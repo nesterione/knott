@@ -24,6 +24,7 @@ for issue in result.issues:         # sorted by path, then line
 vault.types()                       # ["concept", "decision", …]
 vault.schemas()                     # [SchemaInfo(type, description, path), …]
 vault.schema_issues()               # problems from schema loading only
+vault.ontology()                    # Ontology(vault, types, schema_issues)
 Knott.init("new-vault")             # InitResult(root, created)
 ```
 

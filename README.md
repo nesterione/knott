@@ -104,6 +104,7 @@ vault = Knott.open(".")              # walks up to the vault root
 result = vault.validate()            # or vault.validate(["transcripts/foo.md"])
 result.ok, result.issues, result.stats
 vault.types()                        # ["script", "transcript"]
+vault.ontology()                     # Ontology(vault, types, schema_issues)
 ```
 
 Validation problems come back as data; only usage errors raise (`KnottError` subclasses).

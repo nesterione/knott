@@ -161,9 +161,9 @@ class Ontology(_Frozen):          vault: str; types: list[OntologyType]; schema_
 - [x] interactive browser check (skipped - not automatable; hash/storage checked via injected script + `--dump-dom`, panel checked via injected `select()`)
 
 ### Task 7: [Final] Update documentation
-- [ ] update README.md if needed (Python API: mention `vault.ontology()`)
-- [ ] delete `docs/plans/20261007-ontology-viewer-prototype.html`
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update README.md if needed (Python API: mention `vault.ontology()`)
+- [x] delete `docs/plans/20261007-ontology-viewer-prototype.html`
+- [x] move this plan to `docs/plans/completed/` (moved by harness)
 
 ## Post-Completion
 *Items requiring manual intervention or external systems - no checkboxes, informational only*
