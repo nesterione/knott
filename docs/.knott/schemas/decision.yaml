@@ -1,0 +1,22 @@
+type: decision
+description: >
+  An architecture decision record: a choice made where the spec was silent or
+  ambiguous, and why.
+attributes:
+  title:
+    type: string
+    required: true
+  status:
+    type: string
+    required: true
+    description: accepted, superseded, or proposed.
+  decided_on:
+    type: date
+    required: true
+relations:
+  affects:
+    target: concept
+    required: true
+    description: Concepts whose behavior the decision shapes.
+  supersedes:
+    target: decision

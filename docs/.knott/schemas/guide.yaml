@@ -1,0 +1,17 @@
+type: guide
+description: Task-oriented documentation - how to do something with Knott.
+attributes:
+  title:
+    type: string
+    required: true
+  audience:
+    type: string
+    required: true
+    description: Who it is for - human, agent, or developer.
+relations:
+  concepts:
+    target: concept
+    description: Concepts the guide relies on.
+  commands:
+    target: command
+    description: Commands the guide uses.

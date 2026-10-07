@@ -1,0 +1,8 @@
+type: compilation
+attributes:
+  title:
+    type: string
+relations:
+  sources:
+    target: script
+    required: true

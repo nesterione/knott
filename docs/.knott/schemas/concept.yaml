@@ -1,0 +1,19 @@
+type: concept
+description: >
+  A core idea in Knott's model. Read concepts first to understand what the
+  other documents refer to.
+attributes:
+  title:
+    type: string
+    required: true
+  summary:
+    type: string
+    required: true
+    description: One-sentence definition.
+  spec_section:
+    type: string
+    description: Section of SPEC.md that defines it, e.g. "§9".
+relations:
+  related:
+    target: concept
+    description: Other concepts worth reading next.

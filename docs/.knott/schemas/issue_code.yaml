@@ -1,0 +1,17 @@
+type: issue_code
+description: >
+  A stable validation issue code reported by `knott validate`, with its cause
+  and how to fix it.
+attributes:
+  code:
+    type: string
+    required: true
+  stage:
+    type: string
+    required: true
+    description: Where it is detected - schema, entity, attribute, or relation.
+relations:
+  about:
+    target: concept
+    required: true
+    description: The concept whose rule this code enforces.

@@ -1,0 +1,15 @@
+type: bad
+attributes:
+  type:
+    type: string
+  size:
+    type: float
+    required: "yes"
+  shared:
+    type: string
+  extra:
+    type: string
+    default: x
+relations:
+  shared:
+    target: script

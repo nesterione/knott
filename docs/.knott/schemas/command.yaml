@@ -1,0 +1,18 @@
+type: command
+description: A `knott` CLI command.
+attributes:
+  title:
+    type: string
+    required: true
+  synopsis:
+    type: string
+    required: true
+    description: Usage line, e.g. "knott validate [PATH...]".
+  writes_files:
+    type: boolean
+    required: true
+    description: Whether the command can create or modify files.
+relations:
+  concepts:
+    target: concept
+    description: Concepts the command operates on.

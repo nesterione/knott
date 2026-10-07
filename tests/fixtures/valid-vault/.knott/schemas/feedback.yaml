@@ -1,0 +1,17 @@
+type: feedback
+description: Review feedback on a transcript.
+attributes:
+  rating:
+    type: integer
+  score:
+    type: number
+  approved:
+    type: boolean
+  reviewed_at:
+    type: datetime
+relations:
+  reviews:
+    target: transcript
+    required: true
+  sources:
+    target: script
