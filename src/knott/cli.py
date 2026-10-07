@@ -31,7 +31,8 @@ app = typer.Typer(
 skill_app = typer.Typer(
     help=(
         "Manage the Agent Skill bundled with knott. The skill teaches AI agents how to read "
-        "schemas, write entities and relations, and run `knott validate`."
+        "schemas, write entities and relations, and run `knott validate`. It installs to "
+        ".claude/skills (Claude Code) and/or .agents/skills (Codex and other agents)."
     ),
     no_args_is_help=True,
 )
