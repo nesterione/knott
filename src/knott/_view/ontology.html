@@ -186,16 +186,31 @@ function clip(n, tx, ty) { // point on pill border toward (tx,ty)
   const t = Math.min(dx ? hw / Math.abs(dx) : Infinity, dy ? hh / Math.abs(dy) : Infinity);
   return [n.x + dx * t, n.y + dy * t];
 }
+function loopCorner(n) { // [sx, sy]: +1/-1 per axis; prefers above-right on ties
+  const dirs = [];
+  for (const e of edges) if (e.s !== e.t && (e.s === n.id || e.t === n.id)) {
+    const o = byId[e.s === n.id ? e.t : e.s], dx = o.x - n.x, dy = o.y - n.y;
+    // layered S-curves leave and enter the pill horizontally
+    dirs.push(mode === "layered" && Math.abs(dx) > 40 ? Math.atan2(0, dx) : Math.atan2(dy, dx));
+  }
+  let best = [1, -1], bestScore = -1;
+  for (const [sx, sy] of [[1, -1], [-1, -1], [1, 1], [-1, 1]]) {
+    const c = Math.atan2(sy * n.h / 2, sx * n.w / 2);
+    const score = Math.min(Math.PI, ...dirs.map(d => { const x = Math.abs(d - c) % (2 * Math.PI); return Math.min(x, 2 * Math.PI - x); }));
+    if (score > bestScore + 1e-6) { best = [sx, sy]; bestScore = score; }
+  }
+  return best;
+}
 function drawEdges() {
   // fan out parallel edges between same pair
   const pairCount = {};
   for (const e of edges) { const k = [e.s, e.t].sort().join("|"); e.k = (pairCount[k] = (pairCount[k] || 0) + 1) - 1; }
   for (const e of edges) {
     const a = byId[e.s], b = byId[e.t];
-    if (a === b) { // self loop above-right
-      const x0 = a.x + a.w / 2 - 22, y0 = a.y - a.h / 2 - 2, x1 = a.x + a.w / 2 + 2, y1 = a.y - 6;
-      e.p.setAttribute("d", `M${x0},${y0} C${x0 + 6},${y0 - 46} ${x1 + 52},${y1 - 30} ${x1 + 3},${y1}`);
-      e.l.setAttribute("x", a.x + a.w / 2 + 26); e.l.setAttribute("y", a.y - a.h / 2 - 30);
+    if (a === b) { // self loop on the pill corner farthest from the node's other edges
+      const [sx, sy] = loopCorner(a), X = rx => a.x + sx * rx, Y = ry => a.y - sy * ry, hw = a.w / 2, hh = a.h / 2;
+      e.p.setAttribute("d", `M${X(hw - 22)},${Y(-hh - 2)} C${X(hw - 16)},${Y(-hh - 48)} ${X(hw + 54)},${Y(-36)} ${X(hw + 5)},${Y(-6)}`);
+      e.l.setAttribute("x", X(hw + 26)); e.l.setAttribute("y", sy < 0 ? Y(-hh - 30) : Y(-hh - 40));
       continue;
     }
     let cx, cy;

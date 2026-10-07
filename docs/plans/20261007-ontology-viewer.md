@@ -153,10 +153,12 @@ class Ontology(_Frozen):          vault: str; types: list[OntologyType]; schema_
 - [x] run `uv run knott validate` inside `docs/` - must pass
 
 ### Task 6: Verify acceptance criteria
-- [ ] run `uv run knott view docs --no-open -o <scratch>/o.html` and take headless Chrome screenshots of `#layered`, `#force` and `#radial` in both light and dark (`--force-dark-mode`). Check that nothing overlaps badly and that labels are readable
-- [ ] check a vault with a relation to an undefined type: the ghost node renders and the panel explains it
-- [ ] check that the page works offline (no network requests) and that switching modes updates the hash and survives a reload
-- [ ] run the full check: `uv run pytest && uv run ruff check && uv run ruff format --check && uv run mypy`
+- [x] run `uv run knott view docs --no-open -o <scratch>/o.html` and take headless Chrome screenshots of `#layered`, `#force` and `#radial` in both light and dark (`--force-dark-mode`). Check that nothing overlaps badly and that labels are readable
+- [x] check a vault with a relation to an undefined type: the ghost node renders and the panel explains it
+- [x] check that the page works offline (no network requests) and that switching modes updates the hash and survives a reload
+- [x] run the full check: `uv run pytest && uv run ruff check && uv run ruff format --check && uv run mypy`
+- ➕ [x] fix: self-loops were always drawn above-right, so in Force mode the `concept.related` loop label covered the `command.concepts` label. Loops now sit on the pill corner farthest from the node's other edges (`loopCorner` in the template)
+- [x] interactive browser check (skipped - not automatable; hash/storage checked via injected script + `--dump-dom`, panel checked via injected `select()`)
 
 ### Task 7: [Final] Update documentation
 - [ ] update README.md if needed (Python API: mention `vault.ontology()`)
