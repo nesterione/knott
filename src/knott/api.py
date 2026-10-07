@@ -10,8 +10,19 @@ from pathlib import Path
 
 from knott import _yaml
 from knott.errors import ConfigError, PathNotFoundError, PathOutsideVaultError
-from knott.models import InitResult, Issue, SchemaInfo, Stats, ValidationResult
+from knott.models import (
+    InitResult,
+    Issue,
+    Ontology,
+    OntologyAttribute,
+    OntologyRelation,
+    OntologyType,
+    SchemaInfo,
+    Stats,
+    ValidationResult,
+)
 from knott.schema.loader import SCHEMAS_DIR, load_schemas
+from knott.schema.models import RelationDef
 from knott.schema.validator import validate_entity
 from knott.vault.discovery import KNOTT_DIR, find_vault_root, iter_markdown
 from knott.vault.entity import MarkdownFile, read_markdown
@@ -79,6 +90,51 @@ class Knott:
         """Problems found while loading schemas, sorted."""
         _, issues = load_schemas(self.root)
         return _sorted(issues)
+
+    def ontology(self) -> Ontology:
+        """The vault's types, their attributes and relations, and entity counts.
+
+        Types are sorted by name; attributes and relations keep their schema order,
+        with relations to undefined types last (``target_known=False``). Files with
+        invalid frontmatter are not counted.
+        """
+        schemas, issues = load_schemas(self.root)
+        counts: dict[str, int] = {}
+        for rel_path in iter_markdown(self.root):
+            parsed = read_markdown(self.root / rel_path, rel_path)
+            if parsed.error is None and parsed.is_entity and isinstance(parsed.type, str):
+                counts[parsed.type] = counts.get(parsed.type, 0) + 1
+
+        def relation(r: RelationDef, known: bool) -> OntologyRelation:
+            return OntologyRelation(
+                name=r.name,
+                target=r.target,
+                required=r.required,
+                description=r.description,
+                target_known=known,
+            )
+
+        types = [
+            OntologyType(
+                type=s.type,
+                description=s.description,
+                path=s.path,
+                count=counts.get(s.type, 0),
+                attributes=[
+                    OntologyAttribute(
+                        name=a.name,
+                        type=a.type.value,
+                        required=a.required,
+                        description=a.description,
+                    )
+                    for a in s.attributes.values()
+                ],
+                relations=[relation(r, True) for r in s.relations.values()]
+                + [relation(r, False) for r in s.unknown_relations.values()],
+            )
+            for _, s in sorted(schemas.items())
+        ]
+        return Ontology(vault=self.root.name, types=types, schema_issues=len(issues))
 
     def validate(self, paths: Sequence[str | Path] | None = None) -> ValidationResult:
         """Validate all schemas, and entities (all, or those within ``paths``).

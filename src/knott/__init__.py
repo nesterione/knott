@@ -8,7 +8,17 @@ from knott.errors import (
     PathOutsideVaultError,
     VaultNotFoundError,
 )
-from knott.models import InitResult, Issue, SchemaInfo, Stats, ValidationResult
+from knott.models import (
+    InitResult,
+    Issue,
+    Ontology,
+    OntologyAttribute,
+    OntologyRelation,
+    OntologyType,
+    SchemaInfo,
+    Stats,
+    ValidationResult,
+)
 
 __all__ = [
     "ConfigError",
@@ -16,6 +26,10 @@ __all__ = [
     "Issue",
     "Knott",
     "KnottError",
+    "Ontology",
+    "OntologyAttribute",
+    "OntologyRelation",
+    "OntologyType",
     "PathNotFoundError",
     "PathOutsideVaultError",
     "SchemaInfo",

@@ -108,11 +108,11 @@ class Ontology(_Frozen):          vault: str; types: list[OntologyType]; schema_
 - Modify: `src/knott/__init__.py` (export `Ontology` if other models are exported there)
 - Modify: `tests/test_api.py`
 
-- [ ] add `OntologyAttribute`, `OntologyRelation`, `OntologyType` and `Ontology` to `models.py`
-- [ ] implement `Knott.ontology()`: load schemas, count entities by type with `iter_markdown` + `read_markdown`, and build sorted types. Unknown relations come last with `target_known=False`
-- [ ] write tests on a `tmp_path` vault: a self-relation, a required relation, a relation to a missing type (`target_known=False`), correct counts, a file with invalid frontmatter that is skipped, and a non-entity Markdown file that isn't counted
-- [ ] write test: an empty vault returns `types == []`, and a broken schema gives `schema_issues > 0` while the other types are still present
-- [ ] run tests - must pass before next task
+- [x] add `OntologyAttribute`, `OntologyRelation`, `OntologyType` and `Ontology` to `models.py`
+- [x] implement `Knott.ontology()`: load schemas, count entities by type with `iter_markdown` + `read_markdown`, and build sorted types. Unknown relations come last with `target_known=False`
+- [x] write tests on a `tmp_path` vault: a self-relation, a required relation, a relation to a missing type (`target_known=False`), correct counts, a file with invalid frontmatter that is skipped, and a non-entity Markdown file that isn't counted
+- [x] write test: an empty vault returns `types == []`, and a broken schema gives `schema_issues > 0` while the other types are still present
+- [x] run tests - must pass before next task
 
 ### Task 3: Add the HTML template and renderer
 
