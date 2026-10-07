@@ -3,9 +3,12 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import questionary
+from prompt_toolkit.input import create_pipe_input
+from prompt_toolkit.output import DummyOutput
 from typer.testing import CliRunner
 
 from knott import cli, version
@@ -254,6 +257,7 @@ def test_config_with_invalid_characters_is_usage_error(
 class FakePrompt:
     def __init__(self, answer: object) -> None:
         self.answer = answer
+        self.application = SimpleNamespace(key_bindings=None)
 
     def ask(self) -> object:
         return self.answer
@@ -367,3 +371,17 @@ def test_skill_install_interactive_conflict_confirm(
     result = runner.invoke(app, ["skill", "install"])
     assert result.exit_code == exit_code
     assert (skill_md.read_text() == "local edits\n") is not overwrite
+
+
+@pytest.mark.parametrize(
+    "make",
+    [
+        lambda **k: questionary.checkbox("Pick:", ["a", "b"], **k),
+        lambda **k: questionary.confirm("Sure?", **k),
+    ],
+)
+def test_ask_escape_cancels(make: Callable[..., questionary.Question]) -> None:
+    with create_pipe_input() as pipe:
+        pipe.send_text("\x1b")
+        pipe.flush()
+        assert cli._ask(make(input=pipe, output=DummyOutput())) is None

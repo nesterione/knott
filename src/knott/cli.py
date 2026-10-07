@@ -10,6 +10,7 @@ from typing import Annotated
 
 import questionary
 import typer
+from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent, merge_key_bindings
 
 from knott.api import Knott, version
 from knott.errors import KnottError
@@ -161,6 +162,19 @@ def _is_interactive() -> bool:
     return sys.stdin.isatty() and sys.stdout.isatty()
 
 
+def _ask(question: questionary.Question) -> object:
+    """Ask ``question``; Esc cancels like Ctrl-C and returns ``None``."""
+    bindings = KeyBindings()
+
+    @bindings.add("escape", eager=True)
+    def _cancel(event: KeyPressEvent) -> None:
+        event.app.exit(exception=KeyboardInterrupt, style="class:aborting")
+
+    app = question.application
+    app.key_bindings = merge_key_bindings([app.key_bindings or KeyBindings(), bindings])
+    return question.ask()
+
+
 def _choose_targets() -> list[SkillTarget]:
     choices = [
         questionary.Choice(
@@ -171,8 +185,14 @@ def _choose_targets() -> list[SkillTarget]:
             (SkillTarget.AGENTS, "Codex and other agents"),
         ]
     ]
-    selected = questionary.checkbox("Install the knott skill to:", choices=choices).ask()
-    return list(selected or [])
+    selected = _ask(
+        questionary.checkbox(
+            "Install the knott skill to:",
+            choices=choices,
+            instruction="(arrows to move, <space> to select, <enter> to confirm, <esc> to cancel)",
+        )
+    )
+    return list(selected) if isinstance(selected, list) else []
 
 
 def format_install(result: InstallResult, root: Path) -> str:
@@ -229,7 +249,7 @@ def skill_install(
             if result.status is InstallStatus.CONFLICT and interactive:
                 location = result.path.relative_to(path).as_posix()
                 question = f"{location} differs from the bundled skill. Overwrite?"
-                if questionary.confirm(question, default=False).ask():
+                if _ask(questionary.confirm(question, default=False)):
                     result = install_skill(path, target, force=True)
         except KnottError as error:
             raise _fail(error) from None
