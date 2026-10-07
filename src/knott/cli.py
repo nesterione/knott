@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
+import webbrowser
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
@@ -16,6 +18,7 @@ from knott.api import Knott, version
 from knott.errors import KnottError
 from knott.models import Issue, ValidationResult
 from knott.skills import InstallResult, InstallStatus, SkillTarget, install_skill
+from knott.view import render_ontology
 
 app = typer.Typer(
     name="knott",
@@ -150,6 +153,41 @@ def types(
     if issues:
         typer.echo("\n\n".join(format_issue(issue) for issue in issues), err=True)
         raise typer.Exit(EXIT_INVALID)
+
+
+@app.command()
+def view(
+    path: Annotated[
+        Path, typer.Argument(help="A path inside the vault (default: current directory).")
+    ] = Path("."),
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output", "-o", help="Write the page here (default: a file in the temp directory)."
+        ),
+    ] = None,
+    no_open: Annotated[
+        bool, typer.Option("--no-open", help="Write the page without opening a browser.")
+    ] = False,
+) -> None:
+    """Draw the vault's ontology as an HTML page and open it in the browser."""
+    try:
+        ontology = Knott.open(path).ontology()
+    except KnottError as error:
+        raise _fail(error) from None
+    if not ontology.types:
+        raise _fail(KnottError("no types to show (add schemas to .knott/schemas/)"))
+    target = output or Path(tempfile.gettempdir()) / f"knott-ontology-{ontology.vault}.html"
+    try:
+        target.write_text(render_ontology(ontology), encoding="utf-8")
+    except OSError as error:
+        raise _fail(KnottError(f"cannot write {target}: {error.strerror or error}")) from None
+    typer.echo(f"Wrote {target}")
+    if ontology.schema_issues:
+        issues = _plural(ontology.schema_issues, "schema issue", "schema issues")
+        typer.echo(f"{issues} — run knott validate", err=True)
+    if not no_open:
+        webbrowser.open(target.resolve().as_uri())
 
 
 @app.command("version")

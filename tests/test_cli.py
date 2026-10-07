@@ -203,6 +203,89 @@ def test_types_with_schema_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "defined twice" in result.stderr
 
 
+@pytest.fixture
+def no_browser(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Record webbrowser.open calls instead of launching a browser."""
+    opened: list[str] = []
+
+    def fake_open(url: str, *args: object, **kwargs: object) -> bool:
+        opened.append(url)
+        return True
+
+    monkeypatch.setattr("webbrowser.open", fake_open)
+    return opened
+
+
+def test_view_writes_page(tmp_path: Path, no_browser: list[str]) -> None:
+    out = tmp_path / "out.html"
+    result = runner.invoke(
+        app, ["view", str(fixture_path("valid-vault")), "--no-open", "-o", str(out)]
+    )
+    assert result.exit_code == 0, result.output
+    assert result.stdout == f"Wrote {out}\n"
+    assert result.stderr == ""
+    page = out.read_text(encoding="utf-8")
+    for name in ["feedback", "script", "transcript"]:
+        assert f'"type": "{name}"' in page
+    assert no_browser == []
+
+
+def test_view_opens_browser(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_browser: list[str]
+) -> None:
+    monkeypatch.chdir(fixture_path("valid-vault"))
+    out = tmp_path / "out.html"
+    result = runner.invoke(app, ["view", "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    assert no_browser == [out.resolve().as_uri()]
+
+
+def test_view_defaults_to_temp_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_browser: list[str]
+) -> None:
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    monkeypatch.chdir(fixture_path("valid-vault"))
+    result = runner.invoke(app, ["view", "--no-open"])
+    assert result.exit_code == 0, result.output
+    expected = tmp_path / "knott-ontology-valid-vault.html"
+    assert result.stdout == f"Wrote {expected}\n"
+    assert expected.is_file()
+
+
+def test_view_empty_vault_is_usage_error(tmp_path: Path, no_browser: list[str]) -> None:
+    (tmp_path / ".knott/schemas").mkdir(parents=True)
+    result = runner.invoke(
+        app, ["view", str(tmp_path), "--no-open", "-o", str(tmp_path / "o.html")]
+    )
+    assert result.exit_code == 2
+    assert "error: no types to show (add schemas to .knott/schemas/)" in result.stderr
+    assert not (tmp_path / "o.html").exists()
+
+
+def test_view_with_schema_issues_still_writes_page(tmp_path: Path, no_browser: list[str]) -> None:
+    out = tmp_path / "out.html"
+    vault = fixture_path("duplicate-schema-type")
+    result = runner.invoke(app, ["view", str(vault), "--no-open", "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    assert result.stdout == f"Wrote {out}\n"
+    assert "1 schema issue — run knott validate" in result.stderr
+    assert '"type": "script"' in out.read_text(encoding="utf-8")
+
+
+def test_view_nonexistent_path_is_usage_error(tmp_path: Path, no_browser: list[str]) -> None:
+    result = runner.invoke(app, ["view", str(tmp_path / "nope"), "--no-open"])
+    assert result.exit_code == 2
+    assert "error: path does not exist" in result.stderr
+
+
+def test_view_unwritable_output_is_usage_error(tmp_path: Path, no_browser: list[str]) -> None:
+    out = tmp_path / "missing-dir" / "out.html"
+    result = runner.invoke(app, ["view", str(fixture_path("valid-vault")), "-o", str(out)])
+    assert result.exit_code == 2
+    assert "error: cannot write" in result.stderr
+    assert no_browser == []
+
+
 def test_init_creates_vault(tmp_path: Path) -> None:
     result = runner.invoke(app, ["init", str(tmp_path)])
     assert result.exit_code == 0
@@ -289,6 +372,11 @@ def _plain(output: str) -> str:
 def test_help_advertises_skill() -> None:
     result = runner.invoke(app, ["--help"], env={"COLUMNS": "200"})
     assert "knott skill install" in _plain(result.output)
+
+
+def test_help_lists_view() -> None:
+    result = runner.invoke(app, ["--help"], env={"COLUMNS": "200"})
+    assert re.search(r"\bview\b", _plain(result.output))
 
 
 def test_skill_install_help_lists_targets() -> None:

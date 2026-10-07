@@ -134,11 +134,11 @@ class Ontology(_Frozen):          vault: str; types: list[OntologyType]; schema_
 - Modify: `src/knott/cli.py`
 - Modify: `tests/test_cli.py`
 
-- [ ] add `view(path=".", output: Path | None, no_open: bool)`: `Knott.open`, `ontology()`, exit 2 when there are no types, render, write (temp default or `-o`), echo `Wrote <path>`, the stderr note for schema issues, and `webbrowser.open(path.as_uri())` unless `--no-open`
-- [ ] write tests: `view --no-open -o out.html` exits 0 and the file contains the vault's type names; without `--no-open`, the monkeypatched `webbrowser.open` is called once with the file URI
-- [ ] write tests: an empty vault exits 2 with the error; a vault with one broken schema still writes the page, exits 0 and prints the issue note on stderr; a path that doesn't exist exits 2
-- [ ] add `view` to the CLI help test if commands are listed there
-- [ ] run tests - must pass before next task
+- [x] add `view(path=".", output: Path | None, no_open: bool)`: `Knott.open`, `ontology()`, exit 2 when there are no types, render, write (temp default or `-o`), echo `Wrote <path>`, the stderr note for schema issues, and `webbrowser.open(path.as_uri())` unless `--no-open`
+- [x] write tests: `view --no-open -o out.html` exits 0 and the file contains the vault's type names; without `--no-open`, the monkeypatched `webbrowser.open` is called once with the file URI
+- [x] write tests: an empty vault exits 2 with the error; a vault with one broken schema still writes the page, exits 0 and prints the issue note on stderr; a path that doesn't exist exits 2
+- [x] add `view` to the CLI help test if commands are listed there
+- [x] run tests - must pass before next task
 
 ### Task 5: Document the command in the docs vault and README
 
