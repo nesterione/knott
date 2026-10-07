@@ -40,3 +40,5 @@ class Schema:
     description: str | None = None
     attributes: dict[str, AttributeDef] = field(default_factory=dict)
     relations: dict[str, RelationDef] = field(default_factory=dict)
+    unknown_relations: dict[str, RelationDef] = field(default_factory=dict)
+    """Relations whose target type no schema defines. Kept for display, ignored by validation."""

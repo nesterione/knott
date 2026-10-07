@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from knott import Knott
+from knott.schema.loader import load_schemas
 
 from .conftest import fixture_path, triples, validate_fixture
 
@@ -37,6 +38,19 @@ def test_unknown_relation_target_type() -> None:
     assert triples(result) == [(".knott/schemas/review.yaml", 4, "schema-unknown-target")]
     assert result.issues[0].field == "relations.about.target"
     assert "`episode`" in result.issues[0].message
+
+
+def test_unknown_relation_target_is_kept_aside() -> None:
+    registry, issues = load_schemas(fixture_path("unknown-relation-target-type"))
+    review = registry["review"]
+    assert review.relations == {}
+    assert list(review.unknown_relations) == ["about"]
+    assert review.unknown_relations["about"].target == "episode"
+    assert [i.code for i in issues] == ["schema-unknown-target"]
+    # Relations with known targets stay where they were.
+    transcript = registry["transcript"]
+    assert list(transcript.relations) == ["derived_from"]
+    assert transcript.unknown_relations == {}
 
 
 def test_schema_unknown_keys_and_invalid_fields() -> None:

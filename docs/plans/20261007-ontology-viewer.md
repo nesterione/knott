@@ -94,11 +94,11 @@ class Ontology(_Frozen):          vault: str; types: list[OntologyType]; schema_
 - Modify: `src/knott/schema/loader.py`
 - Modify: `tests/test_schemas.py`
 
-- [ ] add `unknown_relations: dict[str, RelationDef]` (default empty) to `Schema`
-- [ ] in `load_schemas`, move the relation into `unknown_relations` instead of `del`, and keep the `schema-unknown-target` issue unchanged
-- [ ] write test: the `unknown-relation-target-type` fixture gives the relation in `unknown_relations`, not in `relations`, and the issue is still reported
-- [ ] confirm the existing validate tests still pass (entity validation ignores unknown relations)
-- [ ] run tests - must pass before next task
+- [x] add `unknown_relations: dict[str, RelationDef]` (default empty) to `Schema`
+- [x] in `load_schemas`, move the relation into `unknown_relations` instead of `del`, and keep the `schema-unknown-target` issue unchanged
+- [x] write test: the `unknown-relation-target-type` fixture gives the relation in `unknown_relations`, not in `relations`, and the issue is still reported
+- [x] confirm the existing validate tests still pass (entity validation ignores unknown relations)
+- [x] run tests - must pass before next task
 
 ### Task 2: Add `Ontology` models and `Knott.ontology()`
 

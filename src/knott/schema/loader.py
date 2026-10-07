@@ -73,7 +73,7 @@ def load_schemas(root: Path) -> tuple[dict[str, Schema], list[Issue]]:
                         ),
                     )
                 )
-                del schema.relations[name]
+                schema.unknown_relations[name] = schema.relations.pop(name)
     return registry, issues
 
 
