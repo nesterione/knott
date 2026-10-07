@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import stat
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
@@ -13,7 +15,7 @@ from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
 from typer.testing import CliRunner
 
-from knott import cli, version
+from knott import Knott, cli, version
 from knott.cli import app
 from knott.skills import SkillTarget
 
@@ -240,16 +242,60 @@ def test_view_opens_browser(
     assert no_browser == [out.resolve().as_uri()]
 
 
-def test_view_defaults_to_temp_dir(
+def test_view_defaults_to_private_temp_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_browser: list[str]
 ) -> None:
     monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
     monkeypatch.chdir(fixture_path("valid-vault"))
+    private = tmp_path / f"knott-{os.getuid()}"
+    expected = private / "knott-ontology-valid-vault.html"
     result = runner.invoke(app, ["view", "--no-open"])
     assert result.exit_code == 0, result.output
-    expected = tmp_path / "knott-ontology-valid-vault.html"
     assert result.stdout == f"Wrote {expected}\n"
-    assert expected.is_file()
+    assert stat.S_IMODE(private.stat().st_mode) == 0o700
+    # The next run reuses the same file instead of piling up new ones.
+    expected.write_text("stale", encoding="utf-8")
+    result = runner.invoke(app, ["view", "--no-open"])
+    assert result.exit_code == 0, result.output
+    assert '"type": "script"' in expected.read_text(encoding="utf-8")
+    assert sorted(p.name for p in tmp_path.iterdir()) == [private.name]
+
+
+def test_view_refuses_symlinked_temp_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_browser: list[str]
+) -> None:
+    temp, elsewhere = tmp_path / "tmp", tmp_path / "elsewhere"
+    temp.mkdir()
+    elsewhere.mkdir(mode=0o700)
+    (temp / f"knott-{os.getuid()}").symlink_to(elsewhere)
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(temp))
+    result = runner.invoke(app, ["view", str(fixture_path("valid-vault")), "--no-open"])
+    assert result.exit_code == 2
+    assert "error: cannot write" in result.stderr
+    assert "is not a directory" in result.stderr
+    assert list(elsewhere.iterdir()) == []
+
+
+def test_view_refuses_shared_temp_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_browser: list[str]
+) -> None:
+    shared = tmp_path / f"knott-{os.getuid()}"
+    shared.mkdir()
+    shared.chmod(0o777)
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    result = runner.invoke(app, ["view", str(fixture_path("valid-vault")), "--no-open"])
+    assert result.exit_code == 2
+    assert "is not private to the current user" in result.stderr
+    assert list(shared.iterdir()) == []
+
+
+def test_view_without_browser_prints_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("webbrowser.open", lambda url, *args, **kwargs: False)
+    out = tmp_path / "out.html"
+    result = runner.invoke(app, ["view", str(fixture_path("valid-vault")), "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    assert result.stderr == f"could not open a browser; open {out}\n"
+    assert out.is_file()
 
 
 def test_view_empty_vault_is_usage_error(tmp_path: Path, no_browser: list[str]) -> None:
@@ -270,6 +316,17 @@ def test_view_with_schema_issues_still_writes_page(tmp_path: Path, no_browser: l
     assert result.stdout == f"Wrote {out}\n"
     assert "1 schema issue — run knott validate" in result.stderr
     assert '"type": "script"' in out.read_text(encoding="utf-8")
+
+
+def test_view_reports_plural_schema_issues(tmp_path: Path, no_browser: list[str]) -> None:
+    Knott.init(tmp_path)
+    schemas = tmp_path / ".knott" / "schemas"
+    (schemas / "a.yaml").write_text("type: a\nrelations:\n  x:\n    target: nope\n")
+    (schemas / "b.yaml").write_text("type: b\nrelations:\n  y:\n    target: gone\n")
+    out = tmp_path / "out.html"
+    result = runner.invoke(app, ["view", str(tmp_path), "--no-open", "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    assert result.stderr == "2 schema issues — run knott validate\n"
 
 
 def test_view_nonexistent_path_is_usage_error(tmp_path: Path, no_browser: list[str]) -> None:

@@ -92,6 +92,8 @@ def _ontology_vault(root: Path) -> Path:
     _write(root / "acme.md", "---\ntype: company\n---\n")
     _write(root / "note.md", "# Just a note\n")
     _write(root / "tagged.md", "---\ntags: [a]\n---\n")
+    _write(root / "odd.md", "---\ntype: [person]\n---\n")  # not a type name: not counted
+    _write(root / "pets" / "rex.md", "---\ntype: animal\n---\n")  # no schema: no type
     return root
 
 
@@ -118,6 +120,17 @@ def test_ontology_types_relations_and_counts(tmp_path: Path) -> None:
         ("pet", "animal", False, False),
     ]
     assert person.relations[2].description == "Missing type."
+
+
+def test_ontology_type_without_entities_has_zero_count(tmp_path: Path) -> None:
+    root = _ontology_vault(tmp_path / "vault")
+    _write(root / ".knott" / "schemas" / "region.yaml", "type: region\n")
+    ontology = Knott.open(root).ontology()
+    assert [(t.type, t.count) for t in ontology.types] == [
+        ("company", 1),
+        ("person", 2),
+        ("region", 0),
+    ]
 
 
 def test_ontology_empty_vault(tmp_path: Path) -> None:

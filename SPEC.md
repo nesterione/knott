@@ -438,6 +438,8 @@ knott init [PATH]
 knott validate [PATH...]
 knott types
 knott version
+knott skill install [PATH]
+knott view [PATH]
 ```
 
 ### `knott init [PATH]`
@@ -465,6 +467,10 @@ If schema errors exist, `types` still prints the types it could load, writes the
 ### `knott version`
 
 Prints the installed Knott version.
+
+### `knott view [PATH] [-o FILE] [--no-open]`
+
+Writes the vault's ontology (types, attributes, relations, entity counts) as one self-contained static HTML page and opens it in the browser. No server and no network. Relations to undefined types point to a dashed "ghost" type. Schema errors still produce a page, with a note to run `knott validate`; a vault with no types exits with code `2`. See `docs/commands/view.md`.
 
 ---
 
@@ -605,6 +611,7 @@ result.ok                          # bool
 result.issues                      # list[Issue], sorted
 result.stats                       # schemas / entities / relations counts
 types = vault.types()              # list[str], sorted
+ontology = vault.ontology()        # Ontology: types with attributes, relations, counts
 ```
 
 `validate()` returns validation problems as data and never raises for them. It raises only for `2`-class conditions (`KnottError` subclasses in `errors.py`).
@@ -640,7 +647,7 @@ At minimum, test: schema discovery and parsing, entity detection, attribute typi
 
 Do not add, unless needed purely to meet the requirements above:
 
-database as source of truth · search indexes · semantic or vector search · embeddings · stable entity IDs · automatic inverse relations · global relation registry · RDF / OWL · inference or reasoning · schema inheritance, composition, or versioning · migration framework · UI · HTTP server · daemon · filesystem watcher · automatic knowledge extraction · automatic memory selection · agent deciding autonomously what to persist · plugin architecture · wikilink resolution.
+database as source of truth · search indexes · semantic or vector search · embeddings · stable entity IDs · automatic inverse relations · global relation registry · RDF / OWL · inference or reasoning · schema inheritance, composition, or versioning · migration framework · UI (an interactive or served app; the static page `knott view` writes is not one) · HTTP server · daemon · filesystem watcher · automatic knowledge extraction · automatic memory selection · agent deciding autonomously what to persist · plugin architecture · wikilink resolution.
 
 Avoid speculative abstractions. Prefer the smallest implementation that satisfies the contract.
 

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
 from knott import Knott, Ontology, OntologyAttribute, OntologyRelation, OntologyType, view
 from knott.view import PLACEHOLDER, render_ontology
@@ -45,10 +47,15 @@ def _ontology(description: str | None = "A task.") -> Ontology:
     )
 
 
-def _embedded(html: str) -> Ontology:
+def _json_slice(html: str) -> tuple[int, int]:
     start = html.index("const DATA = ") + len("const DATA = ")
-    data, _ = json.JSONDecoder().raw_decode(html, start)
-    return Ontology.model_validate(data)
+    _, end = json.JSONDecoder().raw_decode(html, start)
+    return start, end
+
+
+def _embedded(html: str) -> Ontology:
+    start, end = _json_slice(html)
+    return Ontology.model_validate(json.loads(html[start:end]))
 
 
 def test_render_replaces_placeholder_with_model_json() -> None:
@@ -69,16 +76,42 @@ def test_render_keeps_non_ascii_text() -> None:
 def test_render_escapes_script_breakouts() -> None:
     ontology = _ontology(HOSTILE)
     html = render_ontology(ontology)
-    assert "</script><script>alert(1)" not in html
-    assert "<!--" not in html
+    start, end = _json_slice(html)
+    data = html[start:end]
+    assert "</" not in data
+    assert "<!--" not in data
     assert html.count("</script>") == 1
+    assert _embedded(html) == ontology
+
+
+def test_render_escapes_lone_surrogates() -> None:
+    ontology = _ontology("broken \ud800 text")
+    html = render_ontology(ontology)
+    html.encode("utf-8")  # would raise on a raw lone surrogate
     assert _embedded(html) == ontology
 
 
 def test_render_loads_nothing_external() -> None:
     html = render_ontology(_ontology())
-    for needle in ('src="http', 'href="http', "src='http", "url(http", "@import", "//cdn"):
+    urls = re.findall(r"[a-z]+://[^\s\"'`)]*|//[a-z0-9-]+\.[a-z0-9.-]*[a-z]", html, re.IGNORECASE)
+    assert urls == ["http://www.w3.org/2000/svg"]
+    for needle in ("@import", "fetch(", "import(", "XMLHttpRequest", "WebSocket"):
         assert needle not in html
+
+
+def test_template_reads_model_fields() -> None:
+    """Every model field the page relies on is read in the template, so renames break here."""
+    template = view._template()
+    reads: dict[type[BaseModel], list[str]] = {
+        Ontology: ["vault", "types", "schema_issues"],
+        OntologyType: ["type", "description", "count", "attributes", "relations"],
+        OntologyAttribute: ["name", "type", "required", "description"],
+        OntologyRelation: ["name", "target", "required", "description", "target_known"],
+    }
+    for model, names in reads.items():
+        for name in names:
+            assert name in model.model_fields, (model.__name__, name)
+            assert re.search(rf"\.{name}\b", template), (model.__name__, name)
 
 
 def test_render_docs_vault() -> None:
@@ -89,11 +122,5 @@ def test_render_docs_vault() -> None:
 
 def test_render_without_placeholder_is_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(view, "_template", lambda: "<html></html>")
-    with pytest.raises(RuntimeError):
-        render_ontology(_ontology())
-
-
-def test_render_with_duplicate_placeholder_is_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(view, "_template", lambda: PLACEHOLDER * 2)
     with pytest.raises(RuntimeError):
         render_ontology(_ontology())

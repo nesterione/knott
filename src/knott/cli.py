@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 import sys
 import tempfile
 import webbrowser
@@ -177,8 +179,10 @@ def view(
         raise _fail(error) from None
     if not ontology.types:
         raise _fail(KnottError("no types to show (add schemas to .knott/schemas/)"))
-    target = output or Path(tempfile.gettempdir()) / f"knott-ontology-{ontology.vault}.html"
+    target = output or _private_temp_dir() / f"knott-ontology-{ontology.vault}.html"
     try:
+        if output is None:
+            _check_private(target.parent)
         target.write_text(render_ontology(ontology), encoding="utf-8")
     except OSError as error:
         raise _fail(KnottError(f"cannot write {target}: {error.strerror or error}")) from None
@@ -186,8 +190,24 @@ def view(
     if ontology.schema_issues:
         issues = _plural(ontology.schema_issues, "schema issue", "schema issues")
         typer.echo(f"{issues} — run knott validate", err=True)
-    if not no_open:
-        webbrowser.open(target.resolve().as_uri())
+    if not no_open and not webbrowser.open(target.resolve().as_uri()):
+        typer.echo(f"could not open a browser; open {target}", err=True)
+
+
+def _private_temp_dir() -> Path:
+    """Per-user directory in the temp dir, so one page per vault is reused safely."""
+    suffix = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
+    return Path(tempfile.gettempdir()) / f"knott{suffix}"
+
+
+def _check_private(directory: Path) -> None:
+    """Create ``directory`` (mode 0700) and refuse one another user could tamper with."""
+    directory.mkdir(mode=0o700, exist_ok=True)
+    info = directory.lstat()
+    if not stat.S_ISDIR(info.st_mode):
+        raise OSError(f"{directory} is not a directory")
+    if hasattr(os, "getuid") and (info.st_uid != os.getuid() or info.st_mode & 0o077):
+        raise OSError(f"{directory} is not private to the current user")
 
 
 @app.command("version")

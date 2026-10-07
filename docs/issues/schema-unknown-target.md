@@ -22,4 +22,4 @@ Create the target schema, or fix the spelling. The message lists the known types
 
 ## Notes
 
-The broken relation is dropped, so entity values for it are not checked until fixed.
+Validation ignores the broken relation, so entity values for it are not checked until fixed. [`knott view`](../commands/view.md) still draws it, as an arrow to a dashed ghost box.

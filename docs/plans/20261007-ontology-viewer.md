@@ -42,7 +42,7 @@
 
 ## Solution Overview
 - **Model first.** `Knott.ontology()` returns a pydantic `Ontology` (types with attributes, relations and counts, plus the number of schema issues). It is plain data, usable from Python and serialisable as JSON. "Referenced by" and the layouts are *not* stored, because the page computes them.
-- **Static page.** One template, `src/knott/_view/ontology.html`, with inline CSS/JS, no CDN and no network. Python replaces the `/*__DATA__*/` placeholder with the model's JSON. `</` is escaped as `<\/` so no schema text can close the `<script>`.
+- **Static page.** One template, `src/knott/_view/ontology.html`, with inline CSS/JS, no CDN and no network. Python replaces the `/*__DATA__*/` placeholder with the model's JSON. `</` is escaped as `<\/` and `<!--` as `<\u0021--` so no schema text can close the `<script>` or switch the HTML parser's script state.
 - **No server, no new dependencies.** The page is written to a temp file (or `-o FILE`) and opened with `webbrowser.open`. A live `--watch` mode is out of scope; it could be added later without changing the page.
 - **Degrade, don't fail.** Broken schemas still produce a page with whatever loaded, plus a note saying "N schema issues — run `knott validate`". Relations to undefined types are drawn as a ghost node with a dashed outline. Only "no types at all" is a usage error (exit 2).
 
@@ -63,13 +63,15 @@ class Ontology(_Frozen):          vault: str; types: list[OntologyType]; schema_
 - `count` is the number of Markdown files whose frontmatter `type` equals the type name. Files whose frontmatter is invalid are skipped. Relations are not resolved.
 
 **Renderer** (`src/knott/view.py`):
-- `render_ontology(ontology: Ontology) -> str` loads the template through `importlib.resources`, dumps `ontology.model_dump()` to JSON with `ensure_ascii=False`, replaces `</` with `<\/`, and substitutes the placeholder exactly once. A missing placeholder is a programming error (`RuntimeError`).
+- `render_ontology(ontology: Ontology) -> str` loads the template through `importlib.resources`, dumps `ontology.model_dump()` to JSON with `ensure_ascii=False`, escapes lone surrogates as `\uXXXX` (so the page always encodes as UTF-8), replaces `</` with `<\/` and `<!--` with `<\u0021--`, and substitutes the placeholder once. A missing placeholder is a programming error (`RuntimeError`).
 
 **CLI**: `knott view [PATH] [-o/--output FILE] [--no-open]`
 - `PATH` defaults to `.`, and `Knott.open(PATH)` walks up to the vault root.
-- With no `-o`, the page is written to `tempfile.gettempdir()/knott-ontology-<vault>.html`, overwriting the previous one so temp files don't pile up.
+- With no `-o`, the page is written to `tempfile.gettempdir()/knott-<uid>/knott-ontology-<vault>.html`, overwriting the previous one so temp files don't pile up. The `knott-<uid>` folder is created with mode 0700; a symlink, or a folder owned by someone else or open to others, is refused (exit 2), so a shared `/tmp` can't redirect or tamper with the page.
 - stdout: `Wrote <path>`. When `schema_issues > 0`, stderr also gets `N schema issues — run knott validate`. The exit code is still 0, because the page was made.
 - No types → `error: no types to show (add schemas to .knott/schemas/)`, exit 2.
+- An output path that can't be written → `error: cannot write <path>: …`, exit 2.
+- If `webbrowser.open` reports failure, stderr gets `could not open a browser; open <path>`.
 
 **Page behaviour** (the prototype plus these changes):
 - Data comes from the injected JSON instead of the hard-coded `DATA`. The header shows `<vault> · N types · M relations · K entities`.
@@ -77,7 +79,8 @@ class Ontology(_Frozen):          vault: str; types: list[OntologyType]; schema_
 - Fit to view on load and resize: compute the layout bounds, then scale/translate a root `<g>`.
 - Layered: labels sit near the source end of the edge (t ≈ 0.3) instead of the midpoint.
 - Ghost nodes: a relation with `target_known: false` gets a synthetic node with a dashed outline and no count. The panel says "undefined type — no schema".
-- Radial: the hub is the type with the highest in-degree, ignoring self-loops. A tie goes to the first type by name.
+- Radial: the hub is the defined (non-ghost) type with the highest in-degree, ignoring self-loops. A tie goes to the first type by name.
+- Review follow-ups: lookups keyed by type name have no prototype (`constructor`, `toString` are ordinary names); parallel relations between two types fan out in every layout; several self-relations on one type take different pill corners; layered puts types with no relations to others in a trailing column and wraps tall columns; resize is debounced and keeps force positions; opening or closing the panel refits the view; the hash is read on load only.
 - Schema-issue note: small muted text under the header when `schema_issues > 0`.
 - Not doing: search, zoom/pan, entity listing, saved drag positions, PNG export, per-type colours.
 

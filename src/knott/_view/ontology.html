@@ -124,16 +124,23 @@
 const DATA = /*__DATA__*/;
 
 // ---------- model ----------
-const nodes = DATA.types.map(t => ({ id: t.type, ...t, ghost: false, x: 0, y: 0, w: 0, h: 34 }));
-const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
-const edges = [];
+// Lookups keyed by type name have no prototype, so names like "constructor" stay plain keys.
+const dict = () => Object.create(null);
+const nodes = DATA.types.map(t => ({ id: t.type, ghost: false, count: t.count, description: t.description, attributes: t.attributes, x: 0, y: 0, w: 0, h: 34 }));
+const byId = dict();
+for (const n of nodes) byId[n.id] = n;
+const edges = [], pairs = dict();
 for (const t of DATA.types) for (const r of t.relations) {
-  if (!byId[r.target]) { // relation to a type with no schema: synthetic ghost node
-    const g = { id: r.target, type: r.target, ghost: true, count: null, description: null, attributes: [], relations: [], x: 0, y: 0, w: 0, h: 34 };
+  if (!r.target_known && !byId[r.target]) { // relation to a type with no schema: synthetic ghost node
+    const g = { id: r.target, ghost: true, x: 0, y: 0, w: 0, h: 34 };
     nodes.push(g); byId[g.id] = g;
   }
-  edges.push({ s: t.type, t: r.target, name: r.name, req: r.required, desc: r.description });
+  const e = { s: t.type, t: r.target, name: r.name, req: r.required, desc: r.description };
+  (pairs[JSON.stringify([e.s, e.t].sort())] ||= []).push(e);
+  edges.push(e);
 }
+// e.k: index among the edges joining the same two types (either direction); e.n: how many there are
+for (const key in pairs) pairs[key].forEach((e, i, all) => { e.k = i; e.n = all.length; });
 
 const NS = "http://www.w3.org/2000/svg";
 const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent && parent.appendChild(e); return e; };
@@ -142,6 +149,7 @@ const panel = document.getElementById("panel");
 const ctx = document.createElement("canvas").getContext("2d");
 const textW = (s, font) => (ctx.font = font, ctx.measureText(s).width);
 const plural = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+const cubic = (t, p0, p1, p2, p3) => { const u = 1 - t; return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3; };
 
 // ---------- header ----------
 {
@@ -186,52 +194,46 @@ function clip(n, tx, ty) { // point on pill border toward (tx,ty)
   const t = Math.min(dx ? hw / Math.abs(dx) : Infinity, dy ? hh / Math.abs(dy) : Infinity);
   return [n.x + dx * t, n.y + dy * t];
 }
-function loopCorner(n) { // [sx, sy]: +1/-1 per axis; prefers above-right on ties
+function loopCorners(n) { // pill corners [sx, sy] (+1/-1 per axis), farthest from the node's other edges first; ties keep above-right first
   const dirs = [];
   for (const e of edges) if (e.s !== e.t && (e.s === n.id || e.t === n.id)) {
     const o = byId[e.s === n.id ? e.t : e.s], dx = o.x - n.x, dy = o.y - n.y;
     // layered S-curves leave and enter the pill horizontally
     dirs.push(mode === "layered" && Math.abs(dx) > 40 ? Math.atan2(0, dx) : Math.atan2(dy, dx));
   }
-  let best = [1, -1], bestScore = -1;
-  for (const [sx, sy] of [[1, -1], [-1, -1], [1, 1], [-1, 1]]) {
-    const c = Math.atan2(sy * n.h / 2, sx * n.w / 2);
-    const score = Math.min(Math.PI, ...dirs.map(d => { const x = Math.abs(d - c) % (2 * Math.PI); return Math.min(x, 2 * Math.PI - x); }));
-    if (score > bestScore + 1e-6) { best = [sx, sy]; bestScore = score; }
-  }
-  return best;
+  const gap = c => Math.min(Math.PI, ...dirs.map(d => { const x = Math.abs(d - c) % (2 * Math.PI); return Math.min(x, 2 * Math.PI - x); }));
+  return [[1, -1], [-1, -1], [1, 1], [-1, 1]]
+    .map(([sx, sy]) => ({ sx, sy, gap: gap(Math.atan2(sy * n.h / 2, sx * n.w / 2)) }))
+    .sort((a, b) => (b.gap - a.gap > 1e-6) - (a.gap - b.gap > 1e-6));
 }
 function drawEdges() {
-  // fan out parallel edges between same pair
-  const pairCount = {};
-  for (const e of edges) { const k = [e.s, e.t].sort().join("|"); e.k = (pairCount[k] = (pairCount[k] || 0) + 1) - 1; }
   for (const e of edges) {
     const a = byId[e.s], b = byId[e.t];
-    if (a === b) { // self loop on the pill corner farthest from the node's other edges
-      const [sx, sy] = loopCorner(a), X = rx => a.x + sx * rx, Y = ry => a.y - sy * ry, hw = a.w / 2, hh = a.h / 2;
-      e.p.setAttribute("d", `M${X(hw - 22)},${Y(-hh - 2)} C${X(hw - 16)},${Y(-hh - 48)} ${X(hw + 54)},${Y(-36)} ${X(hw + 5)},${Y(-6)}`);
-      e.l.setAttribute("x", X(hw + 26)); e.l.setAttribute("y", sy < 0 ? Y(-hh - 30) : Y(-hh - 40));
+    if (a === b) { // self loops take the free corners in turn; past four they grow outward
+      const { sx, sy } = loopCorners(a)[e.k % 4], m = 1 + 0.6 * Math.floor(e.k / 4);
+      const X = rx => a.x + sx * rx, Y = ry => a.y - sy * ry, hw = a.w / 2, hh = a.h / 2;
+      e.p.setAttribute("d", `M${X(hw - 22)},${Y(-hh - 2)} C${X(hw - 16)},${Y(-hh - 48 * m)} ${X(hw + 54 * m)},${Y(-36 * m)} ${X(hw + 5)},${Y(-6)}`);
+      e.l.setAttribute("x", X(hw + 26 * m)); e.l.setAttribute("y", sy < 0 ? Y(-hh - 30 * m) : Y(-hh - 40 * m));
       continue;
     }
-    let cx, cy;
     if (mode === "layered" && Math.abs(a.x - b.x) > 40) {
       // horizontal S-curve; bow long edges away from intermediate columns
       const span = Math.round(Math.abs(b.x - a.x) / colGap);
       const bow = span > 1 ? (a.y <= b.y ? -1 : 1) * 70 * (span - 1) : 0;
-      const [sx, sy] = [a.x + Math.sign(b.x - a.x) * (a.w / 2 + 3), a.y];
-      const [tx, ty] = [b.x - Math.sign(b.x - a.x) * (b.w / 2 + 7), b.y];
-      const dx = (tx - sx) * 0.5;
-      e.p.setAttribute("d", `M${sx},${sy} C${sx + dx},${sy + bow} ${tx - dx},${ty + bow} ${tx},${ty}`);
+      // parallel edges (either direction) fan out; their ends shift less so they stay on the pill
+      const off = (e.k - (e.n - 1) / 2) * 28, end = Math.max(-10, Math.min(10, off / 2));
+      const sx = a.x + Math.sign(b.x - a.x) * (a.w / 2 + 3), sy = a.y + end;
+      const tx = b.x - Math.sign(b.x - a.x) * (b.w / 2 + 7), ty = b.y + end;
+      const dx = (tx - sx) * 0.5, c1 = [sx + dx, sy + bow + off], c2 = [tx - dx, ty + bow + off];
+      e.p.setAttribute("d", `M${sx},${sy} C${c1} ${c2} ${tx},${ty}`);
       // label near the source end (t = 0.3) so labels of edges into one target don't pile up
-      const lx = 0.343 * sx + 0.441 * (sx + dx) + 0.189 * (tx - dx) + 0.027 * tx;
-      const ly = 0.343 * sy + 0.441 * (sy + bow) + 0.189 * (ty + bow) + 0.027 * ty;
-      e.l.setAttribute("x", lx); e.l.setAttribute("y", ly - 5);
+      e.l.setAttribute("x", cubic(0.3, sx, c1[0], c2[0], tx)); e.l.setAttribute("y", cubic(0.3, sy, c1[1], c2[1], ty) - 5);
       continue;
     }
     // gentle quadratic curve
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
     const off = 18 + e.k * 26;
-    cx = mx - dy / len * off; cy = my + dx / len * off;
+    const cx = mx - dy / len * off, cy = my + dx / len * off;
     const [sx, sy] = clip(a, cx, cy), [tx, ty] = clip(b, cx, cy);
     e.p.setAttribute("d", `M${sx},${sy} Q${cx},${cy} ${tx},${ty}`);
     e.l.setAttribute("x", 0.25 * sx + 0.5 * cx + 0.25 * tx); e.l.setAttribute("y", 0.25 * sy + 0.5 * cy + 0.25 * ty - 5);
@@ -244,22 +246,20 @@ function draw() {
 
 // ---------- fit to view ----------
 let view = { s: 1, x: 0, y: 0 };
-function fit(points, animate) {
+function fit(animate, useTargets) { // scale and centre the current positions, or the layout targets
   const [W, H] = size(), PAD = 70;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const [n, x, y] of points) {
+  for (const n of nodes) {
+    const x = useTargets ? n.tx : n.x, y = useTargets ? n.ty : n.y;
     x0 = Math.min(x0, x - n.w / 2); x1 = Math.max(x1, x + n.w / 2);
     y0 = Math.min(y0, y - n.h / 2); y1 = Math.max(y1, y + n.h / 2);
   }
-  if (!isFinite(x0)) return;
   const bw = x1 - x0 + 2 * PAD, bh = y1 - y0 + 2 * PAD;
   const s = Math.min(1, W / bw, H / bh);
   view = { s, x: W / 2 - s * (x0 + x1) / 2, y: H / 2 - s * (y0 + y1) / 2 };
   gR.classList.toggle("still", !animate);
   gR.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.s})`;
 }
-const fitTargets = animate => fit(nodes.map(n => [n, n.tx, n.ty]), animate);
-const fitCurrent = animate => fit(nodes.map(n => [n, n.x, n.y]), animate);
 
 // ---------- layouts ----------
 let mode = "layered", colGap = 240;
@@ -267,7 +267,7 @@ const size = () => { const r = svg.getBoundingClientRect(); return [r.width - (p
 
 function layered() {
   // rank = longest path from a source, ignoring self loops and DFS back edges (breaks cycles)
-  const state = {}, back = new Set();
+  const state = dict(), back = new Set();
   const visit = id => {
     state[id] = 1;
     for (const e of edges) if (e.s === id && e.t !== id) {
@@ -277,19 +277,30 @@ function layered() {
   };
   for (const n of nodes) if (!state[n.id]) visit(n.id);
   const dag = edges.filter(e => e.s !== e.t && !back.has(e));
-  const rank = Object.fromEntries(nodes.map(n => [n.id, 0]));
+  const rank = dict(), linked = new Set();
+  for (const n of nodes) rank[n.id] = 0;
   for (let i = 0; i < nodes.length; i++) for (const e of dag) rank[e.t] = Math.max(rank[e.t], rank[e.s] + 1);
+  for (const e of edges) if (e.s !== e.t) { linked.add(e.s); linked.add(e.t); }
+  // types with no relations to others get their own trailing column
   let cols = [];
-  for (const n of nodes) (cols[rank[n.id]] ||= []).push(n);
+  const lone = [];
+  for (const n of nodes) if (linked.has(n.id)) (cols[rank[n.id]] ||= []).push(n); else lone.push(n);
   cols = cols.filter(Boolean);
-  const [W, H] = size();
+  if (lone.length) cols.push(lone);
+  const [W, H] = size(), rowGap = 92, perCol = Math.max(4, Math.floor((H - 120) / rowGap));
+  // start columns in name order; wrap tall ones so fit-to-view keeps a readable scale
+  cols = cols.flatMap(c => {
+    c.sort((a, b) => a.id.localeCompare(b.id));
+    const parts = [];
+    for (let i = 0; i < c.length; i += perCol) parts.push(c.slice(i, i + perCol));
+    return parts;
+  });
   const minGap = Math.max(...nodes.map(n => n.w)) + 90;
   colGap = Math.max(minGap, Math.min(300, (W - 200) / Math.max(1, cols.length - 1)));
-  const x0 = W / 2 - colGap * (cols.length - 1) / 2, rowGap = 92;
+  const x0 = W / 2 - colGap * (cols.length - 1) / 2;
   const place = () => cols.forEach((c, i) => c.forEach((n, j) => { n.tx = x0 + i * colGap; n.ty = H / 2 + (j - (c.length - 1) / 2) * rowGap; }));
-  // start columns in name order, then barycenter sweeps
-  cols.forEach(c => c.sort((a, b) => a.id.localeCompare(b.id)));
   place();
+  // barycenter sweeps
   for (let it = 0; it < 4; it++) {
     for (const c of cols) {
       for (const n of c) {
@@ -303,10 +314,11 @@ function layered() {
 }
 
 function radial() {
-  const indeg = Object.fromEntries(nodes.map(n => [n.id, 0]));
+  const indeg = dict();
+  for (const n of nodes) indeg[n.id] = 0;
   for (const e of edges) if (e.s !== e.t) indeg[e.t]++;
-  // hub: highest in-degree; a tie goes to the first type by name
-  const hub = nodes.slice().sort((a, b) => indeg[b.id] - indeg[a.id] || a.id.localeCompare(b.id))[0];
+  // hub: a defined type with the highest in-degree; a tie goes to the first type by name
+  const hub = nodes.slice().sort((a, b) => a.ghost - b.ghost || indeg[b.id] - indeg[a.id] || a.id.localeCompare(b.id))[0];
   const [W, H] = size(), R = Math.max(Math.min(W, H) * 0.32, nodes.length * 26);
   hub.tx = W / 2; hub.ty = H / 2;
   const rest = nodes.filter(n => n !== hub);
@@ -345,7 +357,7 @@ function runForce() {
   cancelAnimationFrame(simRaf);
   const tick = () => {
     if (mode !== "force") return;
-    if (alpha < 0.005) { if (fitAfterSim) { fitAfterSim = false; fitCurrent(true); } return; }
+    if (alpha < 0.005) { if (fitAfterSim) { fitAfterSim = false; fit(true); } return; }
     forceStep(); alpha *= 0.985; draw(); simRaf = requestAnimationFrame(tick);
   };
   simRaf = requestAnimationFrame(tick);
@@ -365,13 +377,18 @@ function animateTo(done) {
   };
   animRaf = requestAnimationFrame(step);
 }
+function arrange(instant) { // run the layered or radial layout and move the nodes there
+  cancelAnimationFrame(animRaf);
+  (mode === "layered" ? layered : radial)();
+  fit(!instant, true);
+  if (instant) { nodes.forEach(n => { n.x = n.tx; n.y = n.ty; }); draw(); } else animateTo();
+}
 
 // ---------- mode: hash > localStorage > "layered" ----------
 const MODES = ["layered", "force", "radial"], KEY = "knott-ontology-mode";
 function remember(m) {
   try { localStorage.setItem(KEY, m); } catch (_) {}
-  if (location.hash.slice(1) === m) return;
-  try { history.replaceState(null, "", "#" + m); } catch (_) { location.hash = m; }
+  try { history.replaceState(null, "", "#" + m); } catch (_) {} // sandboxed frames may refuse
 }
 function initialMode() {
   const h = location.hash.slice(1);
@@ -381,28 +398,22 @@ function initialMode() {
 }
 
 function setMode(m, instant) {
+  if (!nodes.length) return;
   mode = m;
   remember(m);
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.l === m));
   nodes.forEach(n => n.fixed = false);
   cancelAnimationFrame(animRaf);
-  if (m === "force") {
-    const [W, H] = size();
-    if (instant) nodes.forEach((n, i) => { const a = i * 2.4; n.x = W / 2 + 120 * Math.cos(a); n.y = H / 2 + 120 * Math.sin(a); });
-    if (instant) { // settle off-screen so the first paint is already laid out
-      alpha = 1;
-      while (alpha >= 0.005) { forceStep(); alpha *= 0.985; }
-      draw(); fitCurrent(false); return;
-    }
-    alpha = 1; fitAfterSim = true; runForce(); return;
-  }
-  cancelAnimationFrame(simRaf);
-  (m === "layered" ? layered : radial)();
-  fitTargets(!instant);
-  if (instant) { nodes.forEach(n => { n.x = n.tx; n.y = n.ty; }); draw(); } else animateTo();
+  if (m !== "force") { cancelAnimationFrame(simRaf); arrange(instant); return; }
+  alpha = 1;
+  if (!instant) { fitAfterSim = true; runForce(); return; }
+  // seed a spiral and settle off-screen so the first paint is already laid out
+  const [W, H] = size();
+  nodes.forEach((n, i) => { const a = i * 2.4; n.x = W / 2 + 120 * Math.cos(a); n.y = H / 2 + 120 * Math.sin(a); });
+  while (alpha >= 0.005) { forceStep(); alpha *= 0.985; }
+  draw(); fit(false);
 }
 document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => setMode(b.dataset.l));
-addEventListener("hashchange", () => { const h = location.hash.slice(1); if (MODES.includes(h) && h !== mode) setMode(h); });
 
 // ---------- drag ----------
 let dragMoved = false;
@@ -436,9 +447,14 @@ function focusOn(id) {
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const link = id => `<a data-go="${esc(id)}">${esc(id)}</a>`;
 function select(id) {
+  const wasOpen = panel.classList.contains("open");
   selected = id === selected ? null : id;
   focusOn(selected);
-  if (!selected) { panel.classList.remove("open"); return; }
+  if (selected) showPanel(id); else panel.classList.remove("open");
+  // the panel covers the right of the view: refit when it opens or closes
+  if (wasOpen !== panel.classList.contains("open")) fit(true);
+}
+function showPanel(id) {
   const n = byId[id];
   const out = edges.filter(e => e.s === id), inc = edges.filter(e => e.t === id && e.s !== id);
   const row = (a, b, c, d) => `<tr><td>${a}${d ? `<span class="d">${esc(d)}</span>` : ""}</td><td class="t">${b}${c ? ' <span class="req" title="required">●</span>' : ""}</td></tr>`;
@@ -461,9 +477,16 @@ function select(id) {
   panel.querySelectorAll("[data-go]").forEach(a => a.onclick = () => { selected = null; select(a.dataset.go); });
 }
 svg.addEventListener("click", () => selected && select(selected));
-addEventListener("resize", () => setMode(mode, true));
 
-setMode(initialMode(), true);
+// resize: refit force positions as they are; re-run the other layouts for the new size
+let resizeTimer = 0;
+addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (!nodes.length) return; if (mode === "force") fit(false); else arrange(true); }, 120);
+});
+
+if (nodes.length) setMode(initialMode(), true);
+else document.querySelector(".hint").textContent = "No types to show — add schemas to .knott/schemas/";
 </script>
 </body>
 </html>

@@ -77,6 +77,7 @@ knott types [--verbose]          # list types (exit 1 if a schema has errors)
 knott validate [PATH...]         # check schemas + all entities, or only PATHs
 knott validate --format json     # {ok, stats, issues[]} for machine reading
 knott init [PATH]                # create .knott/ (never overwrites)
+knott view [PATH] [--no-open] [-o FILE]  # write an HTML diagram of types and relations
 ```
 
 Exit codes: `0` valid, `1` validation issues, `2` usage error (no vault, bad path, malformed `.knott/config.yaml`).

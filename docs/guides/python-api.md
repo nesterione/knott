@@ -35,13 +35,17 @@ Knott.init("new-vault")             # InitResult(root, created)
 - It raises only for exit-code-2 conditions, all subclasses of `KnottError`: `VaultNotFoundError`, `ConfigError`, `PathNotFoundError`, `PathOutsideVaultError`.
 - Relative paths passed to `validate()` are resolved against the vault root (the CLI resolves them against the current directory first).
 
+`ontology()` returns `Ontology(vault, types, schema_issues)`. Each `OntologyType` has `type`, `description`, `path`, `count` (entities of that type; files with invalid frontmatter are not counted), `attributes` and `relations`. Relations to types with no schema come last, with `target_known=False`.
+
 ## Layout
 
 ```
 src/knott/
-  api.py        Knott class: open / init / validate / types
+  api.py        Knott class: open / init / validate / types / schemas / schema_issues / ontology
   cli.py        thin Typer adapter
-  models.py     Issue, Stats, ValidationResult, SchemaInfo, InitResult
+  view.py       render_ontology(): Ontology → self-contained HTML (template in _view/)
+  models.py     Issue, Stats, ValidationResult, SchemaInfo, InitResult,
+                Ontology, OntologyType, OntologyAttribute, OntologyRelation
   errors.py     KnottError hierarchy
   schema/       loader (discovery + parsing), validator (entities vs schemas)
   vault/        discovery, entity (frontmatter), links (resolve_reference)

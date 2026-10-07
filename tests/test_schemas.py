@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from knott import Knott
@@ -51,6 +52,19 @@ def test_unknown_relation_target_is_kept_aside() -> None:
     transcript = registry["transcript"]
     assert list(transcript.relations) == ["derived_from"]
     assert transcript.unknown_relations == {}
+
+
+def test_validation_ignores_relations_to_unknown_types(
+    copy_fixture: Callable[[str], Path],
+) -> None:
+    vault = copy_fixture("unknown-relation-target-type")
+    (vault / "reviews").mkdir()
+    (vault / "reviews" / "r1.md").write_text(
+        '---\ntype: review\nabout: "[Missing](../nowhere.md)"\n---\n', encoding="utf-8"
+    )
+    result = Knott.open(vault).validate()
+    assert triples(result) == [(".knott/schemas/review.yaml", 4, "schema-unknown-target")]
+    assert result.stats.entities == 2
 
 
 def test_schema_unknown_keys_and_invalid_fields() -> None:
