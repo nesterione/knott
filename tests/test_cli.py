@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
@@ -280,15 +281,20 @@ def _interactive(
     monkeypatch.setattr(questionary, "confirm", lambda *a, **k: FakePrompt(overwrite))
 
 
+def _plain(output: str) -> str:
+    """Strip ANSI styling; CI forces colored help output."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", output)
+
+
 def test_help_advertises_skill() -> None:
     result = runner.invoke(app, ["--help"], env={"COLUMNS": "200"})
-    assert "knott skill install" in result.output
+    assert "knott skill install" in _plain(result.output)
 
 
 def test_skill_install_help_lists_targets() -> None:
     result = runner.invoke(app, ["skill", "install", "--help"], env={"COLUMNS": "200"})
-    assert "--claude" in result.output
-    assert "--agents" in result.output
+    assert "--claude" in _plain(result.output)
+    assert "--agents" in _plain(result.output)
 
 
 @pytest.mark.parametrize(
