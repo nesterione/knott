@@ -1,6 +1,6 @@
 [project]
 name = "knott"
-version = "0.1.0"
+version = "0.2.0"
 description = "A local, file-first knowledge layer for AI agents: typed Markdown entities, schemas, and semantic relations."
 readme = "README.md"
 license = "MIT"

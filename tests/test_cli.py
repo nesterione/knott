@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
@@ -242,7 +243,8 @@ def test_version() -> None:
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
     assert result.output == f"{version()}\n"
-    assert version() == "0.1.0"
+    pyproject = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
+    assert version() == pyproject["project"]["version"]
 
 
 def test_config_with_invalid_characters_is_usage_error(
