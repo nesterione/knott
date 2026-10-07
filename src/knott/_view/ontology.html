@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knott Ontology</title>
+<style>
+  :root {
+    --bg: #fbfaf8; --surface: #ffffff; --ink: #1d1d1f; --muted: #8a8a8e;
+    --line: #c9c7c2; --border: #e4e2dd; --accent: #3b5bdb; --accent-soft: #e7ecfd;
+    --panel-shadow: 0 8px 30px rgba(0,0,0,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141416; --surface: #1d1d20; --ink: #ececee; --muted: #8b8b92;
+      --line: #4a4a50; --border: #2e2e33; --accent: #8ea2ff; --accent-soft: #23284a;
+      --panel-shadow: 0 8px 30px rgba(0,0,0,.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 14px/1.45 ui-sans-serif, -apple-system, "SF Pro Text", "Inter", system-ui, sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 20px; padding: 18px 24px 0;
+  }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
+  h1 span { color: var(--muted); font-weight: 400; margin-left: 6px; }
+  .issues { padding: 4px 24px 0; color: var(--muted); font-size: 12px; }
+  .issues code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; }
+  #root { transition: transform .45s ease; }
+  #root.still { transition: none; }
+  nav { display: flex; gap: 2px; margin-left: auto; background: var(--border); padding: 2px; border-radius: 8px; }
+  nav button {
+    border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px;
+    padding: 4px 12px; border-radius: 6px; cursor: pointer;
+  }
+  nav button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  main { flex: 1; position: relative; }
+  svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .legend {
+    position: absolute; left: 24px; bottom: 18px; color: var(--muted); font-size: 12px;
+    display: flex; gap: 18px; align-items: center;
+  }
+  .legend svg { position: static; width: 28px; height: 8px; vertical-align: middle; margin-right: 6px; }
+  .hint { position: absolute; left: 24px; top: 8px; color: var(--muted); font-size: 12px; }
+
+  .edge path { fill: none; stroke: var(--line); stroke-width: 1.3; transition: stroke .15s, opacity .15s; }
+  .edge.opt path { stroke-dasharray: 4 4; }
+  .edge text { font-size: 11.5px; fill: var(--muted); paint-order: stroke; stroke: var(--bg); stroke-width: 5px; stroke-linejoin: round; transition: opacity .15s, fill .15s; }
+  .node { cursor: pointer; }
+  .node rect { fill: var(--surface); stroke: var(--border); stroke-width: 1; transition: stroke .15s, fill .15s; }
+  .node .name { font-size: 13.5px; font-weight: 550; fill: var(--ink); }
+  .node .count { font-size: 12px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  .node:hover rect { stroke: var(--line); }
+  .node.ghost rect { fill: var(--bg); stroke: var(--line); stroke-dasharray: 4 3; }
+  .node.ghost .name { fill: var(--muted); font-style: italic; }
+  .node.sel rect { stroke: var(--accent); fill: var(--accent-soft); }
+  .dim .edge:not(.hot) { opacity: .15; }
+  .dim .node:not(.hot) { opacity: .3; }
+  .edge.hot path { stroke: var(--accent); }
+  .edge.hot text { fill: var(--accent); }
+  #arrow path { fill: var(--line); }
+  #arrowHot path { fill: var(--accent); }
+
+  aside {
+    position: absolute; top: 12px; right: 12px; bottom: 12px; width: 320px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--panel-shadow); padding: 20px 22px; overflow: auto;
+    transform: translateX(calc(100% + 24px)); transition: transform .25s ease;
+  }
+  aside.open { transform: none; }
+  aside h2 { font-size: 17px; margin: 0 0 2px; font-weight: 600; }
+  aside .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 12px; }
+  aside p { margin: 0 0 18px; color: var(--ink); }
+  aside h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; margin: 18px 0 8px; }
+  aside table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  aside td { padding: 5px 0; border-top: 1px solid var(--border); vertical-align: top; }
+  aside td:first-child { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; }
+  aside td.t { color: var(--muted); text-align: right; white-space: nowrap; }
+  aside td .d { display: block; color: var(--muted); font-family: inherit; font-size: 12px; margin-top: 1px; }
+  aside a { color: var(--accent); text-decoration: none; cursor: pointer; }
+  aside .req { color: var(--accent); }
+  aside .ghostnote { color: var(--muted); font-style: italic; }
+  aside .close { position: absolute; top: 14px; right: 16px; border: 0; background: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+  .empty { color: var(--muted); font-size: 13px; }
+  @media (max-width: 640px) {
+    header { padding: 14px 16px 0; flex-wrap: wrap; }
+    .issues { padding: 4px 16px 0; }
+    aside { width: auto; left: 12px; top: auto; height: 55%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ontology <span id="meta"></span></h1>
+  <nav id="tabs">
+    <button data-l="layered" class="on">Layered</button>
+    <button data-l="force">Force</button>
+    <button data-l="radial">Radial</button>
+  </nav>
+</header>
+<div class="issues" id="issues" hidden></div>
+<main id="main">
+  <div class="hint">Click a type for details · drag to move</div>
+  <svg id="svg">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z"/></marker>
+      <marker id="arrowHot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z"/></marker>
+    </defs>
+    <g id="root"><g id="edges"></g><g id="nodes"></g></g>
+  </svg>
+  <div class="legend">
+    <span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="1.3"/></svg>required</span>
+    <span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="1.3" stroke-dasharray="4 4"/></svg>optional</span>
+  </div>
+  <aside id="panel"></aside>
+</main>
+
+<script>
+const DATA = /*__DATA__*/;
+
+// ---------- model ----------
+const nodes = DATA.types.map(t => ({ id: t.type, ...t, ghost: false, x: 0, y: 0, w: 0, h: 34 }));
+const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+const edges = [];
+for (const t of DATA.types) for (const r of t.relations) {
+  if (!byId[r.target]) { // relation to a type with no schema: synthetic ghost node
+    const g = { id: r.target, type: r.target, ghost: true, count: null, description: null, attributes: [], relations: [], x: 0, y: 0, w: 0, h: 34 };
+    nodes.push(g); byId[g.id] = g;
+  }
+  edges.push({ s: t.type, t: r.target, name: r.name, req: r.required, desc: r.description });
+}
+
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent && parent.appendChild(e); return e; };
+const svg = document.getElementById("svg"), gR = document.getElementById("root"), gE = document.getElementById("edges"), gN = document.getElementById("nodes");
+const panel = document.getElementById("panel");
+const ctx = document.createElement("canvas").getContext("2d");
+const textW = (s, font) => (ctx.font = font, ctx.measureText(s).width);
+const plural = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+
+// ---------- header ----------
+{
+  const known = DATA.types.length, entities = DATA.types.reduce((a, t) => a + t.count, 0);
+  document.getElementById("meta").textContent =
+    [DATA.vault, plural(known, "type", "types"), plural(edges.length, "relation", "relations"), plural(entities, "entity", "entities")].join(" · ");
+  document.title = `${DATA.vault} · Knott Ontology`;
+  if (DATA.schema_issues > 0) {
+    const box = document.getElementById("issues");
+    box.innerHTML = `${plural(DATA.schema_issues, "schema issue", "schema issues")} — run <code>knott validate</code>`;
+    box.hidden = false;
+  }
+}
+
+// ---------- render nodes ----------
+for (const n of nodes) {
+  const nameW = textW(n.id, "550 13.5px -apple-system, system-ui, sans-serif");
+  const cntW = n.ghost ? 0 : textW(String(n.count), "12px -apple-system, system-ui, sans-serif") + 14;
+  n.w = Math.round(nameW + cntW + 32);
+  const g = el("g", { class: "node" + (n.ghost ? " ghost" : "") }, gN);
+  el("rect", { x: -n.w / 2, y: -n.h / 2, width: n.w, height: n.h, rx: n.h / 2 }, g);
+  const t1 = el("text", { class: "name", x: -n.w / 2 + 16, y: 4.5 }, g); t1.textContent = n.id;
+  if (!n.ghost) { const t2 = el("text", { class: "count", x: n.w / 2 - 16, y: 4.5, "text-anchor": "end" }, g); t2.textContent = n.count; }
+  n.g = g;
+  g.addEventListener("click", ev => { if (!dragMoved) select(n.id); ev.stopPropagation(); });
+  g.addEventListener("mouseenter", () => focusOn(n.id));
+  g.addEventListener("mouseleave", () => focusOn(selected));
+  g.addEventListener("pointerdown", ev => startDrag(ev, n));
+}
+for (const e of edges) {
+  const g = el("g", { class: "edge" + (e.req ? "" : " opt") }, gE);
+  e.p = el("path", { "marker-end": "url(#arrow)" }, g);
+  e.l = el("text", { "text-anchor": "middle" }, g); e.l.textContent = e.name;
+  e.g = g;
+}
+
+// ---------- geometry ----------
+function clip(n, tx, ty) { // point on pill border toward (tx,ty)
+  const dx = tx - n.x, dy = ty - n.y;
+  if (!dx && !dy) return [n.x, n.y];
+  const hw = n.w / 2 + 3, hh = n.h / 2 + 3;
+  const t = Math.min(dx ? hw / Math.abs(dx) : Infinity, dy ? hh / Math.abs(dy) : Infinity);
+  return [n.x + dx * t, n.y + dy * t];
+}
+function drawEdges() {
+  // fan out parallel edges between same pair
+  const pairCount = {};
+  for (const e of edges) { const k = [e.s, e.t].sort().join("|"); e.k = (pairCount[k] = (pairCount[k] || 0) + 1) - 1; }
+  for (const e of edges) {
+    const a = byId[e.s], b = byId[e.t];
+    if (a === b) { // self loop above-right
+      const x0 = a.x + a.w / 2 - 22, y0 = a.y - a.h / 2 - 2, x1 = a.x + a.w / 2 + 2, y1 = a.y - 6;
+      e.p.setAttribute("d", `M${x0},${y0} C${x0 + 6},${y0 - 46} ${x1 + 52},${y1 - 30} ${x1 + 3},${y1}`);
+      e.l.setAttribute("x", a.x + a.w / 2 + 26); e.l.setAttribute("y", a.y - a.h / 2 - 30);
+      continue;
+    }
+    let cx, cy;
+    if (mode === "layered" && Math.abs(a.x - b.x) > 40) {
+      // horizontal S-curve; bow long edges away from intermediate columns
+      const span = Math.round(Math.abs(b.x - a.x) / colGap);
+      const bow = span > 1 ? (a.y <= b.y ? -1 : 1) * 70 * (span - 1) : 0;
+      const [sx, sy] = [a.x + Math.sign(b.x - a.x) * (a.w / 2 + 3), a.y];
+      const [tx, ty] = [b.x - Math.sign(b.x - a.x) * (b.w / 2 + 7), b.y];
+      const dx = (tx - sx) * 0.5;
+      e.p.setAttribute("d", `M${sx},${sy} C${sx + dx},${sy + bow} ${tx - dx},${ty + bow} ${tx},${ty}`);
+      // label near the source end (t = 0.3) so labels of edges into one target don't pile up
+      const lx = 0.343 * sx + 0.441 * (sx + dx) + 0.189 * (tx - dx) + 0.027 * tx;
+      const ly = 0.343 * sy + 0.441 * (sy + bow) + 0.189 * (ty + bow) + 0.027 * ty;
+      e.l.setAttribute("x", lx); e.l.setAttribute("y", ly - 5);
+      continue;
+    }
+    // gentle quadratic curve
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const off = 18 + e.k * 26;
+    cx = mx - dy / len * off; cy = my + dx / len * off;
+    const [sx, sy] = clip(a, cx, cy), [tx, ty] = clip(b, cx, cy);
+    e.p.setAttribute("d", `M${sx},${sy} Q${cx},${cy} ${tx},${ty}`);
+    e.l.setAttribute("x", 0.25 * sx + 0.5 * cx + 0.25 * tx); e.l.setAttribute("y", 0.25 * sy + 0.5 * cy + 0.25 * ty - 5);
+  }
+}
+function draw() {
+  for (const n of nodes) n.g.setAttribute("transform", `translate(${n.x},${n.y})`);
+  drawEdges();
+}
+
+// ---------- fit to view ----------
+let view = { s: 1, x: 0, y: 0 };
+function fit(points, animate) {
+  const [W, H] = size(), PAD = 70;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [n, x, y] of points) {
+    x0 = Math.min(x0, x - n.w / 2); x1 = Math.max(x1, x + n.w / 2);
+    y0 = Math.min(y0, y - n.h / 2); y1 = Math.max(y1, y + n.h / 2);
+  }
+  if (!isFinite(x0)) return;
+  const bw = x1 - x0 + 2 * PAD, bh = y1 - y0 + 2 * PAD;
+  const s = Math.min(1, W / bw, H / bh);
+  view = { s, x: W / 2 - s * (x0 + x1) / 2, y: H / 2 - s * (y0 + y1) / 2 };
+  gR.classList.toggle("still", !animate);
+  gR.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.s})`;
+}
+const fitTargets = animate => fit(nodes.map(n => [n, n.tx, n.ty]), animate);
+const fitCurrent = animate => fit(nodes.map(n => [n, n.x, n.y]), animate);
+
+// ---------- layouts ----------
+let mode = "layered", colGap = 240;
+const size = () => { const r = svg.getBoundingClientRect(); return [r.width - (panel.classList.contains("open") ? 340 : 0), r.height]; };
+
+function layered() {
+  // rank = longest path from a source, ignoring self loops and DFS back edges (breaks cycles)
+  const state = {}, back = new Set();
+  const visit = id => {
+    state[id] = 1;
+    for (const e of edges) if (e.s === id && e.t !== id) {
+      if (state[e.t] === 1) back.add(e); else if (!state[e.t]) visit(e.t);
+    }
+    state[id] = 2;
+  };
+  for (const n of nodes) if (!state[n.id]) visit(n.id);
+  const dag = edges.filter(e => e.s !== e.t && !back.has(e));
+  const rank = Object.fromEntries(nodes.map(n => [n.id, 0]));
+  for (let i = 0; i < nodes.length; i++) for (const e of dag) rank[e.t] = Math.max(rank[e.t], rank[e.s] + 1);
+  let cols = [];
+  for (const n of nodes) (cols[rank[n.id]] ||= []).push(n);
+  cols = cols.filter(Boolean);
+  const [W, H] = size();
+  const minGap = Math.max(...nodes.map(n => n.w)) + 90;
+  colGap = Math.max(minGap, Math.min(300, (W - 200) / Math.max(1, cols.length - 1)));
+  const x0 = W / 2 - colGap * (cols.length - 1) / 2, rowGap = 92;
+  const place = () => cols.forEach((c, i) => c.forEach((n, j) => { n.tx = x0 + i * colGap; n.ty = H / 2 + (j - (c.length - 1) / 2) * rowGap; }));
+  // start columns in name order, then barycenter sweeps
+  cols.forEach(c => c.sort((a, b) => a.id.localeCompare(b.id)));
+  place();
+  for (let it = 0; it < 4; it++) {
+    for (const c of cols) {
+      for (const n of c) {
+        const nb = edges.filter(e => e.s !== e.t && (e.s === n.id || e.t === n.id)).map(e => byId[e.s === n.id ? e.t : e.s].ty);
+        n.bc = nb.length ? nb.reduce((a, b) => a + b) / nb.length : n.ty;
+      }
+      c.sort((a, b) => a.bc - b.bc);
+      place();
+    }
+  }
+}
+
+function radial() {
+  const indeg = Object.fromEntries(nodes.map(n => [n.id, 0]));
+  for (const e of edges) if (e.s !== e.t) indeg[e.t]++;
+  // hub: highest in-degree; a tie goes to the first type by name
+  const hub = nodes.slice().sort((a, b) => indeg[b.id] - indeg[a.id] || a.id.localeCompare(b.id))[0];
+  const [W, H] = size(), R = Math.max(Math.min(W, H) * 0.32, nodes.length * 26);
+  hub.tx = W / 2; hub.ty = H / 2;
+  const rest = nodes.filter(n => n !== hub);
+  if (!rest.length) return;
+  // order ring so connected neighbours sit next to each other
+  const ring = [rest.shift()];
+  while (rest.length) {
+    const cur = ring[ring.length - 1];
+    const i = rest.findIndex(n => edges.some(e => (e.s === cur.id && e.t === n.id) || (e.t === cur.id && e.s === n.id)));
+    ring.push(rest.splice(i < 0 ? 0 : i, 1)[0]);
+  }
+  ring.forEach((n, i) => { const a = -Math.PI / 2 + i * 2 * Math.PI / ring.length; n.tx = W / 2 + R * Math.cos(a) * 1.25; n.ty = H / 2 + R * Math.sin(a); });
+}
+
+// force: live simulation
+let alpha = 0, simRaf = 0, fitAfterSim = false;
+function forceStep() {
+  const [W, H] = size();
+  for (const a of nodes) { a.vx = a.vx || 0; a.vy = a.vy || 0; }
+  for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
+    const a = nodes[i], b = nodes[j]; let dx = b.x - a.x, dy = b.y - a.y; let d2 = dx * dx + dy * dy || 1, d = Math.sqrt(d2);
+    const f = 60000 / d2; dx /= d; dy /= d;
+    a.vx -= dx * f; a.vy -= dy * f; b.vx += dx * f; b.vy += dy * f;
+  }
+  for (const e of edges) if (e.s !== e.t) {
+    const a = byId[e.s], b = byId[e.t], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1, f = (d - 210) * 0.04;
+    a.vx += dx / d * f; a.vy += dy / d * f; b.vx -= dx / d * f; b.vy -= dy / d * f;
+  }
+  for (const n of nodes) {
+    n.vx += (W / 2 - n.x) * 0.01; n.vy += (H / 2 - n.y) * 0.01;
+    if (n.fixed) { n.vx = n.vy = 0; continue; }
+    n.x += n.vx * alpha; n.y += n.vy * alpha; n.vx *= 0.6; n.vy *= 0.6;
+  }
+}
+function runForce() {
+  cancelAnimationFrame(simRaf);
+  const tick = () => {
+    if (mode !== "force") return;
+    if (alpha < 0.005) { if (fitAfterSim) { fitAfterSim = false; fitCurrent(true); } return; }
+    forceStep(); alpha *= 0.985; draw(); simRaf = requestAnimationFrame(tick);
+  };
+  simRaf = requestAnimationFrame(tick);
+}
+
+// animate to target positions
+let animRaf = 0;
+function animateTo(done) {
+  cancelAnimationFrame(animRaf);
+  const from = nodes.map(n => [n.x, n.y]), t0 = performance.now(), D = 550;
+  const ease = t => 1 - Math.pow(1 - t, 3);
+  const step = now => {
+    const t = Math.min(1, (now - t0) / D), k = ease(t);
+    nodes.forEach((n, i) => { n.x = from[i][0] + (n.tx - from[i][0]) * k; n.y = from[i][1] + (n.ty - from[i][1]) * k; });
+    draw();
+    if (t < 1) animRaf = requestAnimationFrame(step); else done && done();
+  };
+  animRaf = requestAnimationFrame(step);
+}
+
+// ---------- mode: hash > localStorage > "layered" ----------
+const MODES = ["layered", "force", "radial"], KEY = "knott-ontology-mode";
+function remember(m) {
+  try { localStorage.setItem(KEY, m); } catch (_) {}
+  if (location.hash.slice(1) === m) return;
+  try { history.replaceState(null, "", "#" + m); } catch (_) { location.hash = m; }
+}
+function initialMode() {
+  const h = location.hash.slice(1);
+  if (MODES.includes(h)) return h;
+  try { const s = localStorage.getItem(KEY); if (MODES.includes(s)) return s; } catch (_) {}
+  return "layered";
+}
+
+function setMode(m, instant) {
+  mode = m;
+  remember(m);
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.l === m));
+  nodes.forEach(n => n.fixed = false);
+  cancelAnimationFrame(animRaf);
+  if (m === "force") {
+    const [W, H] = size();
+    if (instant) nodes.forEach((n, i) => { const a = i * 2.4; n.x = W / 2 + 120 * Math.cos(a); n.y = H / 2 + 120 * Math.sin(a); });
+    if (instant) { // settle off-screen so the first paint is already laid out
+      alpha = 1;
+      while (alpha >= 0.005) { forceStep(); alpha *= 0.985; }
+      draw(); fitCurrent(false); return;
+    }
+    alpha = 1; fitAfterSim = true; runForce(); return;
+  }
+  cancelAnimationFrame(simRaf);
+  (m === "layered" ? layered : radial)();
+  fitTargets(!instant);
+  if (instant) { nodes.forEach(n => { n.x = n.tx; n.y = n.ty; }); draw(); } else animateTo();
+}
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => setMode(b.dataset.l));
+addEventListener("hashchange", () => { const h = location.hash.slice(1); if (MODES.includes(h) && h !== mode) setMode(h); });
+
+// ---------- drag ----------
+let dragMoved = false;
+function startDrag(ev, n) {
+  dragMoved = false;
+  const r = svg.getBoundingClientRect();
+  const toLocal = e => [(e.clientX - r.left - view.x) / view.s, (e.clientY - r.top - view.y) / view.s];
+  const [px, py] = toLocal(ev), ox = px - n.x, oy = py - n.y;
+  n.fixed = true;
+  const move = e => {
+    dragMoved = true; const [x, y] = toLocal(e); n.x = x - ox; n.y = y - oy;
+    if (mode === "force") { fitAfterSim = false; alpha = Math.max(alpha, 0.3); runForce(); } else draw();
+  };
+  const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); if (mode !== "force") n.fixed = false; setTimeout(() => dragMoved = false, 0); };
+  window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+}
+
+// ---------- focus & panel ----------
+let selected = null;
+function focusOn(id) {
+  svg.classList.toggle("dim", !!id);
+  const near = new Set([id]);
+  for (const e of edges) {
+    const hot = !!id && (e.s === id || e.t === id);
+    e.g.classList.toggle("hot", hot);
+    e.p.setAttribute("marker-end", hot ? "url(#arrowHot)" : "url(#arrow)");
+    if (hot) { near.add(e.s); near.add(e.t); }
+  }
+  for (const n of nodes) { n.g.classList.toggle("hot", near.has(n.id)); n.g.classList.toggle("sel", n.id === selected); }
+}
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const link = id => `<a data-go="${esc(id)}">${esc(id)}</a>`;
+function select(id) {
+  selected = id === selected ? null : id;
+  focusOn(selected);
+  if (!selected) { panel.classList.remove("open"); return; }
+  const n = byId[id];
+  const out = edges.filter(e => e.s === id), inc = edges.filter(e => e.t === id && e.s !== id);
+  const row = (a, b, c, d) => `<tr><td>${a}${d ? `<span class="d">${esc(d)}</span>` : ""}</td><td class="t">${b}${c ? ' <span class="req" title="required">●</span>' : ""}</td></tr>`;
+  const head = n.ghost
+    ? `<div class="sub ghostnote">undefined type — no schema</div>`
+    : `<div class="sub">${plural(n.count, "entity", "entities")}</div>${n.description ? `<p>${esc(n.description)}</p>` : ""}`;
+  const own = n.ghost ? "" : `
+    <h3>Attributes</h3>
+    ${n.attributes.length ? `<table>${n.attributes.map(a => row(esc(a.name), esc(a.type), a.required, a.description)).join("")}</table>` : '<div class="empty">None</div>'}
+    <h3>Relations out</h3>
+    ${out.length ? `<table>${out.map(e => row(esc(e.name), "→ " + link(e.t), e.req, e.desc)).join("")}</table>` : '<div class="empty">None</div>'}`;
+  panel.innerHTML = `
+    <button class="close" aria-label="Close">×</button>
+    <h2>${esc(n.id)}</h2>
+    ${head}${own}
+    <h3>Referenced by</h3>
+    ${inc.length ? `<table>${inc.map(e => row(link(e.s) + "." + esc(e.name), "", e.req)).join("")}</table>` : '<div class="empty">None</div>'}`;
+  panel.classList.add("open");
+  panel.querySelector(".close").onclick = () => select(id);
+  panel.querySelectorAll("[data-go]").forEach(a => a.onclick = () => { selected = null; select(a.dataset.go); });
+}
+svg.addEventListener("click", () => selected && select(selected));
+addEventListener("resize", () => setMode(mode, true));
+
+setMode(initialMode(), true);
+</script>
+</body>
+</html>

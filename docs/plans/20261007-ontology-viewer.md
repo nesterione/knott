@@ -121,12 +121,12 @@ class Ontology(_Frozen):          vault: str; types: list[OntologyType]; schema_
 - Create: `src/knott/view.py`
 - Create: `tests/test_view.py`
 
-- [ ] turn the prototype into the template: replace the hard-coded `DATA` with `const DATA = /*__DATA__*/;`, and map the field names to the model (attributes/relations as objects, `count`, `target_known`)
-- [ ] apply the page changes from Technical Details: header from data, mode in hash + localStorage, fit to view, layered labels near the source, ghost nodes, schema-issue note, radial tie-break
-- [ ] implement `render_ontology()` in `view.py`: the JSON dump, `</` escaping, a single placeholder substitution, and `RuntimeError` if the placeholder is missing
-- [ ] write tests: the placeholder is gone, the embedded JSON parses back to the same model, and a description containing `</script><script>alert(1)` does not appear raw in the output
-- [ ] write test: the output loads no external URLs (no `src="http`, no `href="http` stylesheet)
-- [ ] run tests - must pass before next task
+- [x] turn the prototype into the template: replace the hard-coded `DATA` with `const DATA = /*__DATA__*/;`, and map the field names to the model (attributes/relations as objects, `count`, `target_known`)
+- [x] apply the page changes from Technical Details: header from data, mode in hash + localStorage, fit to view, layered labels near the source, ghost nodes, schema-issue note, radial tie-break
+- [x] implement `render_ontology()` in `view.py`: the JSON dump, `</` escaping, a single placeholder substitution, and `RuntimeError` if the placeholder is missing
+- [x] write tests: the placeholder is gone, the embedded JSON parses back to the same model, and a description containing `</script><script>alert(1)` does not appear raw in the output
+- [x] write test: the output loads no external URLs (no `src="http`, no `href="http` stylesheet)
+- [x] run tests - must pass before next task
 
 ### Task 4: Add the `knott view` command
 
