@@ -67,6 +67,7 @@ $ knott validate
 | `knott init [PATH]` | Create `.knott/schemas/` and `.knott/config.yaml` |
 | `knott validate [PATH...]` | Check all schemas, plus all entities or those under `PATH` (`--format json` for agents) |
 | `knott types [--verbose]` | List discovered types |
+| `knott view [PATH]` | Draw the ontology as an HTML page and open it (`-o FILE`, `--no-open`) |
 | `knott version` | Print the installed version |
 | `knott skill install [PATH]` | Install the bundled Agent Skill to `.claude/skills` and/or `.agents/skills` (`--claude`, `--agents`; asks interactively without flags) |
 

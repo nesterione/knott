@@ -26,15 +26,17 @@ decision ──── affects ───────┘
 decision ── supersedes ──▶ decision
 ```
 
-| Type | Holds | Key relations |
-|---|---|---|
-| `concept` | the model's core ideas | `related → concept` |
-| `command` | CLI commands | `concepts → concept` |
-| `issue_code` | every validation code, cause and fix | `about → concept` (required) |
-| `guide` | how-tos | `concepts → concept`, `commands → command` |
-| `decision` | design records | `affects → concept` (required), `supersedes → decision` |
+| Type         | Holds                                | Key relations                                           |
+| ------------ | ------------------------------------ | ------------------------------------------------------- |
+| `concept`    | the model's core ideas               | `related → concept`                                     |
+| `command`    | CLI commands                         | `concepts → concept`                                    |
+| `issue_code` | every validation code, cause and fix | `about → concept` (required)                            |
+| `guide`      | how-tos                              | `concepts → concept`, `commands → command`              |
+| `decision`   | design records                       | `affects → concept` (required), `supersedes → decision` |
 
 Run `knott types --verbose` inside `docs/` to see them, and `knott validate` to check the whole folder.
+
+Run `knott view` inside `docs/` to explore it interactively.
 
 ## Designing your own
 

@@ -147,10 +147,10 @@ class Ontology(_Frozen):          vault: str; types: list[OntologyType]; schema_
 - Modify: `docs/concepts/ontology.md`
 - Modify: `README.md`
 
-- [ ] create `docs/commands/view.md` (`type: command`, `title: knott view`, `synopsis`, `writes_files: true`, `concepts:` → ontology, schema), with a short description of the layouts, the panel and the flags
-- [ ] in `docs/concepts/ontology.md`, keep the ASCII diagram and add "Run `knott view` inside `docs/` to explore it interactively."
-- [ ] add a `knott view` row to the README commands table
-- [ ] run `uv run knott validate` inside `docs/` - must pass
+- [x] create `docs/commands/view.md` (`type: command`, `title: knott view`, `synopsis`, `writes_files: true`, `concepts:` → ontology, schema), with a short description of the layouts, the panel and the flags
+- [x] in `docs/concepts/ontology.md`, keep the ASCII diagram and add "Run `knott view` inside `docs/` to explore it interactively."
+- [x] add a `knott view` row to the README commands table
+- [x] run `uv run knott validate` inside `docs/` - must pass
 
 ### Task 6: Verify acceptance criteria
 - [ ] run `uv run knott view docs --no-open -o <scratch>/o.html` and take headless Chrome screenshots of `#layered`, `#force` and `#radial` in both light and dark (`--force-dark-mode`). Check that nothing overlaps badly and that labels are readable
