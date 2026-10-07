@@ -68,6 +68,7 @@ $ knott validate
 | `knott validate [PATH...]` | Check all schemas, plus all entities or those under `PATH` (`--format json` for agents) |
 | `knott types [--verbose]` | List discovered types |
 | `knott version` | Print the installed version |
+| `knott skill install [PATH]` | Install the bundled Agent Skill to `.claude/skills` and/or `.agents/skills` (`--claude`, `--agents`; asks interactively without flags) |
 
 Exit codes: `0` valid, `1` validation issues, `2` usage or configuration error.
 
@@ -108,7 +109,13 @@ Validation problems come back as data; only usage errors raise (`KnottError` sub
 
 ## For agents
 
-See [`skills/knott/SKILL.md`](skills/knott/SKILL.md), an Agent Skill describing how to read schemas, write entities and relations, and validate.
+Knott ships an Agent Skill describing how to read schemas, write entities and relations, and validate ([`SKILL.md`](src/knott/_skills/knott/SKILL.md)). Install it into a project:
+
+```sh
+knott skill install            # pick targets interactively
+knott skill install --claude   # .claude/skills/knott/ (Claude Code)
+knott skill install --agents   # .agents/skills/knott/ (Codex and other agents)
+```
 
 ## Development
 

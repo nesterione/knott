@@ -112,11 +112,11 @@ def install_skill(root: Path, target: SkillTarget, *, force: bool = False) -> In
 - Modify: `README.md` (skill link)
 - Create: `tests/test_skills.py`
 
-- [ ] `git mv skills/knott src/knott/_skills/knott` and remove the empty `skills/`
-- [ ] update the README "For agents" link to the new path
-- [ ] build the wheel (`uv build`) and confirm `knott/skills/knott/SKILL.md` is inside (`unzip -l`)
-- [ ] write a test: `importlib.resources.files("knott") / "_skills/knott/SKILL.md"` exists and starts with frontmatter `name: knott`
-- [ ] run tests - must pass before task 2
+- [x] `git mv skills/knott src/knott/_skills/knott` and remove the empty `skills/`
+- [x] update the README "For agents" link to the new path
+- [x] build the wheel (`uv build`) and confirm `knott/_skills/knott/SKILL.md` is inside (`unzip -l`)
+- [x] write a test: `importlib.resources.files("knott") / "_skills/knott/SKILL.md"` exists and starts with frontmatter `name: knott`
+- [x] run tests - must pass before task 2
 
 ### Task 2: Install logic in `knott.skills`
 
@@ -124,21 +124,21 @@ def install_skill(root: Path, target: SkillTarget, *, force: bool = False) -> In
 - Create: `src/knott/skills.py`
 - Modify: `tests/test_skills.py`
 
-- [ ] add `SkillTarget`, `InstallStatus`, `InstallResult` and `target_dir`
-- [ ] implement `install_skill` with tree comparison and copy via `importlib.resources` (`as_file`/`iterdir` traversal)
-- [ ] raise `KnottError` when the destination is a file or not writable
-- [ ] write tests: CREATED on an empty dir, UNCHANGED on a second run, CONFLICT on a modified file (file untouched), UPDATED with `force=True`, extra destination files preserved, both targets map to the correct dirs
-- [ ] write error tests: destination path is a file → `KnottError`
-- [ ] run tests - must pass before task 3
+- [x] add `SkillTarget`, `InstallStatus`, `InstallResult` and `target_dir`
+- [x] implement `install_skill` with tree comparison and copy via `importlib.resources` (`as_file`/`iterdir` traversal)
+- [x] raise `KnottError` when the destination is a file or not writable
+- [x] write tests: CREATED on an empty dir, UNCHANGED on a second run, CONFLICT on a modified file (file untouched), UPDATED with `force=True`, extra destination files preserved, both targets map to the correct dirs
+- [x] write error tests: destination path is a file → `KnottError`
+- [x] run tests - must pass before task 3
 
 ### Task 3: Add questionary dependency
 
 **Files:**
 - Modify: `pyproject.toml`, `uv.lock`
 
-- [ ] `uv add questionary` (core dependency)
-- [ ] confirm `uv run mypy` is clean with questionary types. If not, add a narrow mypy override.
-- [ ] run tests - must pass before task 4
+- [x] `uv add questionary` (core dependency)
+- [x] confirm `uv run mypy` is clean with questionary types. If not, add a narrow mypy override.
+- [x] run tests - must pass before task 4
 
 ### Task 4: `knott skill install` command, non-interactive path
 
@@ -146,13 +146,13 @@ def install_skill(root: Path, target: SkillTarget, *, force: bool = False) -> In
 - Modify: `src/knott/cli.py`
 - Modify: `tests/test_cli.py`
 
-- [ ] add a `skill_app = typer.Typer(help=...)` sub-app registered as `skill`, and the `install` command with `PATH`, `--claude`, `--agents` and `--force`
-- [ ] add `_is_interactive()` and the no-flags/no-TTY error (exit 2)
-- [ ] add output formatting and exit codes (0/1/2) per Technical Details
-- [ ] add the epilog to the top-level `app` advertising the skill
-- [ ] write tests: `--claude`, `--agents`, both; rerun says up to date; conflict exits 1 without `--force` and succeeds with `--force`; nonexistent PATH exits 2; no flags with `_is_interactive` patched False exits 2 with a hint
-- [ ] write tests: `knott --help` mentions `knott skill install`; `knott skill install --help` lists `--claude`/`--agents`
-- [ ] run tests - must pass before task 5
+- [x] add a `skill_app = typer.Typer(help=...)` sub-app registered as `skill`, and the `install` command with `PATH`, `--claude`, `--agents` and `--force`
+- [x] add `_is_interactive()` and the no-flags/no-TTY error (exit 2)
+- [x] add output formatting and exit codes (0/1/2) per Technical Details
+- [x] add the epilog to the top-level `app` advertising the skill
+- [x] write tests: `--claude`, `--agents`, both; rerun says up to date; conflict exits 1 without `--force` and succeeds with `--force`; nonexistent PATH exits 2; no flags with `_is_interactive` patched False exits 2 with a hint
+- [x] write tests: `knott --help` mentions `knott skill install`; `knott skill install --help` lists `--claude`/`--agents`
+- [x] run tests - must pass before task 5
 
 ### Task 5: Interactive path (questionary)
 
@@ -160,22 +160,22 @@ def install_skill(root: Path, target: SkillTarget, *, force: bool = False) -> In
 - Modify: `src/knott/cli.py`
 - Modify: `tests/test_cli.py`
 
-- [ ] when there are no flags and `_is_interactive()`, show `questionary.checkbox` with `.claude/skills` (checked) and `.agents/skills`
-- [ ] handle `None` or an empty selection: print `Nothing installed.` and exit 1
-- [ ] on CONFLICT in interactive mode, ask `questionary.confirm` to overwrite
-- [ ] write tests (monkeypatch `_is_interactive` → True and a fake `questionary.checkbox(...).ask()`): selection installs the chosen targets; cancel exits 1; confirm yes overwrites, confirm no leaves the file and exits 1
-- [ ] run tests - must pass before task 6
+- [x] when there are no flags and `_is_interactive()`, show `questionary.checkbox` with `.claude/skills` (checked) and `.agents/skills`
+- [x] handle `None` or an empty selection: print `Nothing installed.` and exit 1
+- [x] on CONFLICT in interactive mode, ask `questionary.confirm` to overwrite
+- [x] write tests (monkeypatch `_is_interactive` → True and a fake `questionary.checkbox(...).ask()`): selection installs the chosen targets; cancel exits 1; confirm yes overwrites, confirm no leaves the file and exits 1
+- [x] run tests - must pass before task 6
 
 ### Task 6: Verify acceptance criteria
-- [ ] the skill ships in the wheel and `uvx --from dist/knott-*.whl knott skill install --claude` works in a temp dir
-- [ ] `knott --help` advertises the skill
-- [ ] interactive, flag and no-TTY paths all behave as specified
-- [ ] run the full suite: `uv run pytest && uv run ruff check && uv run ruff format --check && uv run mypy`
+- [x] the skill ships in the wheel and `uvx --from dist/knott-*.whl knott skill install --claude` works in a temp dir
+- [x] `knott --help` advertises the skill
+- [x] interactive, flag and no-TTY paths all behave as specified
+- [x] run the full suite: `uv run pytest && uv run ruff check && uv run ruff format --check && uv run mypy`
 
 ### Task 7: [Final] Update documentation
-- [ ] create `docs/commands/skill.md`, matching the style of the other command pages
-- [ ] add `knott skill install` to the README Commands table and update "For agents" to say "run `knott skill install`"
-- [ ] move this plan to `docs/plans/completed/`
+- [x] create `docs/commands/skill.md`, matching the style of the other command pages
+- [x] add `knott skill install` to the README Commands table and update "For agents" to say "run `knott skill install`"
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 **Manual verification**:
@@ -184,3 +184,9 @@ def install_skill(root: Path, target: SkillTarget, *, force: bool = False) -> In
 
 **Release**:
 - bump the version and publish via the existing GitHub Actions trusted-publishing workflow (see `RELEASING.md`).
+
+## Implementation notes
+- ➕ updated the stale `skills/knott/SKILL.md` references in `SPEC.md` and `docs/guides/agent-workflow.md`, and linked the new command page from `docs/README.md`.
+- ➕ conflict only when an existing file would be overwritten; a bundled file missing from an otherwise identical install is added without `--force` (status `updated`).
+- ➕ `knott skill` gets `short_help` so the command list stays one line; the full text shows in `knott skill --help`.
+- ⚠️ `ruff format --check` (no paths) already fails on `main` on Python code blocks in README.md, SPEC.md and docs/guides/python-api.md. That's unrelated to this change; `ruff format --check src tests` is clean.

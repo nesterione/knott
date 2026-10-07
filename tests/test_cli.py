@@ -5,10 +5,12 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+import questionary
 from typer.testing import CliRunner
 
-from knott import version
+from knott import cli, version
 from knott.cli import app
+from knott.skills import SkillTarget
 
 from .conftest import fixture_path
 
@@ -247,3 +249,121 @@ def test_config_with_invalid_characters_is_usage_error(
     (vault / ".knott/config.yaml").write_bytes(b"knott_version: \x00\n")
     monkeypatch.chdir(vault)
     assert runner.invoke(app, ["validate"]).exit_code == 2
+
+
+class FakePrompt:
+    def __init__(self, answer: object) -> None:
+        self.answer = answer
+
+    def ask(self) -> object:
+        return self.answer
+
+
+@pytest.fixture
+def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "_is_interactive", lambda: False)
+    return tmp_path
+
+
+def _interactive(
+    monkeypatch: pytest.MonkeyPatch, selected: list[SkillTarget] | None, overwrite: bool = False
+) -> None:
+    monkeypatch.setattr(cli, "_is_interactive", lambda: True)
+    monkeypatch.setattr(questionary, "checkbox", lambda *a, **k: FakePrompt(selected))
+    monkeypatch.setattr(questionary, "confirm", lambda *a, **k: FakePrompt(overwrite))
+
+
+def test_help_advertises_skill() -> None:
+    result = runner.invoke(app, ["--help"], env={"COLUMNS": "200"})
+    assert "knott skill install" in result.output
+
+
+def test_skill_install_help_lists_targets() -> None:
+    result = runner.invoke(app, ["skill", "install", "--help"], env={"COLUMNS": "200"})
+    assert "--claude" in result.output
+    assert "--agents" in result.output
+
+
+@pytest.mark.parametrize(
+    ("flags", "dirs"),
+    [
+        (["--claude"], [".claude/skills/knott"]),
+        (["--agents"], [".agents/skills/knott"]),
+        (["--claude", "--agents"], [".claude/skills/knott", ".agents/skills/knott"]),
+    ],
+)
+def test_skill_install_flags(project: Path, flags: list[str], dirs: list[str]) -> None:
+    result = runner.invoke(app, ["skill", "install", *flags])
+    assert result.exit_code == 0, result.output
+    assert result.output == "".join(f"✓ {d}  installed\n" for d in dirs)
+    for d in dirs:
+        assert (project / d / "SKILL.md").is_file()
+    assert runner.invoke(app, ["skill", "install", *flags]).output == "".join(
+        f"✓ {d}  up to date\n" for d in dirs
+    )
+
+
+def test_skill_install_into_path_argument(project: Path) -> None:
+    (project / "sub").mkdir()
+    result = runner.invoke(app, ["skill", "install", "sub", "--claude"])
+    assert result.exit_code == 0, result.output
+    assert (project / "sub/.claude/skills/knott/SKILL.md").is_file()
+
+
+def test_skill_install_conflict_needs_force(project: Path) -> None:
+    skill_md = project / ".claude/skills/knott/SKILL.md"
+    skill_md.parent.mkdir(parents=True)
+    skill_md.write_text("local edits\n")
+    result = runner.invoke(app, ["skill", "install", "--claude"])
+    assert result.exit_code == 1
+    assert "--force" in result.output
+    assert skill_md.read_text() == "local edits\n"
+    result = runner.invoke(app, ["skill", "install", "--claude", "--force"])
+    assert result.exit_code == 0, result.output
+    assert result.output == "✓ .claude/skills/knott  updated\n"
+
+
+def test_skill_install_missing_path_is_usage_error(project: Path) -> None:
+    result = runner.invoke(app, ["skill", "install", "missing", "--claude"])
+    assert result.exit_code == 2
+
+
+def test_skill_install_without_flags_or_tty_is_usage_error(project: Path) -> None:
+    result = runner.invoke(app, ["skill", "install"])
+    assert result.exit_code == 2
+    assert "pass --claude and/or --agents" in result.output
+    assert not (project / ".claude").exists()
+
+
+def test_skill_install_interactive_selection(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _interactive(monkeypatch, [SkillTarget.AGENTS])
+    result = runner.invoke(app, ["skill", "install"])
+    assert result.exit_code == 0, result.output
+    assert (project / ".agents/skills/knott/SKILL.md").is_file()
+    assert not (project / ".claude").exists()
+
+
+@pytest.mark.parametrize("selected", [None, []])
+def test_skill_install_interactive_cancel(
+    project: Path, monkeypatch: pytest.MonkeyPatch, selected: list[SkillTarget] | None
+) -> None:
+    _interactive(monkeypatch, selected)
+    result = runner.invoke(app, ["skill", "install"])
+    assert result.exit_code == 1
+    assert result.output == "Nothing installed.\n"
+
+
+@pytest.mark.parametrize(("overwrite", "exit_code"), [(True, 0), (False, 1)])
+def test_skill_install_interactive_conflict_confirm(
+    project: Path, monkeypatch: pytest.MonkeyPatch, overwrite: bool, exit_code: int
+) -> None:
+    skill_md = project / ".claude/skills/knott/SKILL.md"
+    skill_md.parent.mkdir(parents=True)
+    skill_md.write_text("local edits\n")
+    _interactive(monkeypatch, [SkillTarget.CLAUDE], overwrite=overwrite)
+    result = runner.invoke(app, ["skill", "install"])
+    assert result.exit_code == exit_code
+    assert (skill_md.read_text() == "local edits\n") is not overwrite

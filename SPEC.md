@@ -482,7 +482,7 @@ Not in v0: `knott create`, `knott edit`, `knott link`.
 
 ## 16. Agent skill
 
-Ship an agent instruction document in the repo at `skills/knott/SKILL.md`, in Agent Skills format (frontmatter with `name` and `description`). It explains:
+Ship an agent instruction document in the repo at `src/knott/_skills/knott/SKILL.md`, in Agent Skills format (frontmatter with `name` and `description`). It explains:
 
 - what a Knott vault is, and that Markdown is the source of truth
 - where schemas live and how to read them
@@ -711,7 +711,7 @@ If `scripts/foo.md` changes to `type: feedback` (with a `feedback` schema presen
 1 validation error
 ```
 
-Also: `uvx knott version` works from a built wheel, and `skills/knott/SKILL.md` exists.
+Also: `uvx knott version` works from a built wheel, and `src/knott/_skills/knott/SKILL.md` exists.
 
 ---
 

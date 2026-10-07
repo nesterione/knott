@@ -29,7 +29,7 @@ This README has no frontmatter, so Knott treats it as an ordinary note.
 
 ## Commands
 
-[init](commands/init.md) · [validate](commands/validate.md) · [types](commands/types.md) · [version](commands/version.md)
+[init](commands/init.md) · [validate](commands/validate.md) · [types](commands/types.md) · [version](commands/version.md) · [skill](commands/skill.md)
 
 ## Issue codes
 

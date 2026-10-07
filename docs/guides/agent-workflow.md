@@ -12,7 +12,7 @@ commands:
 ---
 # Agent workflow
 
-Knott is built for agents that persist knowledge as files. The full instructions ship as an Agent Skill at `skills/knott/SKILL.md`; this is the short version.
+Knott is built for agents that persist knowledge as files. The full instructions ship as an Agent Skill (install it into a project with `knott skill install`). This is the short version.
 
 1. `knott types --verbose`: find the right type and its schema file.
 2. Read the schema YAML: `description`, required fields, relation targets.
