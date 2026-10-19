@@ -51,12 +51,26 @@ class InitResult(_Frozen):
 
 
 class OntologyAttribute(_Frozen):
-    """An attribute declared by a type's schema."""
+    """An attribute declared by a type's schema, or a nested part of one."""
 
-    name: str
+    name: str | None
+    """Field name; None for a list's `items` or a map's `values`."""
     type: str
+    """A scalar type name, or `list`, `object` or `map`."""
     required: bool
     description: str | None
+    items: OntologyAttribute | None = None
+    """For a `list`: the definition of each item."""
+    values: OntologyAttribute | None = None
+    """For a `map`: the definition of each value (keys are free strings)."""
+    fields: list[OntologyAttribute] = []
+    """For an `object`: its declared fields, in schema order."""
+
+    @property
+    def notation(self) -> str:
+        """Compact form of the type, e.g. ``list of object`` or ``map of map of string``."""
+        inner = self.items or self.values
+        return self.type if inner is None else f"{self.type} of {inner.notation}"
 
 
 class OntologyRelation(_Frozen):

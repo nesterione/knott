@@ -11,12 +11,12 @@ A Knott vault is an ordinary directory of Markdown files with a `.knott/` direct
 
 - **Entity**: a Markdown file whose YAML frontmatter is a mapping with a `type` key. Files without frontmatter, or without `type`, are ordinary notes and are ignored.
 - **Schema**: `.knott/schemas/**/*.yaml`, one file per type. The `type:` value inside the file is the type's name; the file name and folder do not matter.
-- **Attribute**: a scalar frontmatter value declared under `attributes:` (`string`, `integer`, `number`, `boolean`, `date`, `datetime`).
+- **Attribute**: a frontmatter value declared under `attributes:`: a scalar (`string`, `integer`, `number`, `boolean`, `date`, `datetime`), or a `list`, `object` or `map` of them, nested.
 - **Relation**: a frontmatter value declared under `relations:` that points to another entity file by relative path. The relation lives only on the source file; never add an inverse on the target.
 
 ## Workflow
 
-1. Run `knott types` (or `knott types --verbose` to see each schema file) and look in `.knott/schemas/`.
+1. Run `knott types --verbose` to see each type's schema file, attributes (with nested shapes) and relations, and look in `.knott/schemas/`.
 2. Pick the relevant type and read its schema YAML: `description`, `attributes`, `relations`, and which fields are `required: true`.
 3. Create or update the Markdown entity. Put it wherever it makes sense to a human; Knott does not dictate folders.
 4. Write relations as relative paths (see below).
@@ -42,8 +42,27 @@ Typing is strict, with no coercion:
 - `string`: quote values YAML would read as something else: `"42"`, `"no"`, `"yes"`, `"on"`, `"off"`, `"2026-10-06"`.
 - `integer`: `3`, not `3.0` or `true`. `number`: `3` or `3.5`. `boolean`: `true` / `false` only (not `yes`/`no`/`on`/`off`).
 - `date`: `2026-10-06`. `datetime`: `2026-10-06T10:30:00` (a time is required).
-- An empty or `null` value counts as missing (for relations, `[]` does too).
-- Keys not declared in the schema are allowed and are not checked.
+- An empty or `null` value counts as missing (for relations and `list` attributes, `[]` does too).
+- Top-level keys not declared in the schema are allowed and are not checked.
+
+## Structured attributes
+
+`knott types --verbose` shows shapes such as `list of object` and `map of map of string`, with object fields indented below and `*` marking required ones. Write them as ordinary YAML:
+
+```yaml
+type: lexeme
+lemma: draugas
+tags: [noun, a1]                # list of string
+senses:                         # list of object (fields: id*, ru*)
+  - {id: friend, ru: друг}
+forms:                          # map of map of string: free keys
+  sg: {nom: draũgas, gen: draũgo}
+```
+
+- An `object` accepts **only** its declared fields; any other key is an error (`attribute-unknown-field`). A `map` accepts any string keys.
+- A required list needs at least one item. Never leave a list item or map value empty (`[a, null]`, `{nom: ~}`).
+- Strict typing applies at every level: quote `"no"`, `"42"`, and so on inside lists and objects too.
+- Issues name the exact location, e.g. `senses[1].ru` or `forms.sg.acc`.
 
 ## Writing relations
 

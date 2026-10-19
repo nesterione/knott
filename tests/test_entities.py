@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from knott import Knott
+from knott.vault.entity import parse_markdown
 
 from .conftest import triples, validate_fixture
 
@@ -157,3 +158,34 @@ def test_bad_explicit_tags_are_reported_not_raised(tmp_path: Path, value: str) -
     (tmp_path / "a.md").write_text(f"---\ntype: t\nx: {value}\n---\n")
     result = Knott.open(tmp_path).validate()
     assert [i.code for i in result.issues] == ["entity-invalid-frontmatter"]
+
+
+def test_nested_values_keep_their_lines_and_source_text() -> None:
+    text = (
+        "---\n"
+        "type: lexeme\n"
+        "senses:\n"
+        "  - {id: friend, ru: друг}\n"
+        "  - id: home\n"
+        "    ru: 5\n"
+        "forms:\n"
+        "  sg: {nom: draũgas, gen: draũgo}\n"
+        "base: &b {done: yes}\n"
+        "copy: *b\n"
+        "---\n"
+    )
+    parsed = parse_markdown(text, "a.md")
+    assert parsed.lines[("senses", 0)] == 4
+    assert parsed.lines[("senses", 0, "ru")] == 4
+    assert parsed.lines[("senses", 1, "ru")] == 6
+    assert parsed.raws[("senses", 1, "ru")] == "5"
+    assert parsed.lines[("forms", "sg", "gen")] == 8
+    assert parsed.raws[("forms", "sg", "gen")] == "draũgo"
+    # Aliased values get metadata under every path that reaches them.
+    assert parsed.raws[("copy", "done")] == "yes"
+    # Missing nested keys fall back to the nearest ancestor's line.
+    assert parsed.line_of(("senses", 1, "missing")) == 5
+    assert parsed.line_of(("absent", "x")) is None
+    # Top-level maps are unchanged.
+    assert parsed.key_lines["forms"] == 7
+    assert parsed.item_lines[("senses", 1)] == 5

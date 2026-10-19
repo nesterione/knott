@@ -18,7 +18,7 @@ from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent, merge_key_bin
 
 from knott.api import Knott, version
 from knott.errors import KnottError
-from knott.models import Issue, ValidationResult
+from knott.models import Issue, OntologyAttribute, OntologyType, ValidationResult
 from knott.skills import InstallResult, InstallStatus, SkillTarget, install_skill
 from knott.view import render_ontology
 
@@ -67,6 +67,55 @@ def format_issue(issue: Issue) -> str:
     header = f"✗ {location}" + (f"  {issue.field}" if issue.field else "")
     body = "\n".join(f"  {line}" for line in issue.message.splitlines())
     return f"{header}\n{body}"
+
+
+def format_type(t: OntologyType) -> str:
+    """A type with its description, attributes (nested shapes indented) and relations."""
+    lines = [f"{t.type}  ({t.path})"]
+    if t.description:
+        lines += [f"  {line}" for line in t.description.strip().splitlines()]
+    if t.attributes:
+        lines.append("  attributes:")
+        lines += _attribute_lines(t.attributes, "    ")
+    if t.relations:
+        lines.append("  relations:")
+        width = max(len(_label(r.name, r.required)) for r in t.relations)
+        for r in t.relations:
+            line = f"    {_label(r.name, r.required):<{width}}  → {r.target}"
+            if not r.target_known:
+                line += " (undefined type)"
+            if r.description:
+                line += f"  {_one_line(r.description)}"
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def _attribute_lines(attributes: list[OntologyAttribute], indent: str) -> list[str]:
+    width = max(len(_label(a.name or "", a.required)) for a in attributes)
+    type_width = max(len(a.notation) for a in attributes)
+    lines: list[str] = []
+    for a in attributes:
+        line = f"{indent}{_label(a.name or '', a.required):<{width}}  {a.notation:<{type_width}}"
+        if a.description:
+            line += f"  {_one_line(a.description)}"
+        lines.append(line.rstrip())
+        node = a
+        while (inner := node.items or node.values) is not None:
+            if inner.description:
+                what = "each item" if node.items is not None else "each value"
+                lines.append(f"{indent}  {what}: {_one_line(inner.description)}")
+            node = inner
+        if node.fields:
+            lines += _attribute_lines(node.fields, indent + "  ")
+    return lines
+
+
+def _label(name: str, required: bool) -> str:
+    return name + ("*" if required else "")
+
+
+def _one_line(text: str) -> str:
+    return " ".join(text.split())
 
 
 def format_result(result: ValidationResult) -> str:
@@ -135,7 +184,12 @@ def validate(
 @app.command()
 def types(
     verbose: Annotated[
-        bool, typer.Option("--verbose", "-v", help="Show each type's schema file and description.")
+        bool,
+        typer.Option(
+            "--verbose",
+            "-v",
+            help="Show each type's schema file, description, attributes and relations.",
+        ),
     ] = False,
 ) -> None:
     """List discovered entity types."""
@@ -143,13 +197,10 @@ def types(
         vault = Knott.open(".")
     except KnottError as error:
         raise _fail(error) from None
-    for info in vault.schemas():
-        if verbose:
-            typer.echo(f"{info.type}  ({info.path})")
-            if info.description:
-                for line in info.description.strip().splitlines():
-                    typer.echo(f"  {line}")
-        else:
+    if verbose:
+        typer.echo("\n\n".join(format_type(t) for t in vault.ontology().types))
+    else:
+        for info in vault.schemas():
             typer.echo(info.type)
     issues = vault.schema_issues()
     if issues:

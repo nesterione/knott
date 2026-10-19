@@ -105,7 +105,7 @@ def test_template_reads_model_fields() -> None:
     reads: dict[type[BaseModel], list[str]] = {
         Ontology: ["vault", "types", "schema_issues"],
         OntologyType: ["type", "description", "count", "attributes", "relations"],
-        OntologyAttribute: ["name", "type", "required", "description"],
+        OntologyAttribute: ["name", "type", "required", "description", "items", "values", "fields"],
         OntologyRelation: ["name", "target", "required", "description", "target_known"],
     }
     for model, names in reads.items():
@@ -124,3 +124,12 @@ def test_render_without_placeholder_is_an_error(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(view, "_template", lambda: "<html></html>")
     with pytest.raises(RuntimeError):
         render_ontology(_ontology())
+
+
+def test_render_keeps_nested_attribute_shapes() -> None:
+    ontology = Knott.open(Path(__file__).parent / "fixtures" / "structured-attributes").ontology()
+    embedded = _embedded(render_ontology(ontology))
+    assert embedded == ontology
+    senses = next(a for a in embedded.types[0].attributes if a.name == "senses")
+    assert senses.items is not None
+    assert [f.name for f in senses.items.fields] == ["id", "ru"]

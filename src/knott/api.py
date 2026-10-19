@@ -22,7 +22,14 @@ from knott.models import (
     ValidationResult,
 )
 from knott.schema.loader import SCHEMAS_DIR, load_schemas
-from knott.schema.models import RelationDef
+from knott.schema.models import (
+    AttributeDef,
+    ListShape,
+    MapShape,
+    ObjectShape,
+    RelationDef,
+    shape_kind,
+)
 from knott.schema.validator import validate_entity
 from knott.vault.discovery import KNOTT_DIR, find_vault_root, iter_markdown
 from knott.vault.entity import MarkdownFile, read_markdown
@@ -120,15 +127,7 @@ class Knott:
                 description=s.description,
                 path=s.path,
                 count=counts.get(s.type, 0),
-                attributes=[
-                    OntologyAttribute(
-                        name=a.name,
-                        type=a.type.value,
-                        required=a.required,
-                        description=a.description,
-                    )
-                    for a in s.attributes.values()
-                ],
+                attributes=[_ontology_attribute(a) for a in s.attributes.values()],
                 relations=[relation(r, True) for r in s.relations.values()]
                 + [relation(r, False) for r in s.unknown_relations.values()],
             )
@@ -244,6 +243,23 @@ class Knott:
             raise ConfigError(f"malformed {CONFIG_FILE.as_posix()}{where}: {exc.message}") from exc
         if data is not None and not isinstance(data, dict):
             raise ConfigError(f"malformed {CONFIG_FILE.as_posix()}: expected a YAML mapping")
+
+
+def _ontology_attribute(a: AttributeDef) -> OntologyAttribute:
+    shape = a.shape
+    return OntologyAttribute(
+        name=a.name,
+        type=shape_kind(shape),
+        required=a.required,
+        description=a.description,
+        items=_ontology_attribute(shape.items) if isinstance(shape, ListShape) else None,
+        values=_ontology_attribute(shape.values) if isinstance(shape, MapShape) else None,
+        fields=(
+            [_ontology_attribute(f) for f in shape.fields.values()]
+            if isinstance(shape, ObjectShape)
+            else []
+        ),
+    )
 
 
 def _sorted(issues: list[Issue]) -> list[Issue]:

@@ -4,7 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from knott import Knott, PathNotFoundError, PathOutsideVaultError, VaultNotFoundError
+from knott import (
+    Knott,
+    OntologyAttribute,
+    PathNotFoundError,
+    PathOutsideVaultError,
+    VaultNotFoundError,
+)
 
 from .conftest import fixture_path
 
@@ -110,9 +116,10 @@ def test_ontology_types_relations_and_counts(tmp_path: Path) -> None:
     assert person.count == 2  # broken.md (invalid frontmatter) is skipped
     assert person.description == "A human."
     assert person.path == ".knott/schemas/person.yaml"
+    scalar: dict[str, object] = {"items": None, "values": None, "fields": []}
     assert [a.model_dump() for a in person.attributes] == [
-        {"name": "name", "type": "string", "required": True, "description": "Full name."},
-        {"name": "born", "type": "date", "required": False, "description": None},
+        {"name": "name", "type": "string", "required": True, "description": "Full name.", **scalar},
+        {"name": "born", "type": "date", "required": False, "description": None, **scalar},
     ]
     assert [(r.name, r.target, r.required, r.target_known) for r in person.relations] == [
         ("manager", "person", False, True),
@@ -150,4 +157,31 @@ def test_ontology_broken_schema_keeps_other_types(tmp_path: Path) -> None:
 
 def test_ontology_is_json_serialisable(tmp_path: Path) -> None:
     ontology = Knott.open(_ontology_vault(tmp_path / "vault")).ontology()
+    assert type(ontology).model_validate_json(ontology.model_dump_json()) == ontology
+
+
+def test_ontology_mirrors_structured_attributes() -> None:
+    ontology = Knott.open(fixture_path("structured-attributes")).ontology()
+    (lexeme,) = ontology.types
+    by_name = {a.name: a for a in lexeme.attributes}
+    assert by_name["lemma"] == OntologyAttribute(
+        name="lemma", type="string", required=True, description=None
+    )
+    senses = by_name["senses"]
+    assert (senses.type, senses.required, senses.notation) == ("list", True, "list of object")
+    assert senses.items == OntologyAttribute(
+        name=None,
+        type="object",
+        required=False,
+        description="One sense per meaning.",
+        fields=[
+            OntologyAttribute(name="id", type="string", required=True, description=None),
+            OntologyAttribute(name="ru", type="string", required=True, description="Russian gloss"),
+        ],
+    )
+    forms = by_name["forms"]
+    assert forms.notation == "map of map of string"
+    assert forms.values is not None and forms.values.values is not None
+    assert forms.values.values.type == "string"
+    assert [f.name for f in by_name["review"].fields] == ["type", "done"]
     assert type(ontology).model_validate_json(ontology.model_dump_json()) == ontology

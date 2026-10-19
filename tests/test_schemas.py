@@ -3,8 +3,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+import pytest
+
 from knott import Knott
 from knott.schema.loader import load_schemas
+from knott.schema.models import (
+    AttributeDef,
+    ListShape,
+    MapShape,
+    ObjectShape,
+    ScalarType,
+    notation,
+)
 
 from .conftest import fixture_path, triples, validate_fixture
 
@@ -118,3 +128,119 @@ def test_aliased_definition_keeps_strict_required(tmp_path: Path) -> None:
         ("attributes.a.required", "schema-invalid-field"),
         ("attributes.b.required", "schema-invalid-field"),
     ]
+
+
+def test_structured_attributes_load_as_a_shape_tree() -> None:
+    registry, issues = load_schemas(fixture_path("structured-attributes"))
+    assert issues == []
+    attributes = registry["lexeme"].attributes
+    assert attributes["lemma"].shape is ScalarType.STRING
+    assert attributes["tags"].shape == ListShape(AttributeDef(None, ScalarType.STRING))
+    senses = attributes["senses"]
+    assert senses.required
+    assert isinstance(senses.shape, ListShape)
+    item = senses.shape.items
+    assert (item.name, item.required, item.description) == (None, False, "One sense per meaning.")
+    assert isinstance(item.shape, ObjectShape)
+    assert list(item.shape.fields) == ["id", "ru"]
+    assert item.shape.fields["ru"] == AttributeDef(
+        "ru", ScalarType.STRING, required=True, description="Russian gloss"
+    )
+    forms = attributes["forms"].shape
+    assert forms == MapShape(AttributeDef(None, MapShape(AttributeDef(None, ScalarType.STRING))))
+    assert notation(forms) == "map of map of string"
+    assert notation(senses.shape) == "list of object"
+    # `type` is reserved only at the top level.
+    review = attributes["review"].shape
+    assert isinstance(review, ObjectShape)
+    assert list(review.fields) == ["type", "done"]
+
+
+def _schema_issues(tmp_path: Path, attributes: str) -> list[tuple[str | None, int | None, str]]:
+    Knott.init(tmp_path)
+    (tmp_path / ".knott/schemas/t.yaml").write_text(
+        "type: t\nattributes:\n" + attributes, encoding="utf-8"
+    )
+    return [(i.field, i.line, i.message) for i in Knott.open(tmp_path).schema_issues()]
+
+
+@pytest.mark.parametrize(
+    ("attributes", "field", "line", "fragment"),
+    [
+        ("  a: {type: list}\n", "attributes.a", 3, "has type list but no `items`"),
+        ("  a: {type: map}\n", "attributes.a", 3, "has type map but no `values`"),
+        ("  a: {type: object}\n", "attributes.a", 3, "has type object but no `fields`"),
+        ("  a:\n    type: object\n    fields: {}\n", "attributes.a.fields", 5, "empty mapping"),
+        ("  a:\n    type: list\n    items: string\n", "attributes.a.items", 5, "must be a mapping"),
+        (
+            "  a:\n    type: string\n    items: {type: string}\n",
+            "attributes.a.items",
+            5,
+            "only allowed when `type` is list, but `type` is string",
+        ),
+        (
+            "  a:\n    type: list\n    fields: {x: {type: string}}\n    items: {type: string}\n",
+            "attributes.a.fields",
+            5,
+            "only allowed when `type` is object",
+        ),
+        (
+            "  a:\n    type: list\n    items: {type: string, required: true}\n",
+            "attributes.a.items.required",
+            5,
+            "put `required` on the list itself",
+        ),
+        (
+            "  a:\n    type: map\n    values:\n      type: string\n      required: true\n",
+            "attributes.a.values.required",
+            7,
+            "put `required` on the map itself",
+        ),
+        (
+            "  a:\n    type: list\n    items:\n      type: object\n      fields:\n"
+            "        x: {type: strin}\n",
+            "attributes.a.items.fields.x.type",
+            8,
+            "unknown attribute type `strin`; expected one of: string, integer, number, "
+            "boolean, date, datetime, list, object, map",
+        ),
+        (
+            "  a:\n    type: list\n    items: {type: string, default: x}\n",
+            "attributes.a.items.default",
+            5,
+            "unknown key `default` in `attributes.a.items`; allowed keys: type, description",
+        ),
+        (
+            "  a:\n    type: map\n    values: {description: no type}\n",
+            "attributes.a.values",
+            5,
+            "`attributes.a.values` is missing `type`",
+        ),
+    ],
+)
+def test_invalid_structured_definitions(
+    tmp_path: Path, attributes: str, field: str, line: int, fragment: str
+) -> None:
+    issues = _schema_issues(tmp_path, attributes)
+    assert [(f, ln) for f, ln, _ in issues] == [(field, line)]
+    assert fragment in issues[0][2]
+
+
+def test_invalid_nested_definition_drops_the_whole_attribute(tmp_path: Path) -> None:
+    _schema_issues(
+        tmp_path,
+        "  ok: {type: string}\n  bad:\n    type: object\n    fields:\n"
+        "      x: {type: string}\n      y: {type: nope}\n",
+    )
+    registry, issues = load_schemas(tmp_path)
+    assert list(registry["t"].attributes) == ["ok"]
+    assert [i.field for i in issues] == ["attributes.bad.fields.y.type"]
+
+
+def test_description_is_allowed_on_items_and_values(tmp_path: Path) -> None:
+    issues = _schema_issues(
+        tmp_path,
+        "  a:\n    type: list\n    items: {type: string, description: one tag}\n"
+        "  b:\n    type: map\n    values: {type: integer, description: a count}\n",
+    )
+    assert issues == []
