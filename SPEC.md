@@ -240,9 +240,12 @@ Allowed keys:
 | top | `description` | no | string |
 | top | `attributes` | no | mapping of field name → attribute definition |
 | top | `relations` | no | mapping of field name → relation definition |
-| attribute | `type` | yes | one of the scalar types in §8 |
+| attribute | `type` | yes | a scalar type in §8, or `list`, `object` or `map` |
 | attribute | `required` | no | boolean, default `false` |
 | attribute | `description` | no | string |
+| attribute | `items` | with `type: list` | the definition of each item (`type`, `description`, nesting keys; no `required`) |
+| attribute | `fields` | with `type: object` | non-empty mapping of field name → attribute definition |
+| attribute | `values` | with `type: map` | the definition of each value (`type`, `description`, nesting keys; no `required`) |
 | relation | `target` | yes | an existing schema `type` (self-reference allowed) |
 | relation | `required` | no | boolean, default `false` |
 | relation | `description` | no | string |
@@ -250,7 +253,8 @@ Allowed keys:
 Schema rules:
 
 - Unknown keys in a schema file are errors. Knott owns these files, so a typo such as `atributes:` must not pass silently.
-- Field names must not be `type`.
+- Top-level field names must not be `type`. Fields nested inside an `object` may be.
+- `items`, `fields` and `values` are allowed only with their own `type`, and are required there.
 - A field name cannot be both an attribute and a relation in the same schema.
 
 Schemas serve three purposes:
@@ -286,7 +290,35 @@ Rules:
 - A key that is present with a `null` or empty value counts as absent.
 - `required: true` means the key is present and not null.
 
-Not in v0: enums, unions, lists, nested objects, custom scalars, inheritance, composition.
+### Structured attributes
+
+An attribute can also be a `list` (every item matches `items`), an `object` (exactly the declared `fields`; objects are closed) or a `map` (free string keys; every value matches `values`). Shapes nest to any depth:
+
+```yaml
+attributes:
+  senses:
+    type: list
+    required: true
+    items:
+      type: object
+      fields:
+        id: {type: string, required: true}
+        ru: {type: string, required: true}
+  forms:
+    type: map
+    values:
+      type: map
+      values: {type: string}
+```
+
+- Every nested value is checked against its definition. Problems give the full path in `field` (`senses[1].ru`, `forms.sg.acc`) and the nested line.
+- An empty container of the declared kind (`[]` for a list, `{}` for an object or map) counts as absent, so a required list needs at least one item. An empty container of another kind is a type mismatch. List items and map values are never absent.
+- An undeclared key in an object is `attribute-unknown-field`. A non-string map key is a type mismatch.
+- A value of the wrong kind is reported once, without checking its contents.
+
+See `docs/decisions/0008-structured-attributes.md`.
+
+Not in v0: enums, unions, relations inside structured values, item counts, named reusable shapes, custom scalars, inheritance, composition.
 
 ---
 
@@ -400,7 +432,7 @@ Validation is the primary feature of v0. A run loads all schemas, then validates
 
 - Each schema file is valid YAML and a mapping.
 - `type` is present and well-formed. No unknown keys (§7).
-- Each attribute has a known scalar `type`.
+- Each attribute has a known `type`; `list`, `object` and `map` have their nested definition, recursively valid.
 - Each relation `target` names a discovered type.
 - No duplicate `type` across files.
 - No field name collisions, and no field named `type`.
@@ -408,7 +440,7 @@ Validation is the primary feature of v0. A run loads all schemas, then validates
 ### Entity validation
 
 - `type` names a discovered schema (`entity-unknown-type`).
-- Declared attributes: required ones are present (`attribute-missing`) and values match their type (`attribute-type-mismatch`).
+- Declared attributes: required ones are present (`attribute-missing`) and values match their type (`attribute-type-mismatch`), at every nesting level. Declared objects have no undeclared keys (`attribute-unknown-field`).
 - Declared relations: checked as in §11.
 - Undeclared keys are allowed and not checked. Strict schemas may come later.
 
@@ -583,7 +615,7 @@ Success output:
 schema-invalid-yaml        schema-invalid-field       schema-duplicate-type
 schema-unknown-target      schema-field-conflict
 entity-invalid-frontmatter entity-unknown-type        not-an-entity
-attribute-missing          attribute-type-mismatch
+attribute-missing          attribute-type-mismatch    attribute-unknown-field
 relation-missing           relation-invalid-value     relation-target-outside-vault
 relation-target-not-found  relation-target-not-entity relation-target-type-mismatch
 ```

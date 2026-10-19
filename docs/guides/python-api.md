@@ -37,6 +37,8 @@ Knott.init("new-vault")             # InitResult(root, created)
 
 `ontology()` returns `Ontology(vault, types, schema_issues)`. Each `OntologyType` has `type`, `description`, `path`, `count` (entities of that type; files with invalid frontmatter are not counted), `attributes` and `relations`. Relations to types with no schema come last, with `target_known=False`.
 
+An `OntologyAttribute` mirrors its schema definition: `name`, `type` (a scalar name, or `list`, `object` or `map`), `required` and `description`. A `list` has its item definition in `items`, a `map` its value definition in `values`, and an `object` its fields in `fields`, recursively; the `items` / `values` nodes have `name=None`. `attribute.notation` gives the compact form, e.g. `list of object`.
+
 ## Layout
 
 ```
