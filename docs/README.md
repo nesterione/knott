@@ -37,7 +37,7 @@ This README has no frontmatter, so Knott treats it as an ordinary note.
 |---|---|
 | schema | [schema-invalid-yaml](issues/schema-invalid-yaml.md) · [schema-invalid-field](issues/schema-invalid-field.md) · [schema-duplicate-type](issues/schema-duplicate-type.md) · [schema-unknown-target](issues/schema-unknown-target.md) · [schema-field-conflict](issues/schema-field-conflict.md) |
 | entity | [entity-invalid-frontmatter](issues/entity-invalid-frontmatter.md) · [entity-unknown-type](issues/entity-unknown-type.md) · [not-an-entity](issues/not-an-entity.md) |
-| attribute | [attribute-missing](issues/attribute-missing.md) · [attribute-type-mismatch](issues/attribute-type-mismatch.md) |
+| attribute | [attribute-missing](issues/attribute-missing.md) · [attribute-type-mismatch](issues/attribute-type-mismatch.md) · [attribute-unknown-field](issues/attribute-unknown-field.md) |
 | relation | [relation-missing](issues/relation-missing.md) · [relation-invalid-value](issues/relation-invalid-value.md) · [relation-target-outside-vault](issues/relation-target-outside-vault.md) · [relation-target-not-found](issues/relation-target-not-found.md) · [relation-target-not-entity](issues/relation-target-not-entity.md) · [relation-target-type-mismatch](issues/relation-target-type-mismatch.md) |
 
 ## Design decisions
@@ -49,3 +49,4 @@ This README has no frontmatter, so Knott treats it as an ordinary note.
 5. [What counts as an empty value](decisions/0005-empty-values.md)
 6. [Symlinks cannot take a relation outside the vault](decisions/0006-symlinks-and-containment.md)
 7. [Hostile YAML is reported, never crashes or hangs](decisions/0007-parser-robustness.md)
+8. [Structured attributes use explicit keywords, and objects are closed](decisions/0008-structured-attributes.md)

@@ -444,6 +444,7 @@ function focusOn(id) {
   }
   for (const n of nodes) { n.g.classList.toggle("hot", near.has(n.id)); n.g.classList.toggle("sel", n.id === selected); }
 }
+const notation = a => (a.items || a.values) ? `${a.type} of ${notation(a.items || a.values)}` : a.type;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const link = id => `<a data-go="${esc(id)}">${esc(id)}</a>`;
 function select(id) {
@@ -457,13 +458,25 @@ function select(id) {
 function showPanel(id) {
   const n = byId[id];
   const out = edges.filter(e => e.s === id), inc = edges.filter(e => e.t === id && e.s !== id);
-  const row = (a, b, c, d) => `<tr><td>${a}${d ? `<span class="d">${esc(d)}</span>` : ""}</td><td class="t">${b}${c ? ' <span class="req" title="required">●</span>' : ""}</td></tr>`;
+  const row = (a, b, c, d, depth = 0) => `<tr><td${depth ? ` class="nested" style="padding-left:${depth * 14}px"` : ""}>${a}${d ? `<span class="d">${esc(d)}</span>` : ""}</td><td class="t">${b}${c ? ' <span class="req" title="required">●</span>' : ""}</td></tr>`;
+  // Object fields are listed under their attribute, indented; a list's items or map's values
+  // are folded into the notation ("list of object") with their description appended.
+  const attrRows = (list, depth = 0) => list.map(a => {
+    let node = a;
+    const notes = a.description ? [a.description] : [];
+    while (node.items || node.values) {
+      const inner = node.items || node.values;
+      if (inner.description) notes.push(`${node.items ? "each item" : "each value"}: ${inner.description}`);
+      node = inner;
+    }
+    return row(esc(a.name), esc(notation(a)), a.required, notes.join(" · "), depth) + attrRows(node.fields || [], depth + 1);
+  }).join("");
   const head = n.ghost
     ? `<div class="sub ghostnote">undefined type — no schema</div>`
     : `<div class="sub">${plural(n.count, "entity", "entities")}</div>${n.description ? `<p>${esc(n.description)}</p>` : ""}`;
   const own = n.ghost ? "" : `
     <h3>Attributes</h3>
-    ${n.attributes.length ? `<table>${n.attributes.map(a => row(esc(a.name), esc(a.type), a.required, a.description)).join("")}</table>` : '<div class="empty">None</div>'}
+    ${n.attributes.length ? `<table>${attrRows(n.attributes)}</table>` : '<div class="empty">None</div>'}
     <h3>Relations out</h3>
     ${out.length ? `<table>${out.map(e => row(esc(e.name), "→ " + link(e.t), e.req, e.desc)).join("")}</table>` : '<div class="empty">None</div>'}`;
   panel.innerHTML = `

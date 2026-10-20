@@ -1,0 +1,29 @@
+type: lexeme
+description: A word with its senses and forms.
+attributes:
+  lemma:
+    type: string
+    required: true
+  tags:
+    type: list
+    items: {type: string}
+  senses:
+    type: list
+    required: true
+    description: The meanings of the word.
+    items:
+      type: object
+      description: One sense per meaning.
+      fields:
+        id: {type: string, required: true}
+        ru: {type: string, required: true, description: Russian gloss}
+  forms:
+    type: map
+    values:
+      type: map
+      values: {type: string}
+  review:
+    type: object
+    fields:
+      type: {type: string}
+      done: {type: boolean}

@@ -196,6 +196,39 @@ def test_types_verbose(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "  Transcript of recorded spoken content.\n" in result.output
 
 
+def test_types_verbose_shows_nested_attributes_and_relations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(fixture_path("structured-attributes"))
+    result = runner.invoke(app, ["types", "--verbose"])
+    assert result.exit_code == 0
+    assert result.output == (
+        "lexeme  (.knott/schemas/lexeme.yaml)\n"
+        "  A word with its senses and forms.\n"
+        "  attributes:\n"
+        "    lemma*   string\n"
+        "    tags     list of string\n"
+        "    senses*  list of object        The meanings of the word.\n"
+        "      each item: One sense per meaning.\n"
+        "      id*  string\n"
+        "      ru*  string  Russian gloss\n"
+        "    forms    map of map of string\n"
+        "    review   object\n"
+        "      type  string\n"
+        "      done  boolean\n"
+    )
+    monkeypatch.chdir(fixture_path("valid-vault"))
+    result = runner.invoke(app, ["types", "--verbose"])
+    assert "  relations:\n    reviews*  → transcript\n    sources   → script\n" in result.output
+    assert "\n\nscript  (" in result.output
+
+
+def test_types_lists_names_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(fixture_path("structured-attributes"))
+    result = runner.invoke(app, ["types"])
+    assert result.output == "lexeme\n"
+
+
 def test_types_with_schema_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(fixture_path("duplicate-schema-type"))
     result = runner.invoke(app, ["types"])

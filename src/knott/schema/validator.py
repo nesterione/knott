@@ -3,14 +3,26 @@
 from __future__ import annotations
 
 import datetime as dt
+import difflib
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from knott._values import BOOLEAN_SPELLINGS, kind, show
+from knott._yaml import KeyPath
 from knott.models import Issue
-from knott.schema.models import AttributeDef, RelationDef, ScalarType, Schema
+from knott.schema.models import (
+    AttributeDef,
+    ListShape,
+    MapShape,
+    ObjectShape,
+    RelationDef,
+    ScalarType,
+    Schema,
+    Shape,
+    notation,
+)
 from knott.vault.entity import MarkdownFile
 from knott.vault.links import LINK_EXAMPLE, LinkError, ResolvedReference
 
@@ -66,9 +78,7 @@ def validate_entity(
         return EntityReport(issues, 0)
 
     for attribute in schema.attributes.values():
-        issue = _check_attribute(entity, attribute)
-        if issue is not None:
-            issues.append(issue)
+        issues.extend(_check_attribute(entity, attribute))
 
     relations = 0
     for relation in schema.relations.values():
@@ -78,31 +88,127 @@ def validate_entity(
     return EntityReport(issues, relations)
 
 
-def _check_attribute(entity: MarkdownFile, attribute: AttributeDef) -> Issue | None:
-    assert entity.frontmatter is not None
-    name = attribute.name
-    value = entity.frontmatter.get(name)
-    line = entity.key_lines.get(name)
-    if is_absent(value):
-        if not attribute.required:
-            return None
-        return Issue(
-            code="attribute-missing",
-            path=entity.path,
-            line=line,
-            field=name,
-            message=f"required attribute `{name}` ({attribute.type.value}) is missing or empty",
+def _check_attribute(entity: MarkdownFile, attribute: AttributeDef) -> list[Issue]:
+    assert entity.frontmatter is not None and attribute.name is not None
+    issues: list[Issue] = []
+    path: KeyPath = (attribute.name,)
+    _check_value(entity, attribute, path, entity.frontmatter.get(attribute.name), issues)
+    return issues
+
+
+def _check_value(
+    entity: MarkdownFile,
+    definition: AttributeDef,
+    path: KeyPath,
+    value: Any,
+    issues: list[Issue],
+) -> None:
+    """Check ``value`` at ``path`` against ``definition``, descending into lists, objects
+    and maps. A value of the wrong kind is reported once, without checking its contents."""
+    shape = definition.shape
+    field = format_field_path(path)
+
+    def report(code: str, message: str, at: KeyPath = path) -> None:
+        issues.append(
+            Issue(
+                code=code,
+                path=entity.path,
+                line=entity.line_of(at),
+                field=format_field_path(at),
+                message=message,
+            )
         )
-    problem = type_mismatch(attribute.type, value, entity.raw.get(name))
-    if problem is None:
-        return None
-    return Issue(
-        code="attribute-type-mismatch",
-        path=entity.path,
-        line=line,
-        field=name,
-        message=f"attribute `{name}` {problem}",
+
+    if _is_empty(value, shape):
+        if definition.name is None:
+            what = "list item" if isinstance(path[-1], int) else "map value"
+            report(
+                "attribute-type-mismatch",
+                f"attribute `{field}` is an empty {what}; remove it or give it a value",
+            )
+        elif definition.required:
+            hint = "; add at least one item" if isinstance(shape, ListShape) else ""
+            report(
+                "attribute-missing",
+                f"required attribute `{field}` ({notation(shape)}) is missing or empty{hint}",
+            )
+        return
+
+    if isinstance(shape, ScalarType):
+        problem = type_mismatch(shape, value, entity.raws.get(path))
+        if problem is not None:
+            report("attribute-type-mismatch", f"attribute `{field}` {problem}")
+        return
+
+    raw = entity.raws.get(path)
+    if isinstance(shape, ListShape) and type(value) is list:
+        for index, item in enumerate(value):
+            _check_value(entity, shape.items, (*path, index), item, issues)
+    elif isinstance(shape, ObjectShape) and type(value) is dict:
+        for name, field_def in shape.fields.items():
+            _check_value(entity, field_def, (*path, name), value.get(name), issues)
+        for key in value:
+            if key not in shape.fields:
+                report(
+                    "attribute-unknown-field",
+                    _unknown_field_message(field, key, list(shape.fields)),
+                    (*path, str(key)),
+                )
+    elif isinstance(shape, MapShape) and type(value) is dict:
+        for key, item in value.items():
+            if isinstance(key, str):
+                _check_value(entity, shape.values, (*path, key), item, issues)
+            else:
+                report("attribute-type-mismatch", _map_key_message(field, key))
+    else:
+        report(
+            "attribute-type-mismatch",
+            f"attribute `{field}` expects {notation(shape)} "
+            f"but got {kind(value)} {show(value, raw)}",
+        )
+
+
+def _is_empty(value: Any, shape: Shape) -> bool:
+    """Decision 0005, at every level: null and "" are absent, and so is an empty
+    container of the declared kind. An empty container of another kind is a mismatch."""
+    if is_absent(value):
+        return True
+    if type(value) is list and not value:
+        return isinstance(shape, ListShape)
+    if type(value) is dict and not value:
+        return isinstance(shape, ObjectShape | MapShape)
+    return False
+
+
+def format_field_path(path: KeyPath) -> str:
+    """``("senses", 1, "ru")`` -> ``senses[1].ru``."""
+    text = ""
+    for part in path:
+        if isinstance(part, int):
+            text += f"[{part}]"
+        else:
+            text += f".{part}" if text else part
+    return text
+
+
+def _unknown_field_message(field: str, key: Any, allowed: list[str]) -> str:
+    name = key if isinstance(key, str) else show(key)
+    message = f"unknown field `{name}` in attribute `{field}`; allowed fields: {', '.join(allowed)}"
+    if isinstance(key, str):
+        close = difflib.get_close_matches(key, allowed, n=1)
+        if close:
+            message += f"; did you mean `{close[0]}`?"
+    return message
+
+
+def _map_key_message(field: str, key: Any) -> str:
+    message = (
+        f"attribute `{field}` has map key {show(key)}, which YAML reads as {kind(key)}; "
+        "map keys must be strings"
     )
+    if type(key) is bool:
+        return message + "; quote the key (YAML reads unquoted yes/no/on/off as booleans)"
+    return message + f'; quote the key, e.g. "{show(key).strip("`")}"'
 
 
 def type_mismatch(expected: ScalarType, value: Any, raw: str | None = None) -> str | None:

@@ -33,6 +33,10 @@ class MarkdownFile:
     """1-based file line of each list item under a top-level key."""
     raw: dict[str, str] = field(default_factory=dict)
     """Source text of top-level scalar values."""
+    lines: dict[_yaml.KeyPath, int] = field(default_factory=dict)
+    """1-based file line of every frontmatter value, by key path, e.g. ``("senses", 1, "ru")``."""
+    raws: dict[_yaml.KeyPath, str] = field(default_factory=dict)
+    """Source text of every scalar frontmatter value, by key path."""
     error: str | None = None
     error_line: int | None = None
 
@@ -43,6 +47,14 @@ class MarkdownFile:
     @property
     def type(self) -> Any:
         return self.frontmatter.get("type") if self.frontmatter is not None else None
+
+    def line_of(self, path: _yaml.KeyPath) -> int | None:
+        """Line of the value at ``path``, or of its nearest ancestor that has one."""
+        for end in range(len(path), 0, -1):
+            line = self.lines.get(path[:end])
+            if line is not None:
+                return line
+        return None
 
 
 def read_markdown(abs_path: Path, rel_path: str) -> MarkdownFile:
@@ -88,7 +100,12 @@ def parse_markdown(text: str, rel_path: str) -> MarkdownFile:
     key_lines: dict[str, int] = {}
     item_lines: dict[tuple[str, int], int] = {}
     raw: dict[str, str] = {}
+    value_lines: dict[_yaml.KeyPath, int] = {}
+    raws: dict[_yaml.KeyPath, str] = {}
     for key_path, loc in doc.locs.items():
+        value_lines[key_path] = loc.line + _YAML_LINE_OFFSET
+        if loc.raw is not None:
+            raws[key_path] = loc.raw
         if len(key_path) == 1 and isinstance(key_path[0], str):
             key_lines[key_path[0]] = loc.line + _YAML_LINE_OFFSET
             if loc.raw is not None:
@@ -103,4 +120,6 @@ def parse_markdown(text: str, rel_path: str) -> MarkdownFile:
         key_lines=key_lines,
         item_lines=item_lines,
         raw=raw,
+        lines=value_lines,
+        raws=raws,
     )
