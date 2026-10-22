@@ -25,7 +25,12 @@ from knott.vault.discovery import KNOTT_DIR
 SCHEMAS_DIR = Path(KNOTT_DIR) / "schemas"
 TYPE_NAME = re.compile(r"^[a-z][a-z0-9_-]*$")
 
-_TOP_KEYS = ("type", "description", "attributes", "relations")
+_TOP_KEYS = ("type", "description", "kid", "attributes", "relations")
+# Top-level frontmatter keys that belong to knott, not to a schema's fields.
+_RESERVED_FIELDS = {
+    "type": "it is reserved for the entity type",
+    "kid": "it is reserved for the knott-managed entity identity",
+}
 _DEFINITION_KEYS = ("type", "required", "description")
 _RELATION_KEYS = ("target", "required", "description")
 _ATTRIBUTE_TYPES = ", ".join([*(t.value for t in ScalarType), *COMPOUND_KINDS])
@@ -142,6 +147,7 @@ class _SchemaParser:
         self._check_keys(data, (), _TOP_KEYS)
         type_name = self._check_type(data)
         description = self._optional_str(data, ("description",))
+        kid_required = self._kid_required(data)
         attributes = self._parse_attributes(data.get("attributes"))
         relations = self._parse_relations(data.get("relations"))
         for name in sorted(set(attributes) & set(relations)):
@@ -157,6 +163,7 @@ class _SchemaParser:
             type=type_name,
             path=self.path,
             description=description,
+            kid_required=kid_required,
             attributes=attributes,
             relations=relations,
         )
@@ -186,6 +193,17 @@ class _SchemaParser:
             )
             return None
         return value
+
+    def _kid_required(self, data: dict[Any, Any]) -> bool:
+        value = data.get("kid")
+        if value is None or value == "required":
+            return value == "required"
+        self.error(
+            "schema-invalid-field",
+            ("kid",),
+            f"`kid` must be `required`, got {show(value)}; omit it to make `kid` optional",
+        )
+        return False
 
     def _optional_str(self, mapping: dict[Any, Any], key_path: _yaml.KeyPath) -> str | None:
         value = mapping.get(key_path[-1])
@@ -231,12 +249,12 @@ class _SchemaParser:
                     f"field name must be a string, got {kind(name)} {show(name)}",
                 )
                 continue
-            # Only top-level fields share the frontmatter with the entity's `type`.
-            if name == "type" and len(base) == 1:
+            # Only top-level fields share the frontmatter with `type` and `kid`.
+            if name in _RESERVED_FIELDS and len(base) == 1:
                 self.error(
                     "schema-field-conflict",
                     (*base, name),
-                    "a field cannot be named `type`; it is reserved for the entity type",
+                    f"a field cannot be named `{name}`; {_RESERVED_FIELDS[name]}",
                 )
                 continue
             if not isinstance(definition, dict):

@@ -9,6 +9,7 @@ from knott.errors import (
     VaultNotFoundError,
 )
 from knott.models import (
+    FixedEntity,
     InitResult,
     Issue,
     Ontology,
@@ -22,6 +23,7 @@ from knott.models import (
 
 __all__ = [
     "ConfigError",
+    "FixedEntity",
     "InitResult",
     "Issue",
     "Knott",

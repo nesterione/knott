@@ -81,6 +81,8 @@ class Schema:
     type: str
     path: str
     description: str | None = None
+    kid_required: bool = False
+    """Set by `kid: required`: every entity of this type must have a `kid`."""
     attributes: dict[str, AttributeDef] = field(default_factory=dict)
     relations: dict[str, RelationDef] = field(default_factory=dict)
     unknown_relations: dict[str, RelationDef] = field(default_factory=dict)

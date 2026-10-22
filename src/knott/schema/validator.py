@@ -24,6 +24,7 @@ from knott.schema.models import (
     notation,
 )
 from knott.vault.entity import MarkdownFile
+from knott.vault.kid import KID_KEY, is_canonical, kid_problem
 from knott.vault.links import LINK_EXAMPLE, LinkError, ResolvedReference
 
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -77,6 +78,7 @@ def validate_entity(
         )
         return EntityReport(issues, 0)
 
+    issues.extend(_check_kid(entity, schema))
     for attribute in schema.attributes.values():
         issues.extend(_check_attribute(entity, attribute))
 
@@ -86,6 +88,37 @@ def validate_entity(
         issues.extend(rel_issues)
         relations += count
     return EntityReport(issues, relations)
+
+
+def _check_kid(entity: MarkdownFile, schema: Schema) -> list[Issue]:
+    assert entity.frontmatter is not None
+    value = entity.frontmatter.get(KID_KEY)
+    if is_absent(value):
+        if not schema.kid_required:
+            return []
+        return [
+            Issue(
+                code="kid-missing",
+                path=entity.path,
+                line=entity.key_lines.get(KID_KEY, entity.key_lines.get("type")),
+                field=KID_KEY,
+                message=(
+                    f"`{schema.type}` entities require a `kid`; "
+                    "run `knott validate --fix` to add one"
+                ),
+            )
+        ]
+    if is_canonical(value):
+        return []
+    return [
+        Issue(
+            code="kid-invalid",
+            path=entity.path,
+            line=entity.key_lines.get(KID_KEY),
+            field=KID_KEY,
+            message=f"`kid` {kid_problem(value, entity.raw.get(KID_KEY))}",
+        )
+    ]
 
 
 def _check_attribute(entity: MarkdownFile, attribute: AttributeDef) -> list[Issue]:
@@ -340,7 +373,7 @@ def _check_relation(
             issues.append(
                 issue(
                     "relation-target-not-entity",
-                    f"relation `{name}` points to `{resolved.destination}`, "
+                    f"relation `{name}` points to {resolved.label}, "
                     f"which is not a Knott entity: {reason}",
                     line,
                 )
@@ -351,7 +384,7 @@ def _check_relation(
                 issue(
                     "relation-target-type-mismatch",
                     f"relation `{name}` expects target type `{relation.target}`\n"
-                    f"but `{resolved.destination}` has type "
+                    f"but {resolved.label} has type "
                     f"{show(target.type, target.raw.get('type'))}",
                     line,
                 )

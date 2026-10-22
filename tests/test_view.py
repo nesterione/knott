@@ -104,7 +104,7 @@ def test_template_reads_model_fields() -> None:
     template = view._template()
     reads: dict[type[BaseModel], list[str]] = {
         Ontology: ["vault", "types", "schema_issues"],
-        OntologyType: ["type", "description", "count", "attributes", "relations"],
+        OntologyType: ["type", "description", "count", "kid_required", "attributes", "relations"],
         OntologyAttribute: ["name", "type", "required", "description", "items", "values", "fields"],
         OntologyRelation: ["name", "target", "required", "description", "target_known"],
     }

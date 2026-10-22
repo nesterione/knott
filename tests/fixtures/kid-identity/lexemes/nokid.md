@@ -1,0 +1,4 @@
+---
+type: lexeme
+lemma: nokid
+---

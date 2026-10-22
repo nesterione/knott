@@ -126,7 +126,7 @@ const DATA = /*__DATA__*/;
 // ---------- model ----------
 // Lookups keyed by type name have no prototype, so names like "constructor" stay plain keys.
 const dict = () => Object.create(null);
-const nodes = DATA.types.map(t => ({ id: t.type, ghost: false, count: t.count, description: t.description, attributes: t.attributes, x: 0, y: 0, w: 0, h: 34 }));
+const nodes = DATA.types.map(t => ({ id: t.type, ghost: false, count: t.count, kidRequired: t.kid_required, description: t.description, attributes: t.attributes, x: 0, y: 0, w: 0, h: 34 }));
 const byId = dict();
 for (const n of nodes) byId[n.id] = n;
 const edges = [], pairs = dict();
@@ -473,7 +473,7 @@ function showPanel(id) {
   }).join("");
   const head = n.ghost
     ? `<div class="sub ghostnote">undefined type — no schema</div>`
-    : `<div class="sub">${plural(n.count, "entity", "entities")}</div>${n.description ? `<p>${esc(n.description)}</p>` : ""}`;
+    : `<div class="sub">${plural(n.count, "entity", "entities")}${n.kidRequired ? " · kid required" : ""}</div>${n.description ? `<p>${esc(n.description)}</p>` : ""}`;
   const own = n.ghost ? "" : `
     <h3>Attributes</h3>
     ${n.attributes.length ? `<table>${attrRows(n.attributes)}</table>` : '<div class="empty">None</div>'}

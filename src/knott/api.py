@@ -11,6 +11,7 @@ from pathlib import Path
 from knott import _yaml
 from knott.errors import ConfigError, PathNotFoundError, PathOutsideVaultError
 from knott.models import (
+    FixedEntity,
     InitResult,
     Issue,
     Ontology,
@@ -33,6 +34,16 @@ from knott.schema.models import (
 from knott.schema.validator import validate_entity
 from knott.vault.discovery import KNOTT_DIR, find_vault_root, iter_markdown
 from knott.vault.entity import MarkdownFile, read_markdown
+from knott.vault.fix import insert_kid
+from knott.vault.kid import (
+    KID_KEY,
+    Claim,
+    KidIndex,
+    build_index,
+    format_claims,
+    is_canonical,
+    new_kid,
+)
 from knott.vault.links import ResolvedReference, resolve_reference
 
 CONFIG_FILE = Path(KNOTT_DIR) / "config.yaml"
@@ -127,6 +138,7 @@ class Knott:
                 description=s.description,
                 path=s.path,
                 count=counts.get(s.type, 0),
+                kid_required=s.kid_required,
                 attributes=[_ontology_attribute(a) for a in s.attributes.values()],
                 relations=[relation(r, True) for r in s.relations.values()]
                 + [relation(r, False) for r in s.unknown_relations.values()],
@@ -135,12 +147,32 @@ class Knott:
         ]
         return Ontology(vault=self.root.name, types=types, schema_issues=len(issues))
 
-    def validate(self, paths: Sequence[str | Path] | None = None) -> ValidationResult:
+    def validate(
+        self, paths: Sequence[str | Path] | None = None, *, fix: bool = False
+    ) -> ValidationResult:
         """Validate all schemas, and entities (all, or those within ``paths``).
 
         Relative ``paths`` are resolved against the vault root. Validation problems
         are returned as data; only usage errors raise.
+
+        With ``fix=True``, every in-scope entity without a `kid` key first gets a new
+        one (a single inserted frontmatter line), and the result lists them in ``fixed``.
         """
+        fixed = self._assign_kids(paths) if fix else []
+        result = self._validate(paths)
+        return result.model_copy(update={"fixed": fixed}) if fixed else result
+
+    def _assign_kids(self, paths: Sequence[str | Path] | None) -> list[FixedEntity]:
+        all_markdown = iter_markdown(self.root)
+        in_scope = all_markdown if paths is None else self._scope(paths, all_markdown)[0]
+        fixed: list[FixedEntity] = []
+        for rel_path in in_scope:
+            kid = new_kid()
+            if insert_kid(self.root, rel_path, kid):
+                fixed.append(FixedEntity(path=rel_path, kid=kid))
+        return fixed
+
+    def _validate(self, paths: Sequence[str | Path] | None) -> ValidationResult:
         schemas, issues = load_schemas(self.root)
         files: dict[str, MarkdownFile] = {}
 
@@ -151,10 +183,19 @@ class Knott:
                 files[rel_path] = parsed
             return parsed
 
-        def resolve(source: str, reference: str) -> ResolvedReference:
-            return resolve_reference(self.root, source, reference)
-
         all_markdown = iter_markdown(self.root)
+        kid_index: KidIndex | None = None
+
+        def kids() -> KidIndex:
+            """Built on first use, so vaults and runs that never touch a `kid` pay nothing."""
+            nonlocal kid_index
+            if kid_index is None:
+                kid_index = build_index(all_markdown, lookup)
+            return kid_index
+
+        def resolve(source: str, reference: str) -> ResolvedReference:
+            return resolve_reference(self.root, source, reference, kids)
+
         if paths is None:
             in_scope = all_markdown
         else:
@@ -163,6 +204,7 @@ class Knott:
 
         entities = 0
         relations = 0
+        in_scope_kids: set[str] = set()
         for rel_path in in_scope:
             parsed = lookup(rel_path)
             if parsed.error is not None:
@@ -181,6 +223,16 @@ class Knott:
             report = validate_entity(parsed, schemas, resolve, lookup)
             issues.extend(report.issues)
             relations += report.relations
+            assert parsed.frontmatter is not None
+            kid = parsed.frontmatter.get(KID_KEY)
+            if is_canonical(kid):
+                in_scope_kids.add(kid)
+
+        # A duplicate is reported only when one of its claimants is in scope.
+        for kid in sorted(in_scope_kids):
+            claims = kids()[kid]
+            if len(claims) > 1:
+                issues.append(_duplicate_kid(kid, claims))
 
         stats = Stats(schemas=len(schemas), entities=entities, relations=relations)
         return ValidationResult(issues=_sorted(issues), stats=stats)
@@ -258,6 +310,21 @@ def _ontology_attribute(a: AttributeDef) -> OntologyAttribute:
             [_ontology_attribute(f) for f in shape.fields.values()]
             if isinstance(shape, ObjectShape)
             else []
+        ),
+    )
+
+
+def _duplicate_kid(kid: str, claims: list[Claim]) -> Issue:
+    first = claims[0]
+    return Issue(
+        code="kid-duplicate",
+        path=first.path,
+        line=first.line,
+        field=KID_KEY,
+        message=(
+            f"`kid` {kid} is claimed by {len(claims)} entities: {format_claims(claims)}\n"
+            "each entity needs its own `kid`; remove the `kid:` line from the copy, "
+            "then run `knott validate --fix`"
         ),
     )
 
