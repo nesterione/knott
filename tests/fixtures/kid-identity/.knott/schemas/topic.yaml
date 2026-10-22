@@ -1,0 +1,4 @@
+type: topic
+relations:
+  includes:
+    target: lexeme

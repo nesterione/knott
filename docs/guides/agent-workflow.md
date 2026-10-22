@@ -18,8 +18,10 @@ Knott is built for agents that persist knowledge as files. The full instructions
 2. Read the schema YAML: `description`, required fields, relation targets.
 3. Create or edit the Markdown file directly. Knott has no `create` command; files are the interface.
 4. Write relations as quoted Markdown links with paths relative to the file.
-5. `knott validate <file> --format json`
+5. `knott validate <file> --fix --format json`. `--fix` gives a new entity its [kid](../concepts/kid.md); it never changes an existing one.
 6. Fix every issue and re-validate until `ok` is `true`.
+
+When starting a new entity from a copy of another file, delete the copied `kid:` line first, or both files claim the same `kid`.
 
 ## Reading results
 

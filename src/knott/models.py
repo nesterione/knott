@@ -27,9 +27,18 @@ class Stats(_Frozen):
     relations: int = 0
 
 
+class FixedEntity(_Frozen):
+    """An entity that `validate(fix=True)` gave a new `kid`."""
+
+    path: str
+    kid: str
+
+
 class ValidationResult(_Frozen):
     issues: list[Issue]
     stats: Stats
+    fixed: list[FixedEntity] = []
+    """Entities that got a new `kid` (only with ``fix=True``)."""
 
     @property
     def ok(self) -> bool:
@@ -93,6 +102,8 @@ class OntologyType(_Frozen):
     """Vault-relative path of the schema file."""
     count: int
     """Markdown files whose frontmatter `type` is this type."""
+    kid_required: bool = False
+    """The schema says `kid: required`."""
     attributes: list[OntologyAttribute]
     relations: list[OntologyRelation]
 

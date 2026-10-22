@@ -46,6 +46,7 @@ This is the real schema from this folder (`.knott/schemas/decision.yaml`).
 - **Choose the relation's direction carefully.** It lives on the source and is never duplicated on the target. Put it on the side that is created later or knows about the other.
 - **Self-reference is fine**: `supersedes: {target: decision}`.
 - **Prefer a relation over a string attribute** when the value names another entity. You get existence and type checks for free.
+- **Require a `kid` when outside tools track entities**: `kid: required` at the top level. Progress records and logs can then refer to the entity even after its file moves. See [Kid](../concepts/kid.md).
 - **Don't fight strict typing.** If a value may be `"N/A"`, it's a `string`, not an `integer`.
 
 ## Structured attributes

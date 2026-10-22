@@ -1,0 +1,5 @@
+type: lexeme
+kid: required
+attributes:
+  lemma:
+    type: string

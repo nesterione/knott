@@ -1,8 +1,8 @@
 ---
 type: command
 title: knott validate
-synopsis: knott validate [PATH...] [--format text|json]
-writes_files: false
+synopsis: knott validate [PATH...] [--format text|json] [--fix]
+writes_files: true
 concepts:
   - "[Schema](../concepts/schema.md)"
   - "[Entity](../concepts/entity.md)"
@@ -33,6 +33,20 @@ Success:
 "Relations" counts each resolved reference, so a list of three counts as 3. On failure, each issue is printed, then `N validation errors`.
 
 `--format json` prints `{"ok": …, "stats": {…}, "issues": [{code, path, line, field, message}]}`, the form agents should parse.
+
+## `--fix`
+
+Gives a [kid](../concepts/kid.md) to every checked entity that has no `kid` key, then validates. Each changed file is listed first:
+
+```
+$ knott validate --fix lexemes/
++ kid  lexemes/namas.md
+
+✓ 2 schemas
+…
+```
+
+The edit is a single inserted line, `kid: <new uuid>`, after the `type:` line; nothing else in the file changes. `--fix` never touches an existing `kid`, even an empty, invalid or duplicated one. With `--format json`, the output gains `"fixed": [{"path", "kid"}]`. Without `--fix`, `validate` never writes.
 
 ## Exit codes
 

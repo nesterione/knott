@@ -74,6 +74,8 @@ def format_type(t: OntologyType) -> str:
     lines = [f"{t.type}  ({t.path})"]
     if t.description:
         lines += [f"  {line}" for line in t.description.strip().splitlines()]
+    if t.kid_required:
+        lines.append("  kid: required")
     if t.attributes:
         lines.append("  attributes:")
         lines += _attribute_lines(t.attributes, "    ")
@@ -160,22 +162,32 @@ def validate(
     output: Annotated[
         OutputFormat, typer.Option("--format", help="Output format.")
     ] = OutputFormat.TEXT,
+    fix: Annotated[
+        bool,
+        typer.Option("--fix", help="Add a `kid` to every checked entity that has none."),
+    ] = False,
 ) -> None:
     """Validate schemas and entities."""
     try:
         start = paths[0] if paths else Path(".")
         vault = Knott.open(start if start.exists() else Path("."))
-        result = vault.validate([p.absolute() for p in paths] if paths else None)
+        result = vault.validate([p.absolute() for p in paths] if paths else None, fix=fix)
     except KnottError as error:
         raise _fail(error) from None
     if output is OutputFormat.JSON:
-        payload = {
+        payload: dict[str, object] = {
             "ok": result.ok,
             "stats": result.stats.model_dump(),
             "issues": [issue.model_dump() for issue in result.issues],
         }
+        if fix:
+            payload["fixed"] = [entity.model_dump() for entity in result.fixed]
         typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
+        for entity in result.fixed:
+            typer.echo(f"+ kid  {entity.path}")
+        if result.fixed:
+            typer.echo()
         typer.echo(format_result(result))
     if not result.ok:
         raise typer.Exit(EXIT_INVALID)

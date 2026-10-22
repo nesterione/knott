@@ -12,7 +12,8 @@ A Knott vault is an ordinary directory of Markdown files with a `.knott/` direct
 - **Entity**: a Markdown file whose YAML frontmatter is a mapping with a `type` key. Files without frontmatter, or without `type`, are ordinary notes and are ignored.
 - **Schema**: `.knott/schemas/**/*.yaml`, one file per type. The `type:` value inside the file is the type's name; the file name and folder do not matter.
 - **Attribute**: a frontmatter value declared under `attributes:`: a scalar (`string`, `integer`, `number`, `boolean`, `date`, `datetime`), or a `list`, `object` or `map` of them, nested.
-- **Relation**: a frontmatter value declared under `relations:` that points to another entity file by relative path. The relation lives only on the source file; never add an inverse on the target.
+- **Relation**: a frontmatter value declared under `relations:` that points to another entity file by relative path (or by `kid`). The relation lives only on the source file; never add an inverse on the target.
+- **Kid**: a knott-managed identity, `kid: <lowercase uuid>`. Never invent or edit one; `knott validate --fix` adds it.
 
 ## Workflow
 
@@ -20,7 +21,7 @@ A Knott vault is an ordinary directory of Markdown files with a `.knott/` direct
 2. Pick the relevant type and read its schema YAML: `description`, `attributes`, `relations`, and which fields are `required: true`.
 3. Create or update the Markdown entity. Put it wherever it makes sense to a human; Knott does not dictate folders.
 4. Write relations as relative paths (see below).
-5. Run `knott validate <file>` after **every** change.
+5. Run `knott validate --fix <file>` after creating an entity (it adds the `kid`), and `knott validate <file>` after **every** change.
 6. Fix every reported issue and validate again before finishing.
 
 ## Writing an entity
@@ -84,6 +85,13 @@ Rules:
 - **Always quote** a Markdown link. Unquoted `[label](path)` is invalid YAML.
 - No wikilinks (`[[note]]`), URLs, `#fragments`, or absolute paths.
 - Paths are case-sensitive, even on macOS.
+- `kid:<uuid>` also works (`- kid:3f2b8c1e-…`), and survives the target being moved. Use it when you were given a `kid`; otherwise prefer the Markdown link. Never wrap it in a link.
+
+## Kids
+
+- **When copying a file to start a new entity, delete its `kid:` line**, then run `knott validate --fix <new file>`. Otherwise both files claim the same `kid` (`kid-duplicate`).
+- Never change an existing `kid`; other files and tools may refer to it.
+- `kid-invalid`: write the canonical form the message gives.
 
 ## Obsidian settings
 
@@ -95,6 +103,7 @@ For vaults edited in Obsidian, set Files & links → *New link format* to **Rela
 knott types [--verbose]          # list types (exit 1 if a schema has errors)
 knott validate [PATH...]         # check schemas + all entities, or only PATHs
 knott validate --format json     # {ok, stats, issues[]} for machine reading
+knott validate --fix [PATH...]   # add a kid to entities that have none, then validate
 knott init [PATH]                # create .knott/ (never overwrites)
 knott view [PATH] [--no-open] [-o FILE]  # write an HTML diagram of types and relations
 ```

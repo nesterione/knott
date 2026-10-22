@@ -244,3 +244,29 @@ def test_description_is_allowed_on_items_and_values(tmp_path: Path) -> None:
         "  b:\n    type: map\n    values: {type: integer, description: a count}\n",
     )
     assert issues == []
+
+
+def test_kid_required_schema_key(tmp_path: Path) -> None:
+    Knott.init(tmp_path)
+    schemas = tmp_path / ".knott/schemas"
+    (schemas / "a.yaml").write_text("type: a\nkid: required\n")
+    (schemas / "b.yaml").write_text("type: b\n")
+    (schemas / "c.yaml").write_text("type: c\nkid: optional\n")
+    registry, issues = load_schemas(tmp_path)
+    assert (registry["a"].kid_required, registry["b"].kid_required) == (True, False)
+    assert not registry["c"].kid_required
+    assert [(i.path, i.line, i.field) for i in issues] == [(".knott/schemas/c.yaml", 2, "kid")]
+    assert issues[0].message == (
+        "`kid` must be `required`, got `optional`; omit it to make `kid` optional"
+    )
+
+
+def test_kid_is_a_reserved_field_name(tmp_path: Path) -> None:
+    issues = _schema_issues(
+        tmp_path,
+        "  kid: {type: string}\n"
+        "  meta:\n    type: object\n    fields:\n      kid: {type: string}\n",
+    )
+    # Only the top-level field is reserved; a nested object may have a `kid` field.
+    assert [(f, ln) for f, ln, _ in issues] == [("attributes.kid", 3)]
+    assert "reserved for the knott-managed entity identity" in issues[0][2]

@@ -20,6 +20,17 @@ Each reference is resolved **relative to the directory of the file that contains
 | 5 | target is a Knott entity | `relation-target-not-entity` |
 | 6 | target's `type` equals the relation's `target` | `relation-target-type-mismatch` |
 
+## `kid:` references
+
+A reference written `kid:<uuid>` names an entity by its [kid](kid.md) instead of its path, so it survives moves and renames. Steps 2–4 are replaced by:
+
+| # | Check | Failure code |
+|---|---|---|
+| 2 | the value after `kid:` is a canonical lowercase UUID, written on its own (not as `[label](kid:…)`) | `relation-invalid-value` |
+| 3 | exactly one entity has that `kid` | `relation-target-not-found`, or `relation-target-ambiguous` when several do |
+
+Steps 5 and 6 then run as for a path. Markdown links remain the default form, because they are readable and clickable in Obsidian.
+
 ## Markdown links
 
 `[label](destination)`: the label is ignored. The destination may be wrapped in `<…>` (needed for spaces) or percent-encoded (`%20`). In YAML the whole thing must be quoted.
@@ -32,4 +43,4 @@ macOS filesystems are case-insensitive by default, Linux's are not. Matching cas
 
 Wikilinks (`[[note]]`): they resolve by note name rather than path. An unquoted `[[note]]` is even parsed by YAML as a nested list.
 
-All of this lives behind one function, `resolve_reference()` in `src/knott/vault/links.py`, so stable IDs can replace paths later without touching anything else.
+All of this lives behind one function, `resolve_reference()` in `src/knott/vault/links.py`.
