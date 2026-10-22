@@ -65,7 +65,7 @@ $ knott validate
 | Command | Purpose |
 |---|---|
 | `knott init [PATH]` | Create `.knott/schemas/` and `.knott/config.yaml` |
-| `knott validate [PATH...]` | Check all schemas, plus all entities or those under `PATH` (`--format json` for agents) |
+| `knott validate [PATH...]` | Check all schemas, plus all entities or those under `PATH` (`--format json` for agents, `--fix` to add missing `kid`s) |
 | `knott types [--verbose]` | List discovered types (`--verbose`: attributes, nested shapes and relations) |
 | `knott view [PATH]` | Draw the ontology as an HTML page and open it (`-o FILE`, `--no-open`) |
 | `knott version` | Print the installed version |
@@ -101,6 +101,16 @@ derived_from: "[Episode 42 script](../scripts/episode-42.md)"
 ```
 
 Wikilinks, URLs, `#fragments`, and absolute paths are rejected. Matching is case-sensitive on every OS.
+
+### Stable identity
+
+`knott validate --fix` gives every entity a `kid`, a knott-managed UUID that survives moves and renames. A relation can then refer to it as `kid:<uuid>`. A schema can require one with `kid: required`. Markdown links stay the recommended form; use `kid:` where a reference must survive renames.
+
+```yaml
+kid: 3f2b8c1e-9d4a-4c2e-b7f1-0a6d5e9c8b21
+includes:
+  - kid:0192f4a1-7c3e-4b2a-9f10-3d5e8c2b4a61
+```
 
 ### Obsidian
 

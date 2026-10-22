@@ -238,6 +238,7 @@ Allowed keys:
 |---|---|---|---|
 | top | `type` | yes | matches `^[a-z][a-z0-9_-]*$` |
 | top | `description` | no | string |
+| top | `kid` | no | `required`: every entity of this type must have a `kid` (§12) |
 | top | `attributes` | no | mapping of field name → attribute definition |
 | top | `relations` | no | mapping of field name → relation definition |
 | attribute | `type` | yes | a scalar type in §8, or `list`, `object` or `map` |
@@ -253,7 +254,7 @@ Allowed keys:
 Schema rules:
 
 - Unknown keys in a schema file are errors. Knott owns these files, so a typo such as `atributes:` must not pass silently.
-- Top-level field names must not be `type`. Fields nested inside an `object` may be.
+- Top-level field names must not be `type` or `kid`. Fields nested inside an `object` may be.
 - `items`, `fields` and `values` are allowed only with their own `type`, and are required there.
 - A field name cannot be both an attribute and a relation in the same schema.
 
@@ -346,7 +347,7 @@ Reverse navigation is left to tools: Obsidian backlinks, or a future derived ind
 
 ## 11. Relation references
 
-In v0, relations use **relative filesystem paths**, not Knott IDs.
+Relations use **relative filesystem paths** by default. A reference may also name an entity by its `kid` (§12).
 
 ### Value shape
 
@@ -402,6 +403,8 @@ target is a Knott entity                           → relation-target-not-entit
 target's type equals relation.target               → relation-target-type-mismatch
 ```
 
+A reference written `kid:<uuid>` skips the path steps. It must be a canonical lowercase UUID (`relation-invalid-value`; a `[label](kid:…)` link is rejected too), exactly one entity must have that `kid` (`relation-target-not-found`, or `relation-target-ambiguous` when several do), and then the type check runs as above.
+
 Use exact case matching so results are the same on case-insensitive filesystems (macOS) and case-sensitive ones (Linux).
 
 An unquoted `[label](path)` is not valid YAML, so it surfaces as `entity-invalid-frontmatter`. That error should also suggest quoting the value when the failing line looks like a Markdown link.
@@ -410,17 +413,23 @@ If the schema marks a relation `required: true`, the key must be present with at
 
 ---
 
-## 12. Stable IDs
+## 12. Stable identity: `kid`
 
-Out of scope for v0. Paths are human-readable, inspectable, clickable, and Git-friendly.
-
-The design should not block a later
+Every entity may carry a knott-managed identity that survives moves and renames:
 
 ```yaml
-id: some-stable-id
+type: lexeme
+kid: 3f2b8c1e-9d4a-4c2e-b7f1-0a6d5e9c8b21
 ```
 
-with a `path ↔ id` mapping. Concretely: keep relation resolution in one module (`vault/links.py`) behind a single function. Build no ID infrastructure now.
+- `kid` is a reserved top-level key, like `type`. Its value is a canonical lowercase UUID (any version; knott generates v4). Other spellings are `kid-invalid`, and the message gives the canonical form.
+- It is optional unless the schema says `kid: required` (`kid-missing`).
+- It is unique across the vault, whatever the type. A duplicate is reported once (`kid-duplicate`), on the first claimant by path, naming every claimant. A scoped run reports a duplicate only if one of its claimants is in scope.
+- `knott validate --fix` inserts `kid: <uuid4>` into every in-scope entity without a `kid` key: one line, after `type:` (or before the closing `---`), with the rest of the file unchanged, re-parsed before it is written. It never changes an existing `kid`, including duplicates. This is knott's only edit to user files.
+- Relations may refer to an entity as `kid:<uuid>` (§11). Markdown links remain the default.
+- Resolution stays behind `resolve_reference()` in `vault/links.py`. The `kid` index is built once per run, only when a run needs it.
+
+A `kid` does not detect two entities describing the same concept. See `docs/decisions/0009-kid-identity.md`.
 
 ---
 
@@ -434,12 +443,14 @@ Validation is the primary feature of v0. A run loads all schemas, then validates
 - `type` is present and well-formed. No unknown keys (§7).
 - Each attribute has a known `type`; `list`, `object` and `map` have their nested definition, recursively valid.
 - Each relation `target` names a discovered type.
+- `kid`, when present, is `required`.
 - No duplicate `type` across files.
-- No field name collisions, and no field named `type`.
+- No field name collisions, and no field named `type` or `kid`.
 
 ### Entity validation
 
 - `type` names a discovered schema (`entity-unknown-type`).
+- `kid`: present when the schema requires it (`kid-missing`), a canonical UUID (`kid-invalid`), and unique (`kid-duplicate`).
 - Declared attributes: required ones are present (`attribute-missing`) and values match their type (`attribute-type-mismatch`), at every nesting level. Declared objects have no undeclared keys (`attribute-unknown-field`).
 - Declared relations: checked as in §11.
 - Undeclared keys are allowed and not checked. Strict schemas may come later.
@@ -467,7 +478,7 @@ Keep the CLI deliberately small:
 
 ```
 knott init [PATH]
-knott validate [PATH...]
+knott validate [PATH...] [--fix]
 knott types
 knott version
 knott skill install [PATH]
@@ -482,7 +493,7 @@ If `.knott/` already exists, it changes nothing, prints that the vault is alread
 
 ### `knott validate [PATH...]`
 
-See §13 for scope and §20 for output.
+See §13 for scope and §20 for output. `--fix` first gives a `kid` to every in-scope entity that has none (§12), prints `+ kid  <path>` for each, then validates. With `--format json`, the output gains `"fixed": [{path, kid}]`.
 
 ### `knott types`
 
@@ -615,9 +626,11 @@ Success output:
 schema-invalid-yaml        schema-invalid-field       schema-duplicate-type
 schema-unknown-target      schema-field-conflict
 entity-invalid-frontmatter entity-unknown-type        not-an-entity
+kid-missing                kid-invalid                kid-duplicate
 attribute-missing          attribute-type-mismatch    attribute-unknown-field
 relation-missing           relation-invalid-value     relation-target-outside-vault
 relation-target-not-found  relation-target-not-entity relation-target-type-mismatch
+relation-target-ambiguous
 ```
 
 ### Exit codes
@@ -642,6 +655,7 @@ result = vault.validate()          # or vault.validate(["transcripts/foo.md"])
 result.ok                          # bool
 result.issues                      # list[Issue], sorted
 result.stats                       # schemas / entities / relations counts
+vault.validate(fix=True)           # add missing kids first; result.fixed lists them
 types = vault.types()              # list[str], sorted
 ontology = vault.ontology()        # Ontology: types with attributes, relations, counts
 ```
@@ -679,7 +693,7 @@ At minimum, test: schema discovery and parsing, entity detection, attribute typi
 
 Do not add, unless needed purely to meet the requirements above:
 
-database as source of truth · search indexes · semantic or vector search · embeddings · stable entity IDs · automatic inverse relations · global relation registry · RDF / OWL · inference or reasoning · schema inheritance, composition, or versioning · migration framework · UI (an interactive or served app; the static page `knott view` writes is not one) · HTTP server · daemon · filesystem watcher · automatic knowledge extraction · automatic memory selection · agent deciding autonomously what to persist · plugin architecture · wikilink resolution.
+database as source of truth · search indexes · semantic or vector search · embeddings · automatic inverse relations · global relation registry · RDF / OWL · inference or reasoning · schema inheritance, composition, or versioning · migration framework · UI (an interactive or served app; the static page `knott view` writes is not one) · HTTP server · daemon · filesystem watcher · automatic knowledge extraction · automatic memory selection · agent deciding autonomously what to persist · plugin architecture · wikilink resolution.
 
 Avoid speculative abstractions. Prefer the smallest implementation that satisfies the contract.
 

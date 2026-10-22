@@ -25,6 +25,7 @@ vault.types()                       # ["concept", "decision", …]
 vault.schemas()                     # [SchemaInfo(type, description, path), …]
 vault.schema_issues()               # problems from schema loading only
 vault.ontology()                    # Ontology(vault, types, schema_issues)
+vault.validate(fix=True)            # add missing kids first; result.fixed: [FixedEntity(path, kid)]
 Knott.init("new-vault")             # InitResult(root, created)
 ```
 

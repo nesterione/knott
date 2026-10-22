@@ -25,6 +25,6 @@ lexeme  (.knott/schemas/lexeme.yaml)
     topic*  → topic
 ```
 
-`*` marks a required field. Object fields are indented under their attribute. A relation to a type no schema defines is marked `(undefined type)`. Types are separated by a blank line.
+A type whose schema says `kid: required` shows `kid: required` under its description. `*` marks a required field. Object fields are indented under their attribute. A relation to a type no schema defines is marked `(undefined type)`. Types are separated by a blank line.
 
 If some schemas have errors, it still prints the types it could load, writes the errors to stderr, and exits `1`.
