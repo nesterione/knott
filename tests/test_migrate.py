@@ -322,6 +322,19 @@ def _legacy_vault(root: Path) -> Path:
             id="not-utf8",
         ),
         pytest.param(
+            lambda r: (
+                (r / ".knott/concepts").mkdir(parents=True),
+                (r / ".knott/concepts/sub").write_text("a file\n"),
+            ),
+            ".knott/concepts/sub is not a folder",
+            id="parent-is-a-file",
+        ),
+        pytest.param(
+            lambda r: (r / ".knott/concepts").write_text("a file\n"),
+            ".knott/concepts is not a folder",
+            id="concepts-is-a-file",
+        ),
+        pytest.param(
             lambda r: (r / ".knott/schemas/notes.txt").write_text("keep me\n"),
             ".knott/schemas/notes.txt: not a `.yaml` schema",
             id="other-file",
@@ -354,3 +367,70 @@ def test_migrate_without_legacy_folder_refuses(tmp_path: Path) -> None:
     with pytest.raises(MigrateError, match="nothing to migrate"):
         Knott.open(tmp_path).migrate()
     assert snapshot(tmp_path) == before
+
+
+def test_migrate_refuses_symlinked_legacy_folder(tmp_path: Path) -> None:
+    real = tmp_path / "real-schemas"
+    real.mkdir()
+    (real / "a.yaml").write_text("type: a\n", encoding="utf-8")
+    root = tmp_path / "vault"
+    (root / ".knott").mkdir(parents=True)
+    (root / ".knott/schemas").symlink_to(real, target_is_directory=True)
+    before = snapshot(tmp_path)
+    with pytest.raises(MigrateError, match="is a symbolic link"):
+        migrate_vault(root)
+    assert snapshot(tmp_path) == before
+
+
+def test_migrate_write_failure_rolls_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _legacy_vault(tmp_path)
+    before = snapshot(root)
+    real_write = Path.write_text
+
+    def failing_write(self: Path, *args: Any, **kwargs: Any) -> int:
+        if self.name == "b.md":
+            raise OSError(28, "No space left on device", str(self))
+        return real_write(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", failing_write)
+    with pytest.raises(MigrateError) as raised:
+        migrate_vault(root)
+    message = str(raised.value)
+    assert ".knott/concepts/sub/b.md: No space left on device" in message
+    assert "nothing was changed" in message
+    assert snapshot(root) == before
+
+
+def test_migrate_write_failure_keeps_existing_concepts_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _legacy_vault(tmp_path)
+    (root / ".knott/concepts").mkdir()
+    before = snapshot(root)
+
+    def failing_write(self: Path, *args: Any, **kwargs: Any) -> int:
+        raise PermissionError(13, "Permission denied", str(self))
+
+    monkeypatch.setattr(Path, "write_text", failing_write)
+    with pytest.raises(MigrateError, match="nothing was changed"):
+        migrate_vault(root)
+    assert snapshot(root) == before
+
+
+def test_migrate_keeps_concepts_when_legacy_folder_cannot_be_removed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _legacy_vault(tmp_path)
+
+    def failing_rmtree(path: Path) -> None:
+        raise PermissionError(13, "Permission denied", str(path / "a.yaml"))
+
+    monkeypatch.setattr("knott.schema.migrate.shutil.rmtree", failing_rmtree)
+    with pytest.raises(MigrateError) as raised:
+        migrate_vault(root)
+    message = str(raised.value)
+    assert "concept files written, but `.knott/schemas/` could not be removed" in message
+    assert ".knott/schemas/a.yaml: Permission denied" in message
+    assert "delete `.knott/schemas/` by hand" in message
+    assert concept(root, ".knott/concepts/a.md") == {"name": "a"}
+    assert concept(root, ".knott/concepts/sub/b.md") == {"name": "b"}

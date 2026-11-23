@@ -8,6 +8,7 @@ import tomllib
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 import questionary
@@ -683,3 +684,48 @@ def test_migrate_refusal_is_usage_error(tmp_path: Path) -> None:
     assert result.exit_code == 2
     assert "error: nothing to migrate" in result.stderr
     assert sorted(p.name for p in (tmp_path / ".knott").iterdir()) == ["concepts", "config.yaml"]
+
+
+def test_migrate_write_failure_is_usage_error_and_changes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / ".knott/schemas").mkdir(parents=True)
+    (tmp_path / ".knott/schemas/a.yaml").write_text("type: a\n", encoding="utf-8")
+    (tmp_path / ".knott/schemas/b.yaml").write_text("type: b\n", encoding="utf-8")
+    before = sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*"))
+    real_write = Path.write_text
+
+    def failing_write(self: Path, *args: Any, **kwargs: Any) -> int:
+        if self.name == "b.md":
+            raise OSError(28, "No space left on device", str(self))
+        return real_write(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", failing_write)
+    result = runner.invoke(app, ["migrate", str(tmp_path)])
+    assert result.exit_code == 2
+    assert "error: cannot write concept files" in result.stderr
+    assert sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*")) == before
+
+
+def test_migrate_parent_is_a_file_is_usage_error(tmp_path: Path) -> None:
+    (tmp_path / ".knott/schemas/a").mkdir(parents=True)
+    (tmp_path / ".knott/schemas/a/c.yaml").write_text("type: c\n", encoding="utf-8")
+    (tmp_path / ".knott/concepts").mkdir()
+    (tmp_path / ".knott/concepts/a").write_text("x\n")
+    result = runner.invoke(app, ["migrate", str(tmp_path)])
+    assert result.exit_code == 2
+    assert "error: .knott/concepts/a is not a folder" in result.stderr
+    assert (tmp_path / ".knott/schemas/a/c.yaml").is_file()
+
+
+def test_migrate_symlinked_legacy_folder_is_usage_error(tmp_path: Path) -> None:
+    real = tmp_path / "real"
+    real.mkdir()
+    (real / "a.yaml").write_text("type: a\n", encoding="utf-8")
+    root = tmp_path / "vault"
+    (root / ".knott").mkdir(parents=True)
+    (root / ".knott/schemas").symlink_to(real, target_is_directory=True)
+    result = runner.invoke(app, ["migrate", str(root)])
+    assert result.exit_code == 2
+    assert "is a symbolic link" in result.stderr
+    assert not (root / ".knott/concepts").exists()

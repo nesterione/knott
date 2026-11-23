@@ -99,8 +99,12 @@ class Knott:
         Works without loading schemas, so it runs on a vault that reports
         ``schema-legacy-layout``. A relation that any entity stores as a YAML list
         becomes ``list`` of ``reference``. Raises ``MigrateError`` (nothing written
-        or removed) when there is no legacy folder, a legacy file can't be read or
-        converted, or a target concept file already exists.
+        or removed) when there is no legacy folder, the legacy folder is a symbolic
+        link, a legacy file can't be read or converted, a target concept file or a
+        non-folder on its path already exists, or writing a concept file fails
+        (files written so far are removed again). If only deleting
+        ``.knott/schemas/`` fails, the concept files are kept and ``MigrateError``
+        says to delete the legacy folder by hand.
         """
         return migrate_vault(self.root)
 

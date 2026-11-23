@@ -566,7 +566,7 @@ Converts a pre-0.5 vault. Reads every `.knott/schemas/**/*.yaml` with the safe l
 - A relation becomes `{type: reference, target, description}`, or `{type: list, required, description, items: {type: reference, target}}` when any entity of that type stores a list in that field.
 - Output is block-style YAML in source key order; multi-line descriptions are folded (`>`). The body is empty.
 
-It refuses (exit `2`, nothing written) when there is no `.knott/schemas/`; a legacy file is unreadable, not UTF-8, not valid YAML, has unknown keys, or declares a name as both attribute and relation; a target `.md` already exists; or `.knott/schemas/` holds a non-hidden file that isn't `.yaml` (the folder is deleted afterwards). On success it writes every file, deletes `.knott/schemas/`, then validates and prints:
+It refuses (exit `2`, nothing written) when there is no `.knott/schemas/`; a legacy file is unreadable, not UTF-8, not valid YAML, has unknown keys, or declares a name as both attribute and relation; a target `.md` already exists, or a non-folder sits where one of its folders would go; `.knott/schemas/` is a symbolic link; or `.knott/schemas/` holds a non-hidden file that isn't `.yaml` (the folder is deleted afterwards). If writing a concept file fails (`OSError`), the files and folders written so far are removed and it exits `2` with nothing changed. If only deleting `.knott/schemas/` fails, the written concept files are kept (the delete may have removed legacy files already) and it exits `2`, asking the user to delete the folder by hand. On success it writes every file, deletes `.knott/schemas/`, then validates and prints:
 
 ```
 + .knott/concepts/compilation.md

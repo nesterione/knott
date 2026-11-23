@@ -6,6 +6,7 @@ legacy folder, writes the concept files and removes the folder.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import shutil
 from collections.abc import Iterable, Mapping
@@ -104,12 +105,21 @@ def migrate_vault(root: Path) -> MigrateResult:
     """Convert ``.knott/schemas/**/*.yaml`` under ``root`` into ``.knott/concepts/**/*.md``.
 
     Everything is read and converted first; any problem raises ``MigrateError``
-    before a single file is written or removed. On success the concept files are
-    written and ``.knott/schemas/`` is deleted.
+    before a single file is written or removed. If writing a concept file fails
+    (``OSError``), the files and folders written so far are removed again and
+    ``MigrateError`` is raised, so the vault is left as it was. If only the final
+    removal of ``.knott/schemas/`` fails, the concept files are complete and kept,
+    and ``MigrateError`` asks the user to delete the legacy folder by hand: rolling
+    back then could lose legacy files ``rmtree`` already deleted.
     """
     legacy = root / LEGACY_SCHEMAS_DIR
     if not legacy.is_dir():
         raise MigrateError(f"nothing to migrate: {root} has no `{LEGACY_SCHEMAS_DIR}/` folder")
+    if legacy.is_symlink():
+        raise MigrateError(
+            f"`{LEGACY_SCHEMAS_DIR}/` is a symbolic link; replace it with a real folder "
+            "first, since migrate deletes that folder"
+        )
     sources: list[Path] = []
     for path in sorted(legacy.rglob("*")):
         if path.is_dir():
@@ -145,6 +155,7 @@ def migrate_vault(root: Path) -> MigrateResult:
             PurePosixPath(CONCEPTS_DIR) / path.relative_to(legacy).with_suffix(".md").as_posix()
         ).as_posix()
         target = root / target_rel
+        _check_parents(root, PurePosixPath(target_rel))
         if target.exists() or target.is_symlink():
             raise MigrateError(
                 f"{target_rel} already exists; move it away or delete it, then run "
@@ -155,16 +166,71 @@ def migrate_vault(root: Path) -> MigrateResult:
             _Planned(rel, target, target_rel, text, [f"{schema_type}.{n}" for n in ordered])
         )
 
-    for item in planned:
-        item.target.parent.mkdir(parents=True, exist_ok=True)
-        item.target.write_text(item.text, encoding="utf-8")
-    (root / CONCEPTS_DIR).mkdir(parents=True, exist_ok=True)
-    shutil.rmtree(legacy)
+    _check_parents(root, PurePosixPath(CONCEPTS_DIR) / "_")
+    _write_all(root, planned)
+    try:
+        shutil.rmtree(legacy)
+    except OSError as exc:
+        raise MigrateError(
+            f"concept files written, but `{LEGACY_SCHEMAS_DIR}/` could not be removed: "
+            f"{_reason(root, exc)}; delete `{LEGACY_SCHEMAS_DIR}/` by hand"
+        ) from None
     return MigrateResult(
         written=[item.target_rel for item in planned],
         removed=LEGACY_SCHEMAS_DIR,
         list_fields=[field for item in planned for field in item.list_fields],
     )
+
+
+def _check_parents(root: Path, target_rel: PurePosixPath) -> None:
+    """Refuse when a folder on the way to ``target_rel`` exists but isn't a folder."""
+    for parent in reversed(target_rel.parents[:-1]):
+        path = root / parent
+        if (path.exists() or path.is_symlink()) and not path.is_dir():
+            raise MigrateError(
+                f"{parent.as_posix()} is not a folder; move it away or delete it, then run "
+                "`knott migrate` again"
+            )
+
+
+def _write_all(root: Path, planned: list[_Planned]) -> None:
+    """Write every concept file; on ``OSError`` undo what was written and raise."""
+    created: list[Path] = []
+    written: list[Path] = []
+    try:
+        for item in planned:
+            _make_dirs(item.target.parent, created)
+            written.append(item.target)
+            item.target.write_text(item.text, encoding="utf-8")
+        _make_dirs(root / CONCEPTS_DIR, created)
+    except OSError as exc:
+        for path in written:
+            with contextlib.suppress(OSError):
+                path.unlink(missing_ok=True)
+        for path in reversed(created):
+            with contextlib.suppress(OSError):
+                path.rmdir()
+        raise MigrateError(
+            f"cannot write concept files: {_reason(root, exc)}; nothing was changed"
+        ) from None
+
+
+def _make_dirs(path: Path, created: list[Path]) -> None:
+    """``mkdir -p`` that records, outermost first, each folder it creates."""
+    missing = [p for p in (path, *path.parents) if not p.is_dir()]
+    for folder in reversed(missing):
+        folder.mkdir()
+        created.append(folder)
+
+
+def _reason(root: Path, exc: OSError) -> str:
+    reason = exc.strerror or str(exc)
+    if exc.filename is None:
+        return reason
+    name = Path(exc.filename)
+    if name.is_relative_to(root):
+        return f"{name.relative_to(root).as_posix()}: {reason}"
+    return f"{name}: {reason}"
 
 
 def _read_legacy(root: Path, path: Path) -> Any:
