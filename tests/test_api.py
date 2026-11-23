@@ -58,7 +58,15 @@ def test_docs_folder_is_a_valid_vault() -> None:
     docs = Path(__file__).parent.parent / "docs"
     result = Knott.open(docs).validate()
     assert result.ok, result.issues
-    assert Knott.open(docs).types() == ["command", "concept", "decision", "guide", "issue_code"]
+    assert Knott.open(docs).types() == [
+        "command",
+        "concept",
+        "decision",
+        "guide",
+        "intent",
+        "issue_code",
+        "spec",
+    ]
 
 
 def _write(path: Path, text: str) -> None:

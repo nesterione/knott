@@ -53,3 +53,21 @@ This README has no frontmatter, so Knott treats it as an ordinary note.
 8. [Structured attributes use explicit keywords, and objects are closed](decisions/0008-structured-attributes.md)
 9. [Entities get a knott-managed `kid`](decisions/0009-kid-identity.md)
 10. [Concepts are Markdown files, and references are properties](decisions/0010-concept-files-and-reference-properties.md)
+11. [Changes are specified in frozen specs, wanted ones start as intents](decisions/0011-specs-intents-and-frozen-history.md)
+
+## How changes are made
+
+Wanted work starts as an **intent** in [intents/](intents/): the need, an example, open questions. When we pick it up, a **spec** in [specs/](specs/) defines the exact behaviour, citing the **decisions** that explain why. Implementing a spec updates [SPEC.md](../SPEC.md) (the current state) and these docs. Once implemented, a spec is never edited again; a later change writes a new spec that `amends` or `supersedes` it. See [decision 0011](decisions/0011-specs-intents-and-frozen-history.md).
+
+### Specs
+
+1. [Add `knott view` to draw the ontology as an HTML page](specs/0001-ontology-viewer.md)
+2. [Ship the agent skill in the package and add `knott skill install`](specs/0002-skill-install-command.md)
+3. [Add list, object and map attributes](specs/0003-structured-attributes.md)
+4. [Give entities a knott-managed `kid`](specs/0004-kid-identity.md)
+5. [Define types in concept files, with references as properties](specs/0005-concept-files.md)
+6. [Relation definitions and reverse lookup](specs/0006-relation-definitions.md) (accepted)
+
+### Intents
+
+- [Relation definitions](intents/relation-definitions.md)

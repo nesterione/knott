@@ -23,7 +23,11 @@ guide ── concepts ──▶ concept ◀────────────�
                              │
 issue_code ─── about ────────┤
 decision ──── affects ───────┘
-decision ── supersedes ──▶ decision
+decision ── supersedes, amends ──▶ decision
+spec ── realizes ──▶ intent ── concepts ──▶ concept
+spec ── decisions ──▶ decision
+spec ── concepts ──▶ concept
+spec ── supersedes, amends ──▶ spec
 ```
 
 | Type         | Holds                                | Key relations                                           |
@@ -32,7 +36,9 @@ decision ── supersedes ──▶ decision
 | `command`    | CLI commands                         | `concepts → concept`                                    |
 | `issue_code` | every validation code, cause and fix | `about → concept` (required)                            |
 | `guide`      | how-tos                              | `concepts → concept`, `commands → command`              |
-| `decision`   | design records                       | `affects → concept` (required), `supersedes → decision` |
+| `decision`   | design records: the choice and why   | `affects → concept` (required), `supersedes`/`amends → decision` |
+| `spec`       | the exact behaviour of one change, frozen once implemented | `realizes → intent`, `decisions → decision`, `concepts → concept`, `supersedes`/`amends → spec` |
+| `intent`     | wanted but not yet specified         | `concepts → concept`                                    |
 
 Every type also has a body template, so a new page starts with the sections its siblings use. Run `knott types --verbose` inside `docs/` to see them, and `knott validate` to check the whole folder.
 
