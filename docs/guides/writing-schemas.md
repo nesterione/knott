@@ -10,6 +10,7 @@ concepts:
 commands:
   - "[knott types](../commands/types.md)"
   - "[knott validate](../commands/validate.md)"
+  - "[knott refs](../commands/refs.md)"
 ---
 # Writing schemas
 
@@ -36,9 +37,11 @@ properties:
     items:
       type: reference
       target: concept
+      relation: about
   supersedes:
     type: reference
     target: decision
+    relation: supersedes
 ---
 # <!-- "NNNN: <the decision as a sentence>", the same text as the `title` property. -->
 
@@ -118,6 +121,32 @@ forms:
 
 See [Attribute](../concepts/attribute.md) and [Relation](../concepts/relation.md) for the full rules.
 
+## Naming the link
+
+A property's key says where a link is stored. A **relation file** says what the link means, once, for every property that uses it. Add one when several properties mean the same thing (`decision.affects` and `issue_code.about` both say "this is about that concept"), when the link needs a name from the target side, or when it must never loop. This folder's `.knott/relations/supersedes.md`:
+
+```markdown
+---
+name: supersedes
+inverse: superseded_by
+acyclic: true
+description: This entity replaces the target entirely. The target is kept unchanged as history.
+---
+Use `supersedes` when the old record is no longer the current answer: a new decision reverses an old one, or a new spec replaces an old spec as a whole. …
+
+When the old record still stands and only part of it changes, use `amends`. …
+```
+
+A property names it with `relation:`, as in the `decision` example above.
+
+- **`relation:` goes on the `reference`**, so for a list it goes on `items`, for a map on `values`.
+- **Name the `inverse` from the target's side**: `superseded_by`, `discussed_in`. It is a label for [`knott refs`](../commands/refs.md), never a property, so it must not equal a top-level property of a concept the relation can point at.
+- **`symmetric: true` for peers**, such as `related`. Store the link on one side; `knott refs` shows it from both. A symmetric relation has no `inverse` and isn't `acyclic`.
+- **`acyclic: true` for anything that replaces or derives from something else.** A loop is reported as `relation-cycle`.
+- **Write the body as guidance**: when to use this relation and which one to use instead. Agents read it in `knott types --verbose` before choosing a property.
+
+See [Relation](../concepts/relation.md#relation-definitions) for the full rules.
+
 ## Templates
 
 Write the body once the entities of a type share a structure. Use the real headings, and put a `<!-- … -->` comment under each saying what goes there:
@@ -141,7 +170,7 @@ Write the body once the entities of a type share a structure. Use the real headi
 Concept files are validated on every run, before entities. After editing one:
 
 ```sh
-knott types --verbose   # did it load, with the shapes and references you meant?
+knott types --verbose   # did it load, with the shapes, references and relations you meant?
 knott validate          # did existing entities break?
 ```
 

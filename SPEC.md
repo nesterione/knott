@@ -168,7 +168,8 @@ The canonical identity of a type is the value of `name`, not the filename or pat
 Reserved:
 
 - `.knott/schemas/` is the pre-0.5 layout. If it exists, a run reports one `schema-legacy-layout` issue and stops: no concept files are loaded and no entities are checked, so the one issue isn't buried under `entity-unknown-type`. `knott migrate` (§14) converts it.
-- `.knott/relations/` is reserved for relation definitions (§9). If it exists, it is `schema-invalid-field`.
+
+Relation definitions are discovered the same way from `.knott/relations/**/*.md`, one relation per file, identified by `name` (§9).
 
 See `docs/decisions/0010-concept-files-and-reference-properties.md`.
 
@@ -255,6 +256,7 @@ Allowed keys:
 | property | `fields` | with `type: object` | non-empty mapping of field name → definition |
 | property | `values` | with `type: map` | the definition of each value (`type`, `description`, nesting keys; no `required`) |
 | property | `target` | with `type: reference` | a type name, or a non-empty list of unique type names (self-reference allowed) |
+| property | `relation` | no; `type: reference` only | the `name` of a relation definition (§9) |
 
 Schema rules:
 
@@ -262,7 +264,7 @@ Schema rules:
 - A file with no frontmatter is `schema-invalid-yaml`.
 - Top-level property names must not be `type` or `kid`. Fields nested inside an `object` may be.
 - `items`, `fields`, `values` and `target` are allowed only with their own `type`, and are required there.
-- `relation` on a reference definition is reserved (§9) and is an error.
+- `relation` is allowed only on a reference definition (§9); on a `list` or `map`, the error says to put it on `items` or `values`.
 - A property whose shape is `reference`, at any depth, is a **relation** (§9–11). Every other property is an **attribute** (§8). They share one map, so a name can't be both.
 
 ### Body template
@@ -363,16 +365,77 @@ properties:
 
 - A `reference` shape can appear at the top level, as list `items`, as map `values`, or as an object field, at any depth.
 - `target` is one type name or a list of them. An entity of any listed type passes.
-- There is no global relation registry. Only keys declared with a reference shape are relations. An undeclared key whose value looks like a path or link is ordinary metadata and is never checked.
+- Only keys declared with a reference shape are relations. An undeclared key whose value looks like a path or link is ordinary metadata and is never checked, whatever its name.
 
-### Relation definitions (reserved)
+### Relation definitions
 
-Decision 0010 fixes the format of future relation definitions (`.knott/relations/<name>.md` with `name`, `description`, `inverse`, `symmetric`, `acyclic`, `transitive`), referenced from a property by `relation: <name>`. None of it is built yet, so both names are reserved:
+A relation definition says what a link means, once, for every property that uses it: its name read from the target side (`inverse`), whether it goes both ways (`symmetric`), and whether it may loop (`acyclic`). Each is one Markdown file, discovered from `.knott/relations/**/*.md` (subfolders are only for organisation; other file types are ignored):
 
-- a `relation:` key on a reference definition → `schema-invalid-field` ("reserved for relation definitions, not supported yet")
-- a `.knott/relations/` folder → `schema-invalid-field`
+```markdown
+---
+name: supersedes
+inverse: superseded_by
+acyclic: true
+description: This entity replaces the target. The target stays as history.
+---
+<!-- Use when the old entity is no longer the current answer. For a partial change, use `amends`. -->
+```
 
-When they land, `target` stays on the property, and a relation definition never adds a key to a concept.
+The frontmatter is the definition. The body is optional usage guidance, stored verbatim (`None` when blank), shown by `types --verbose` and `view`, and never checked against anything. Keys are closed:
+
+| Key | Required | Value |
+|---|---|---|
+| `name` | yes | `^[a-z][a-z0-9_-]*$`. Relation names and concept names are separate namespaces. |
+| `description` | no | string |
+| `inverse` | no | a name, same pattern as `name` |
+| `symmetric` | no | `true` / `false` (strict spelling), default `false` |
+| `acyclic` | no | `true` / `false`, default `false` |
+
+- `transitive` is reserved: `schema-invalid-field` ("reserved, not supported yet"). Any other key is `schema-invalid-field` with a "did you mean" suggestion. A file with a valid `name` is still registered when an optional key is invalid; that key is dropped.
+- A file with no frontmatter, or invalid YAML, is `schema-invalid-yaml`. Two files with the same `name` are `schema-duplicate-relation`, reported at the second file in path order and naming both.
+- A relation no property names is valid, and is listed by `types --verbose`.
+
+A reference property names a relation with `relation:`:
+
+```yaml
+properties:
+  supersedes: { type: reference, target: decision, relation: supersedes }
+  affects:
+    type: list
+    items: { type: reference, target: concept, relation: about }
+```
+
+- `relation:` is allowed on a `reference` shape only, at any depth. On a `list` or `map` it is `schema-invalid-field` with "put `relation:` on `items`" (or `values`); on another shape, "only allowed when `type` is reference". Its value must be a string.
+- The property keeps its own `target`, `required` and `description`. The relation declares no source or target types and never adds a key to a concept.
+- A name no relation file defines is `relation-unknown`, at the `relation:` line. The reference still works as a plain reference.
+- Many properties may name one relation, in one concept or across concepts, under any key names.
+
+### Checks on definitions
+
+Run on every command, after all concept and relation files are read. Only known targets are considered.
+
+| Rule | Code | Reported at |
+|---|---|---|
+| Two relations declare the same `inverse` | `relation-inverse-conflict` | the second file's `inverse:` line, naming both |
+| An `inverse` equals another relation's `name` | `relation-inverse-conflict` | the `inverse:` line |
+| An `inverse` equals its own `name` | `relation-inverse-conflict`, suggesting `symmetric: true` | the `inverse:` line |
+| An `inverse` equals a top-level property name of a concept that a property naming this relation can target | `relation-inverse-conflict`, naming the concept | the `inverse:` line, one issue per concept |
+| `symmetric: true` with an `inverse` | `relation-symmetric-mismatch` | the `inverse:` line |
+| `symmetric: true` with `acyclic: true` | `relation-symmetric-mismatch` | the `acyclic:` line |
+| A property names a symmetric relation, but its known targets don't include the property's own concept | `relation-symmetric-mismatch` | the concept file's `relation:` line |
+
+A nested field name (`speakers[].role`) never conflicts with an `inverse`, and neither does a property of a concept the relation's properties can't target.
+
+### Cycles
+
+For each relation with `acyclic: true` (and not `symmetric`) that some property names, knott builds one graph from the whole vault, lazily, once per run:
+
+- Nodes are entities. Edges are references at properties that name the relation, at any depth, in any concept, that pass every check in §11, including the target-type check. Path and `kid:` references count the same. Entities with invalid frontmatter or an unknown type add no edges.
+- Each strongly connected component with more than one entity, or an entity that references itself, is one `relation-cycle` issue. Loops mixing two relations are not reported.
+- The message names the shortest loop from the component's entity with the smallest path (successors tried in path order): "`supersedes` must not form a cycle: decisions/0011.md → decisions/0012.md → decisions/0011.md". It is reported at the first entity on that loop, in path order, that is in the run's scope, at the line of its reference to the next entity (the first in schema order when there are several); `field` is that property's full path.
+- A scoped run reports a cycle when at least one entity of its component is in scope. If none of the named loop's entities is, the loop is taken from the component's smallest in-scope entity and reported there.
+
+See `docs/specs/0006-relation-definitions.md`.
 
 ---
 
@@ -380,7 +443,25 @@ When they land, `target` stays on the property, and a relation definition never 
 
 Relations are stored only on the source side. The script does not get an inverse `derived_from`. This avoids duplicated state, sync problems, and unclear ownership of a relation.
 
-Reverse navigation is left to tools: Obsidian backlinks, or a future derived index (§17). Explicit inverse relations may come later if real workflows need them.
+Reverse navigation is computed, never stored: `knott refs` (§14) and `Knott.refs()` (§21), or Obsidian backlinks. A relation's `inverse` (§9) is a label for reading the link from the target side, not a property.
+
+### Reverse lookup
+
+Reverse lookup collects, for one entity E, every reference in the vault that resolves to E. Only declared reference properties count. A reference that resolves to E but fails the target-type check is still listed, because it still points at E; `validate` reports the mismatch separately.
+
+References are grouped by a **label**:
+
+| The referring property | Group label | Kind |
+|---|---|---|
+| names a relation with an `inverse` | the inverse, e.g. `superseded_by` | `inverse` |
+| names a symmetric relation | the relation's name, e.g. `related` | `symmetric` |
+| names a relation without `inverse`, not symmetric | `← <name>`, e.g. `← about` | `relation` |
+| names no relation, or an unknown one | `← <type>.<path>`, e.g. `← guide.concepts[]` (path notation as in `references()`) | `property` |
+
+- Properties from different concepts that name the same relation share one group.
+- Symmetric groups also include E's own outgoing references at properties naming that relation. Each linked entity appears once, with direction `in` (only the other side stores it), `out` (only E stores it) or `both`. Storing a symmetric link on both sides is valid and is never reported. `field` and `line` say where the link is stored: the linked entity's (first, in schema order) reference for `in` and `both`, E's own for `out`. A self-reference at a symmetric property is `both`.
+- A relation that is both `symmetric` and has an `inverse` is grouped by its inverse. Two relations that declare the same `inverse` give two groups with the same label, one per relation.
+- Groups are ordered: `inverse`, `symmetric` and `relation` groups by label (then relation name), then `property` groups by label. Within a group, references are ordered by source path, then field in schema order (list items in list order); symmetric groups by linked entity's path.
 
 ---
 
@@ -492,7 +573,8 @@ Validation is the primary feature of v0. A run loads all concept files, then val
 - Each name in a reference's `target` names a discovered type (`schema-unknown-target`, one issue per unknown name, `field` = the full key path such as `properties.sources.items.target`). Unknown names are dropped from the target list. If none is left, values are still checked for shape and resolved, but the target-type check is skipped.
 - `kid`, when present, is `required`.
 - No duplicate `name` across files (`schema-duplicate-type`).
-- No top-level property named `type` or `kid`; no `relation:` key; no `.knott/relations/` folder.
+- No top-level property named `type` or `kid`.
+- Relation files are well-formed, with unique names (`schema-duplicate-relation`); every `relation:` names one (`relation-unknown`); the checks on definitions pass (`relation-inverse-conflict`, `relation-symmetric-mismatch`; §9).
 
 ### Entity validation
 
@@ -500,6 +582,7 @@ Validation is the primary feature of v0. A run loads all concept files, then val
 - `kid`: present when the schema requires it (`kid-missing`), a canonical UUID (`kid-invalid`), and unique (`kid-duplicate`).
 - Attributes: required ones are present (`attribute-missing`) and values match their type (`attribute-type-mismatch`), at every nesting level. Declared objects have no undeclared keys (`attribute-unknown-field`).
 - References, at every nesting level: checked as in §11. A list or map whose items are references uses the `relation-*` codes.
+- No relation with `acyclic: true` forms a loop (`relation-cycle`, §9).
 - Undeclared top-level keys are allowed and not checked. Strict schemas may come later.
 
 For example, this stays valid even though `some_personal_metadata` is not in the schema:
@@ -531,6 +614,7 @@ knott migrate [PATH]
 knott version
 knott skill install [PATH]
 knott view [PATH]
+knott refs PATH
 ```
 
 ### `knott init [PATH]`
@@ -555,7 +639,27 @@ transcript
 
 If schema errors exist, `types` still prints the types it could load, writes the errors to stderr, and exits with code `1`.
 
-`--verbose` adds, per type: the concept file path, the description, `kid: required` when set, `template: yes|no`, `references:` with the path of every reference at any depth (`[]` for list items, `.*` for map values, `.field` for object fields, or `none`), and the properties with nested shapes indented. A reference shows `→ target | target`; a target no concept defines is marked `(unknown)`.
+`--verbose` adds, per type: the concept file path, the description, `kid: required` when set, `template: yes|no`, `references:` with the path of every reference at any depth (`[]` for list items, `.*` for map values, `.field` for object fields, or `none`), and the properties with nested shapes indented. A reference shows `→ target | target`; a target no concept defines is marked `(unknown)`. A reference that names a relation shows it after the type, as part of the type column: `affects  list of reference → concept  (about)`; a name no relation file defines is not shown.
+
+After the types, a `relations:` section lists every relation, sorted by name: on one line, indented by two spaces, the name, then `inverse: <x>`, `symmetric`, `acyclic` as they apply, separated by two spaces; then the description and the guidance, each line indented by four spaces (blank lines kept empty). Relations are separated by a blank line. A vault without relations has no `relations:` section. From `tests/fixtures/relation-refs`:
+
+```
+relations:
+  about  inverse: discussed_in
+    The source discusses the target.
+
+  cites
+
+  related  symmetric
+    The two entities are worth reading together.
+    Store the link on either side.
+
+  supersedes  inverse: superseded_by  acyclic
+    This entity replaces the target.
+    <!-- Use when the old entity is no longer the current answer. -->
+
+    For a partial change, use `amends`.
+```
 
 ### `knott migrate [PATH]`
 
@@ -585,7 +689,36 @@ Prints the installed Knott version.
 
 ### `knott view [PATH] [-o FILE] [--no-open]`
 
-Writes the vault's ontology (types, properties, templates, references, entity counts) as one self-contained static HTML page and opens it in the browser. No server and no network. Each reference is an edge per known target, labelled with its path; it is drawn as required only when every step on its path is required. Targets no concept defines get no edge and are marked `(unknown)` in the type's panel. Schema errors still produce a page, with a note to run `knott validate`; a vault that still has `.knott/schemas/` prints the `schema-legacy-layout` issue to stderr, writes no page and exits `1`; a vault with no types exits with code `2`. See `docs/commands/view.md`.
+Writes the vault's ontology (types, properties, templates, references, entity counts) as one self-contained static HTML page and opens it in the browser. No server and no network. Each reference is an edge per known target, labelled with its path; it is drawn as required only when every step on its path is required. Targets no concept defines get no edge and are marked `(unknown)` in the type's panel. A reference that names a relation is labelled with the relation's name instead of its path; the type's panel shows the path with the relation in parentheses under "References out", and, under "Referenced by", every reference property (any depth, any type, T included) whose known targets include the type, grouped and labelled as in reverse lookup (§10), each row `<source type>.<property path>`. A "Relations (N)" button in the header, hidden without relations, lists every relation with its keys, description and guidance (HTML-escaped). The embedded data has `relations`, a `relation` key on each edge, and `referenced_by`: a list of `{type, groups}`, each group `{label, kind, relation, references: [{type, path, required}]}`. Schema errors still produce a page, with a note to run `knott validate`; a vault that still has `.knott/schemas/` prints the `schema-legacy-layout` issue to stderr, writes no page and exits `1`; a vault with no types exits with code `2`. See `docs/commands/view.md`.
+
+### `knott refs PATH [--format text|json]`
+
+Lists every reference that points at one entity (reverse lookup, §10). `PATH` is an entity file (relative to the current directory) or `kid:<uuid>`. The vault is found from PATH's location, or from the current directory for `kid:`.
+
+```
+$ cd docs && knott refs concepts/kid.md
+concepts/kid.md  concept
+
+discussed_in
+  decisions/0009-kid-identity.md  decision    affects[0]
+  issues/kid-duplicate.md         issue_code  about
+  issues/kid-invalid.md           issue_code  about
+  issues/kid-missing.md           issue_code  about
+
+related
+  concepts/entity.md                concept  related[0]  →
+  concepts/reference-resolution.md  concept  related[1]  →
+  concepts/schema.md                concept  related[2]  →
+
+← spec.concepts[]
+  specs/0004-kid-identity.md  spec  concepts[0]
+```
+
+- The header line is the entity's vault-relative path, two spaces, and its type. Each group is preceded by a blank line, then its label, then one line per reference indented by two spaces: path, type, field, and, in symmetric groups, the direction `←` (in), `→` (out) or `⇄` (both). Within a group, every column but the last is padded to the group's widest value plus two spaces; lines have no trailing spaces.
+- An entity nobody references prints its header line, a blank line and `no references`.
+- `--format json` prints `{"entity": {path, type, kid}, "groups": [{label, kind, relation, references: [{path, type, kid, field, line, direction}]}]}`. `relation` is `null` for `property` groups; `direction` is always `in` outside symmetric groups.
+- `refs` does not validate. Schema issues don't stop it; it works with the concepts and relations that loaded.
+- Exit codes: `0` on success, including no references. `1` when the vault has the legacy layout (`schema-legacy-layout` on stderr). `2` when PATH doesn't exist, isn't inside the vault, isn't an entity (a file under `.knott/` or another hidden folder, a folder, a note without `type`, a file whose frontmatter can't be read), or a `kid:` is malformed or matches no entity or several.
 
 ---
 
@@ -610,6 +743,7 @@ Ship an agent instruction document in the repo at `src/knott/_skills/knott/SKILL
 - how to discover types (`knott types`)
 - how to create an entity and write references (relative paths, Markdown-link form, quoted; strict cardinality; nested references)
 - that `knott validate <file>` must be run after every change
+- relation files: how to read their guidance, never to write an inverse, `knott refs` before renaming or deleting, and `relation-cycle`
 
 Typical agent workflow:
 
@@ -628,6 +762,8 @@ The skill describes usage. The CLI provides deterministic behavior.
 
 Out of scope for v0. No SQLite, FTS, vector DBs, embeddings, graph DBs, RDF stores, persistent or background indexes.
 
+The reference index behind cycles and reverse lookup (§9, §10) lives in memory for one run and is never written.
+
 Any future index must be derived, disposable, and fully rebuildable from the files:
 
 ```
@@ -638,7 +774,7 @@ Markdown files → rebuildable derived index → search / traversal / retrieval
 
 ## 18. Semantic model
 
-Knott borrows vocabulary from RDF (entity, attribute, relation/predicate, schema) but does not implement RDF. Not in v0: RDF serialization, RDFS, OWL, SPARQL, reasoning, inference, inverse/symmetric/transitive properties (reserved for relation definitions, §9), cardinality constraints beyond `required` and `reference` vs `list`.
+Knott borrows vocabulary from RDF (entity, attribute, relation/predicate, schema) but does not implement RDF. Relation definitions (§9) name a link's inverse and mark it symmetric or acyclic; inverses are labels for reverse lookup, never stored or inferred. Not in v0: RDF serialization, RDFS, OWL, SPARQL, reasoning, inference, transitive relations (`transitive` is reserved), domain and range on relations, cardinality constraints beyond `required` and `reference` vs `list`.
 
 The model must stay small enough to understand by reading a few concept files.
 
@@ -696,13 +832,14 @@ Success output:
 
 ```
 schema-invalid-yaml        schema-invalid-field       schema-duplicate-type
-schema-unknown-target      schema-legacy-layout
+schema-unknown-target      schema-legacy-layout       schema-duplicate-relation
+relation-unknown           relation-inverse-conflict  relation-symmetric-mismatch
 entity-invalid-frontmatter entity-unknown-type        not-an-entity
 kid-missing                kid-invalid                kid-duplicate
 attribute-missing          attribute-type-mismatch    attribute-unknown-field
 relation-missing           relation-invalid-value     relation-target-outside-vault
 relation-target-not-found  relation-target-not-entity relation-target-type-mismatch
-relation-target-ambiguous
+relation-target-ambiguous  relation-cycle
 ```
 
 ### Exit codes
@@ -729,10 +866,15 @@ result.issues                      # list[Issue], sorted
 result.stats                       # schemas / entities / relations counts
 vault.validate(fix=True)           # add missing kids first; result.fixed lists them
 types = vault.types()              # list[str], sorted
-ontology = vault.ontology()        # Ontology: types with properties, templates, counts
+ontology = vault.ontology()        # Ontology: types with properties, templates, counts, relations
 ontology.types[0].references()     # [("speakers[].person", OntologyAttribute), …]
+ontology.relations                 # [RelationDefinition(name, description, inverse, symmetric,
+                                   #   acyclic, guidance, path), …], sorted by name
+refs = vault.refs("concepts/kid.md")   # or "kid:<uuid>"; Refs(entity, groups), see §10
 vault.migrate()                    # MigrateResult(written, removed, list_fields); see §14
 ```
+
+`OntologyAttribute.relation` is the relation a reference names (`None` when none, or one no relation file defines). `Refs` has `entity: EntityRef(path, type, kid)` and `groups: list[RefGroup(label, kind, relation, references: list[Ref(path, type, kid, field, line, direction)])]`; `type` is the frontmatter `type` as written. A relative path passed to `refs()` is resolved against the vault root, as in `validate()`.
 
 `validate()` returns validation problems as data and never raises for them. It raises only for `2`-class conditions (`KnottError` subclasses in `errors.py`).
 
@@ -760,7 +902,10 @@ tests/fixtures/
 ├── reference-cardinality/          # reference vs list of reference
 ├── legacy-layout/                  # .knott/schemas/ for knott migrate
 ├── duplicate-schema-type/
-└── schema-unknown-key/
+├── schema-unknown-key/
+├── relation-definitions/           # .knott/relations/ and relation: on references
+├── relation-cycles/                # acyclic relations: self-loop, pairs, chains, kid edges
+└── relation-refs/                  # knott refs: every group kind and direction
 ```
 
 At minimum, test: schema discovery and parsing, entity detection, attribute typing, relation parsing and resolution, target type checks, duplicate schema handling, the CLI output format, and exit codes.

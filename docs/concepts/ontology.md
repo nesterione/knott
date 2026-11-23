@@ -8,7 +8,7 @@ related:
 ---
 # Ontology
 
-Knott borrows vocabulary from RDF (entity, attribute, relation/predicate, schema) but does not implement RDF. A vault's ontology is simply its concept files in `.knott/concepts/`: small enough to understand by reading a few of them.
+Knott borrows vocabulary from RDF (entity, attribute, relation/predicate, schema) but does not implement RDF. A vault's ontology is simply its concept files in `.knott/concepts/`, plus the [relation definitions](relation.md#relation-definitions) in `.knott/relations/` that say what its links mean: small enough to understand by reading a few of them.
 
 ## This docs folder is an example
 
@@ -40,7 +40,18 @@ spec ── supersedes, amends ──▶ spec
 | `spec`       | the exact behaviour of one change, frozen once implemented | `realizes → intent`, `decisions → decision`, `concepts → concept`, `supersedes`/`amends → spec` |
 | `intent`     | wanted but not yet specified         | `concepts → concept`                                    |
 
-Every type also has a body template, so a new page starts with the sections its siblings use. Run `knott types --verbose` inside `docs/` to see them, and `knott validate` to check the whole folder.
+Four relation files give those links a meaning:
+
+| Relation     | Keys                                  | Named by                                 |
+| ------------ | ------------------------------------- | ---------------------------------------- |
+| `about`      | `inverse: discussed_in`               | `decision.affects`, `issue_code.about`   |
+| `related`    | `symmetric`                           | `concept.related`                        |
+| `supersedes` | `inverse: superseded_by`, `acyclic`   | `decision.supersedes`, `spec.supersedes` |
+| `amends`     | `inverse: amended_by`, `acyclic`      | `decision.amends`, `spec.amends`         |
+
+`knott refs specs/0005-concept-files.md` lists `specs/0006-relation-definitions.md` under `amended_by`, although 0005 is never edited.
+
+Every type also has a body template, so a new page starts with the sections its siblings use. Run `knott types --verbose` inside `docs/` to see them and the relations, and `knott validate` to check the whole folder.
 
 Run `knott view` inside `docs/` to explore it interactively.
 
@@ -48,6 +59,7 @@ Run `knott view` inside `docs/` to explore it interactively.
 
 - Start with 2–4 types. Add one when you find yourself writing the same frontmatter keys repeatedly.
 - Point relations from the thing that *knows* about the other: a transcript knows its script, not the reverse.
+- When several properties mean the same link, or the link needs a name from the target side, add a relation file and name it with `relation:`.
 - Use `required: true` sparingly. It's for things that make the entity meaningless when missing.
 - Write a `description` on every type and property. Agents read them.
 - Give a type a body template once its entities share sections. Agents copy it.

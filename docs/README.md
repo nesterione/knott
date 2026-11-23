@@ -4,7 +4,7 @@ This folder is itself a **Knott vault**: the documentation is written as typed M
 
 ```sh
 cd docs
-knott types --verbose   # the five documentation types, with their body templates
+knott types --verbose   # the documentation types, with their body templates and relations
 knott validate          # every page and link is checked
 ```
 
@@ -29,17 +29,17 @@ This README has no frontmatter, so Knott treats it as an ordinary note.
 
 ## Commands
 
-[init](commands/init.md) · [validate](commands/validate.md) · [types](commands/types.md) · [migrate](commands/migrate.md) · [version](commands/version.md) · [skill](commands/skill.md) · [view](commands/view.md)
+[init](commands/init.md) · [validate](commands/validate.md) · [types](commands/types.md) · [migrate](commands/migrate.md) · [version](commands/version.md) · [skill](commands/skill.md) · [view](commands/view.md) · [refs](commands/refs.md)
 
 ## Issue codes
 
 | Stage | Codes |
 |---|---|
-| schema | [schema-invalid-yaml](issues/schema-invalid-yaml.md) · [schema-invalid-field](issues/schema-invalid-field.md) · [schema-duplicate-type](issues/schema-duplicate-type.md) · [schema-unknown-target](issues/schema-unknown-target.md) · [schema-legacy-layout](issues/schema-legacy-layout.md) |
+| schema | [schema-invalid-yaml](issues/schema-invalid-yaml.md) · [schema-invalid-field](issues/schema-invalid-field.md) · [schema-duplicate-type](issues/schema-duplicate-type.md) · [schema-unknown-target](issues/schema-unknown-target.md) · [schema-legacy-layout](issues/schema-legacy-layout.md) · [schema-duplicate-relation](issues/schema-duplicate-relation.md) · [relation-unknown](issues/relation-unknown.md) · [relation-inverse-conflict](issues/relation-inverse-conflict.md) · [relation-symmetric-mismatch](issues/relation-symmetric-mismatch.md) |
 | entity | [entity-invalid-frontmatter](issues/entity-invalid-frontmatter.md) · [entity-unknown-type](issues/entity-unknown-type.md) · [not-an-entity](issues/not-an-entity.md) |
 | kid | [kid-missing](issues/kid-missing.md) · [kid-invalid](issues/kid-invalid.md) · [kid-duplicate](issues/kid-duplicate.md) |
 | attribute | [attribute-missing](issues/attribute-missing.md) · [attribute-type-mismatch](issues/attribute-type-mismatch.md) · [attribute-unknown-field](issues/attribute-unknown-field.md) |
-| relation | [relation-missing](issues/relation-missing.md) · [relation-invalid-value](issues/relation-invalid-value.md) · [relation-target-outside-vault](issues/relation-target-outside-vault.md) · [relation-target-not-found](issues/relation-target-not-found.md) · [relation-target-not-entity](issues/relation-target-not-entity.md) · [relation-target-type-mismatch](issues/relation-target-type-mismatch.md) · [relation-target-ambiguous](issues/relation-target-ambiguous.md) |
+| relation | [relation-missing](issues/relation-missing.md) · [relation-invalid-value](issues/relation-invalid-value.md) · [relation-target-outside-vault](issues/relation-target-outside-vault.md) · [relation-target-not-found](issues/relation-target-not-found.md) · [relation-target-not-entity](issues/relation-target-not-entity.md) · [relation-target-type-mismatch](issues/relation-target-type-mismatch.md) · [relation-target-ambiguous](issues/relation-target-ambiguous.md) · [relation-cycle](issues/relation-cycle.md) |
 
 ## Design decisions
 

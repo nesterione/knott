@@ -51,6 +51,7 @@ Concept files use `name:`, not `type:`. Entities keep `type: transcript`, so a c
 | property | `description` | no | string |
 | property | `items` / `fields` / `values` | with `list` / `object` / `map` | see [Attribute](attribute.md) |
 | property | `target` | with `reference` | a type name, or a list of type names: `target: [episode, meeting]` |
+| property | `relation` | no, `reference` only | a relation defined in `.knott/relations/`, see [relation definitions](relation.md#relation-definitions) |
 
 Unknown keys are **errors** in concept files (Knott owns these files, so `propertes:` must not pass silently), unlike in entities. A top-level property can't be named `type` or `kid`; both belong to knott.
 

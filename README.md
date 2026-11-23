@@ -76,7 +76,8 @@ $ knott validate
 |---|---|
 | `knott init [PATH]` | Create `.knott/concepts/` and `.knott/config.yaml` |
 | `knott validate [PATH...]` | Check all schemas, plus all entities or those under `PATH` (`--format json` for agents, `--fix` to add missing `kid`s) |
-| `knott types [--verbose]` | List discovered types (`--verbose`: properties, nested shapes, references and whether a template exists) |
+| `knott types [--verbose]` | List discovered types (`--verbose`: properties, nested shapes, references, whether a template exists, and the relations) |
+| `knott refs PATH` | List who references an entity, grouped by relation (`PATH` or `kid:<uuid>`; `--format json`) |
 | `knott migrate [PATH]` | Convert a pre-0.5 `.knott/schemas/` folder into concept files, then validate |
 | `knott view [PATH]` | Draw the ontology as an HTML page and open it (`-o FILE`, `--no-open`) |
 | `knott version` | Print the installed version |
@@ -116,6 +117,39 @@ sources:
 ```
 
 Wikilinks, URLs, `#fragments`, and absolute paths are rejected. Matching is case-sensitive on every OS.
+
+### Relations
+
+A relation file in `.knott/relations/` says what a link means: its name read from the target side (`inverse`), whether it goes both ways (`symmetric`), and whether it may loop (`acyclic`). Its body is usage guidance for agents. `.knott/relations/supersedes.md`:
+
+```markdown
+---
+name: supersedes
+inverse: superseded_by
+acyclic: true
+description: This entity replaces the target entirely. The target is kept unchanged as history.
+---
+Use `supersedes` when the old record is no longer the current answer. When only part of it changes, use `amends`.
+```
+
+A reference property names it with `relation:`. The property keeps its own `target`, and many properties may share one relation:
+
+```yaml
+properties:
+  supersedes: { type: reference, target: decision, relation: supersedes }
+```
+
+Nothing is stored on the target. `knott refs` reads links from the target side, grouped by inverse:
+
+```sh
+$ knott refs specs/0005-concept-files.md
+specs/0005-concept-files.md  spec
+
+amended_by
+  specs/0006-relation-definitions.md  spec  amends[0]
+```
+
+A loop of an `acyclic` relation is reported as `relation-cycle`.
 
 ### Stable identity
 
@@ -168,7 +202,8 @@ vault = Knott.open(".")              # walks up to the vault root
 result = vault.validate()            # or vault.validate(["transcripts/foo.md"])
 result.ok, result.issues, result.stats
 vault.types()                        # ["script", "transcript"]
-vault.ontology()                     # Ontology(vault, types, schema_issues)
+vault.ontology()                     # Ontology(vault, types, schema_issues, relations)
+vault.refs("concepts/kid.md")        # Refs(entity, groups): who references it, grouped by relation
 for t in vault.ontology().types:
     t.properties, t.template, t.references()   # references(): [("speakers[].person", …), …]
 ```
