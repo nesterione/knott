@@ -5,7 +5,8 @@ audience: human
 concepts:
   - "[Relation](../concepts/relation.md)"
   - "[Reference resolution](../concepts/reference-resolution.md)"
-commands: "[knott validate](../commands/validate.md)"
+commands:
+  - "[knott validate](../commands/validate.md)"
 ---
 # Using a vault in Obsidian
 

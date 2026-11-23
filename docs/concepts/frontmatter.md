@@ -3,7 +3,8 @@ type: concept
 title: Frontmatter
 summary: The YAML block between `---` lines at the top of a Markdown file.
 spec_section: "§5"
-related: "[Entity](entity.md)"
+related:
+  - "[Entity](entity.md)"
 ---
 # Frontmatter
 

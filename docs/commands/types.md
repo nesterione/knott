@@ -3,7 +3,8 @@ type: command
 title: knott types
 synopsis: knott types [--verbose]
 writes_files: false
-concepts: "[Schema](../concepts/schema.md)"
+concepts:
+  - "[Schema](../concepts/schema.md)"
 ---
 # knott types
 

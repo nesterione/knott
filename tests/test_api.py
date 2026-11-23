@@ -53,8 +53,6 @@ def test_results_are_plain_frozen_data() -> None:
         issue.code = "x"
 
 
-# TODO(Task 8): docs/ still has `.knott/schemas/` until `knott migrate docs` converts it.
-@pytest.mark.xfail(reason="docs/ uses the legacy schema layout until Task 8", strict=True)
 def test_docs_folder_is_a_valid_vault() -> None:
     """docs/ is written as a Knott vault; keep it valid."""
     docs = Path(__file__).parent.parent / "docs"

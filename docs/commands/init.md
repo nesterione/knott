@@ -3,7 +3,8 @@ type: command
 title: knott init
 synopsis: knott init [PATH]
 writes_files: true
-concepts: "[Vault](../concepts/vault.md)"
+concepts:
+  - "[Vault](../concepts/vault.md)"
 ---
 # knott init
 

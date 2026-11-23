@@ -3,7 +3,8 @@ type: decision
 title: Relations are stored only on the source side
 status: accepted
 decided_on: 2026-10-06
-affects: "[Relation](../concepts/relation.md)"
+affects:
+  - "[Relation](../concepts/relation.md)"
 ---
 # 0003: Relations are stored only on the source side
 

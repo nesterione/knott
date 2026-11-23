@@ -232,10 +232,10 @@ properties:                     # optional map: name → definition
 - Delete: `docs/.knott/schemas/*.yaml`
 - Create: `docs/.knott/concepts/{concept,command,decision,guide,issue_code}.md`
 
-- [ ] run `uv run knott migrate docs`, then check the diff
-- [ ] write body templates from the existing documents' structure: `concept` (definition, example, rules), `decision` (Context / Decision / Not included / Why / Consequences), `issue_code` (cause, example, fix), `command`, `guide`
-- [ ] `uv run knott validate docs` passes; `uv run knott types --verbose` inside `docs/` shows the templates
-- [ ] run full tests - must pass before next task
+- [x] run `uv run knott migrate docs`, then check the diff (➕ 5 entities held a single reference in a field migrate made a list; rewrote them as one-item lists)
+- [x] write body templates from the existing documents' structure: `concept` (definition, example, rules), `decision` (Context / Decision / Not included / Why / Consequences), `issue_code` (cause, example, fix), `command`, `guide`
+- [x] `uv run knott validate docs` passes; `uv run knott types --verbose` inside `docs/` shows the templates
+- [x] run full tests - must pass before next task
 
 ### Task 9: SPEC, concept docs, issue docs, README
 
