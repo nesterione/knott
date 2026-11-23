@@ -92,6 +92,8 @@ class OntologyAttribute(_Frozen):
     """For a `reference`: target types that some concept defines, in schema order."""
     unknown_targets: list[str] = []
     """For a `reference`: target types no concept defines (shown, never enforced)."""
+    relation: str | None = None
+    """For a `reference`: the relation it names, when a relation file defines it."""
 
     @property
     def notation(self) -> str:
@@ -154,13 +156,30 @@ def _walk_references(
         yield from _walk_references(field, f"{path}.{field.name}", required and field.required)
 
 
+class RelationDefinition(_Frozen):
+    """A relation file in ``.knott/relations/`` (spec 0006)."""
+
+    name: str
+    description: str | None
+    inverse: str | None
+    """The relation's name read from the target side."""
+    symmetric: bool
+    acyclic: bool
+    guidance: str | None
+    """The relation file's body, verbatim; None when blank."""
+    path: str
+    """Vault-relative path of the relation file."""
+
+
 class Ontology(_Frozen):
-    """The vault's types and the references between them."""
+    """The vault's types, relations and the references between them."""
 
     vault: str
     """Directory name of the vault root."""
     types: list[OntologyType]
     schema_issues: int
+    relations: list[RelationDefinition] = []
+    """Every relation that loaded, sorted by name."""
 
 
 RefKind = Literal["inverse", "symmetric", "relation", "property"]

@@ -20,6 +20,7 @@ from knott.models import (
     OntologyAttribute,
     OntologyType,
     Refs,
+    RelationDefinition,
     SchemaInfo,
     Stats,
     ValidationResult,
@@ -129,14 +130,14 @@ class Knott:
         return _sorted(issues)
 
     def ontology(self) -> Ontology:
-        """The vault's types, their properties and templates, and entity counts.
+        """The vault's types, their properties and templates, entity counts, and relations.
 
         Types are sorted by name; properties keep their schema order, references
         included (``type == "reference"``, at any depth). Target types no concept
         defines are listed in ``unknown_targets``. Files with invalid frontmatter
-        are not counted.
+        are not counted. Relations are sorted by name.
         """
-        schemas, issues = load_schemas(self.root)
+        schemas, relation_defs, issues = load_ontology(self.root)
         counts: dict[str, int] = {}
         for rel_path in iter_markdown(self.root):
             parsed = read_markdown(self.root / rel_path, rel_path)
@@ -155,7 +156,21 @@ class Knott:
             )
             for _, s in sorted(schemas.items())
         ]
-        return Ontology(vault=self.root.name, types=types, schema_issues=len(issues))
+        relations = [
+            RelationDefinition(
+                name=r.name,
+                description=r.description,
+                inverse=r.inverse,
+                symmetric=r.symmetric,
+                acyclic=r.acyclic,
+                guidance=r.guidance,
+                path=r.path,
+            )
+            for _, r in sorted(relation_defs.items())
+        ]
+        return Ontology(
+            vault=self.root.name, types=types, schema_issues=len(issues), relations=relations
+        )
 
     def validate(
         self, paths: Sequence[str | Path] | None = None, *, fix: bool = False
@@ -358,6 +373,7 @@ def _ontology_attribute(a: AttributeDef) -> OntologyAttribute:
         ),
         targets=list(shape.targets) if isinstance(shape, ReferenceShape) else [],
         unknown_targets=list(shape.unknown) if isinstance(shape, ReferenceShape) else [],
+        relation=shape.relation if isinstance(shape, ReferenceShape) else None,
     )
 
 

@@ -175,20 +175,35 @@ related
 
 ### `knott types --verbose`
 
-- A property that names a relation shows it after the type: `affects  list of reference → concept  (about)`.
-- A `relations:` section after the types lists every relation: name, then `inverse: <x>`, `symmetric`, `acyclic` as they apply, then the description and the guidance.
+- A property that names a relation shows it after the type: `affects  list of reference → concept  (about)`. The relation is part of the type column, so descriptions stay aligned. A name no relation file defines is not shown (the reference is plain, as in `refs`).
+- A `relations:` section after the types lists every relation, sorted by name: on one line, indented by two spaces, the name, then `inverse: <x>`, `symmetric`, `acyclic` as they apply, separated by two spaces; then the description and the guidance, each line indented by four spaces (blank lines kept empty). Relations are separated by a blank line. A vault without relations has no `relations:` section, so its output is unchanged.
+
+  ```
+  relations:
+    about  inverse: discussed_in
+      The source discusses the target.
+
+    related  symmetric
+
+    supersedes  inverse: superseded_by  acyclic
+      This entity replaces the target.
+      <!-- Use when the old entity is no longer the current answer. -->
+  ```
 
 ### `knott view`
 
-- An edge whose property names a relation is labelled with the relation's name instead of the property path.
-- The side panel's "Referenced by" list uses the reverse-lookup groups and labels.
-- A "Relations" section lists every relation with its keys, description and guidance.
+The view shows types, not entities, so its lists are about what *can* point at a type.
+
+- An edge whose property names a relation is labelled with the relation's name instead of the property path. The side panel's "References out" list shows the property path, followed by the relation in parentheses, and the property table shows it after the type, as `types --verbose` does.
+- The side panel's "Referenced by" list for a type T holds every reference property, at any depth and of any type (T included), whose known targets include T. Properties are grouped and labelled with the reverse-lookup rules above, exactly as `refs` labels them: `discussed_in`, `related`, `← cites`, `← guide.concepts[]`, ordered as `refs` orders groups. Each row is `<source type>.<property path>`, ordered by source type, then schema order, with the required mark. A wrong-type reference can appear in `refs` for an entity but never here, since no property can target T.
+- A "Relations (N)" button in the header opens a panel that lists every relation, sorted by name, with its keys (`inverse: <x>`, `symmetric`, `acyclic`), description and guidance (verbatim, HTML-escaped). The button is hidden when the vault has no relations.
+- The embedded data gains `relations` (the `Ontology.relations` list), a `relation` key on each edge, and `referenced_by`: a list of `{type, groups}` with each group `{label, kind, relation, references: [{type, path, required}]}`.
 
 ### Python API
 
 - `Knott.refs(path_or_kid: str | Path) -> Refs`. A relative path is resolved against the vault root, as in `validate`; the CLI passes an absolute path. `Refs` has `entity: EntityRef(path, type, kid)` and `groups: list[RefGroup(label, kind, relation, references: list[Ref(path, type, kid, field, line, direction)])]`. Raises `PathNotFoundError`, `PathOutsideVaultError` or `KnottError` for the exit-2 cases. `type` is the frontmatter `type` as written (a non-string in YAML form).
-- `Ontology.relations: list[RelationDefinition(name, description, inverse, symmetric, acyclic, guidance, path)]`.
-- `OntologyAttribute.relation: str | None` on reference nodes.
+- `Ontology.relations: list[RelationDefinition(name, description, inverse, symmetric, acyclic, guidance, path)]`, sorted by name; `[]` for a vault without relations. `RelationDefinition` is exported from `knott`.
+- `OntologyAttribute.relation: str | None` on reference nodes: the relation the reference names, `None` when it names none or a name no relation file defines.
 
 ## Edge cases
 

@@ -8,15 +8,52 @@ outgoing references, merged with the incoming ones per linked entity.
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, Protocol
 
 from knott._values import show
 from knott.models import Ref, RefDirection, RefGroup, RefKind
-from knott.schema.models import RelationDef
 from knott.vault.index import IndexedReference, VaultSession
 from knott.vault.kid import KID_KEY, is_canonical
 
 _KIND_ORDER: dict[RefKind, int] = {"inverse": 0, "symmetric": 0, "relation": 0, "property": 1}
+
+GroupKey = tuple[RefKind, str, str | None]
+"""A reverse-lookup group: its kind, label and relation name."""
+
+
+class RelationLike(Protocol):
+    """What grouping needs from a relation: `RelationDef` or `RelationDefinition`."""
+
+    @property
+    def name(self) -> str: ...
+    @property
+    def inverse(self) -> str | None: ...
+    @property
+    def symmetric(self) -> bool: ...
+
+
+def group_key(
+    relations: Mapping[str, RelationLike],
+    relation: str | None,
+    source_type: Any,
+    property_path: str,
+) -> GroupKey:
+    """The group of a reference at ``source_type``'s property ``property_path`` (in
+    `references()` notation) that names ``relation`` (spec 0006 labels)."""
+    definition = relations.get(relation) if relation is not None else None
+    if definition is None:
+        return "property", f"← {type_name(source_type)}.{property_path}", None
+    if definition.inverse is not None:
+        return "inverse", definition.inverse, definition.name
+    if definition.symmetric:
+        return "symmetric", definition.name, definition.name
+    return "relation", f"← {definition.name}", definition.name
+
+
+def group_order(key: GroupKey) -> tuple[int, str, str]:
+    """Sort key for groups: relation groups by label (then relation), then property groups."""
+    return _KIND_ORDER[key[0]], key[1], key[2] or ""
 
 
 def type_name(value: Any) -> str:
@@ -31,23 +68,21 @@ def entity_kid(session: VaultSession, path: str) -> str | None:
 
 
 def reverse_lookup(
-    session: VaultSession, relations: dict[str, RelationDef], entity: str
+    session: VaultSession, relations: Mapping[str, RelationLike], entity: str
 ) -> list[RefGroup]:
     """The reverse-lookup groups of ``entity`` (a vault-relative path), in spec order."""
     index = session.references()
-    incoming: dict[tuple[RefKind, str, str | None], list[IndexedReference]] = {}
+    incoming: dict[GroupKey, list[IndexedReference]] = {}
     for ref in index.to(entity):
-        incoming.setdefault(_group_key(ref, relations), []).append(ref)
-    outgoing: dict[tuple[RefKind, str, str | None], list[IndexedReference]] = {}
+        incoming.setdefault(_key(ref, relations), []).append(ref)
+    outgoing: dict[GroupKey, list[IndexedReference]] = {}
     for ref in index.from_(entity):
-        key = _group_key(ref, relations)
+        key = _key(ref, relations)
         if key[0] == "symmetric":
             outgoing.setdefault(key, []).append(ref)
 
     groups: list[RefGroup] = []
-    for key in sorted(
-        incoming.keys() | outgoing.keys(), key=lambda k: (_KIND_ORDER[k[0]], k[1], k[2] or "")
-    ):
+    for key in sorted(incoming.keys() | outgoing.keys(), key=group_order):
         kind, label, relation = key
         if kind == "symmetric":
             references = _symmetric(session, incoming.get(key, []), outgoing.get(key, []))
@@ -59,17 +94,8 @@ def reverse_lookup(
     return groups
 
 
-def _group_key(
-    ref: IndexedReference, relations: dict[str, RelationDef]
-) -> tuple[RefKind, str, str | None]:
-    relation = relations.get(ref.relation) if ref.relation is not None else None
-    if relation is None:
-        return "property", f"← {ref.source_type}.{ref.property_path}", None
-    if relation.inverse is not None:
-        return "inverse", relation.inverse, relation.name
-    if relation.symmetric:
-        return "symmetric", relation.name, relation.name
-    return "relation", f"← {relation.name}", relation.name
+def _key(ref: IndexedReference, relations: Mapping[str, RelationLike]) -> GroupKey:
+    return group_key(relations, ref.relation, ref.source_type, ref.property_path)
 
 
 def _symmetric(

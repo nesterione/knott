@@ -68,6 +68,7 @@ def _payload(html: str) -> dict[str, Any]:
 def _embedded(html: str) -> Ontology:
     data = _payload(html)
     data.pop("edges")
+    data.pop("referenced_by")
     return Ontology.model_validate(data)
 
 
@@ -122,7 +123,7 @@ def test_template_reads_model_fields() -> None:
     """Every model field the page relies on is read in the template, so renames break here."""
     template = view._template()
     reads: dict[type[BaseModel], list[str]] = {
-        Ontology: ["vault", "types", "schema_issues"],
+        Ontology: ["vault", "types", "schema_issues", "relations"],
         OntologyType: ["type", "description", "count", "kid_required", "properties", "template"],
         OntologyAttribute: [
             "name",
@@ -134,6 +135,7 @@ def test_template_reads_model_fields() -> None:
             "fields",
             "targets",
             "unknown_targets",
+            "relation",
         ],
     }
     for model, names in reads.items():
@@ -189,7 +191,13 @@ def test_view_edges_for_union_targets_skip_unknown_targets() -> None:
 def test_view_edge_required_follows_the_path() -> None:
     ontology = _ontology()
     assert view.ontology_edges(ontology) == [
-        {"source": "task", "target": "task", "path": "blocked_by[]", "required": False}
+        {
+            "source": "task",
+            "target": "task",
+            "path": "blocked_by[]",
+            "relation": None,
+            "required": False,
+        }
     ]
     owner = ontology.types[0].properties[2]
     required = ontology.model_copy(
@@ -202,7 +210,7 @@ def test_view_edge_required_follows_the_path() -> None:
         }
     )
     assert view.ontology_edges(required) == [
-        {"source": "task", "target": "task", "path": "owner", "required": True}
+        {"source": "task", "target": "task", "path": "owner", "relation": None, "required": True}
     ]
 
 

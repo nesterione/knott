@@ -24,6 +24,7 @@ from knott.models import (
     OntologyAttribute,
     OntologyType,
     Refs,
+    RelationDefinition,
     ValidationResult,
 )
 from knott.skills import InstallResult, InstallStatus, SkillTarget, install_skill
@@ -101,12 +102,22 @@ def _notation(a: OntologyAttribute) -> str:
     return f"{a.type} → {' | '.join(targets)}" if targets else a.type
 
 
+def _type_column(a: OntologyAttribute) -> str:
+    """The notation, then the relation the innermost reference names: ``(about)``."""
+    node = a
+    while (inner := node.items or node.values) is not None:
+        node = inner
+    return _notation(a) + (f"  ({node.relation})" if node.relation else "")
+
+
 def _attribute_lines(attributes: list[OntologyAttribute], indent: str) -> list[str]:
     width = max(len(_label(a.name or "", a.required)) for a in attributes)
-    type_width = max(len(_notation(a)) for a in attributes)
+    type_width = max(len(_type_column(a)) for a in attributes)
     lines: list[str] = []
     for a in attributes:
-        line = f"{indent}{_label(a.name or '', a.required):<{width}}  {_notation(a):<{type_width}}"
+        line = (
+            f"{indent}{_label(a.name or '', a.required):<{width}}  {_type_column(a):<{type_width}}"
+        )
         if a.description:
             line += f"  {_one_line(a.description)}"
         lines.append(line.rstrip())
@@ -119,6 +130,24 @@ def _attribute_lines(attributes: list[OntologyAttribute], indent: str) -> list[s
         if node.fields:
             lines += _attribute_lines(node.fields, indent + "  ")
     return lines
+
+
+def format_relations(relations: list[RelationDefinition]) -> str:
+    """The ``relations:`` section: per relation its name and keys on one line, then
+    its description and guidance indented; relations separated by blank lines."""
+    blocks: list[str] = []
+    for r in relations:
+        keys = [
+            *([f"inverse: {r.inverse}"] if r.inverse is not None else []),
+            *(["symmetric"] if r.symmetric else []),
+            *(["acyclic"] if r.acyclic else []),
+        ]
+        lines = ["  ".join([f"  {r.name}", *keys])]
+        for text in (r.description, r.guidance):
+            if text and text.strip():
+                lines += [f"    {line}".rstrip() for line in text.strip().splitlines()]
+        blocks.append("\n".join(lines))
+    return "relations:\n" + "\n\n".join(blocks)
 
 
 def _label(name: str, required: bool) -> str:
@@ -236,7 +265,10 @@ def types(
         typer.Option(
             "--verbose",
             "-v",
-            help="Show each type's concept file, description, template, references and properties.",
+            help=(
+                "Show each type's concept file, description, template, references and "
+                "properties, then the relations."
+            ),
         ),
     ] = False,
 ) -> None:
@@ -246,9 +278,12 @@ def types(
     except KnottError as error:
         raise _fail(error) from None
     if verbose:
-        found = vault.ontology().types
-        if found:
-            typer.echo("\n\n".join(format_type(t) for t in found))
+        ontology = vault.ontology()
+        sections = [format_type(t) for t in ontology.types]
+        if ontology.relations:
+            sections.append(format_relations(ontology.relations))
+        if sections:
+            typer.echo("\n\n".join(sections))
     else:
         for info in vault.schemas():
             typer.echo(info.type)

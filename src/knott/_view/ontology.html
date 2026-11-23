@@ -88,6 +88,14 @@
     margin: 8px 0 0; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
     font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere;
   }
+  aside .rel { color: var(--muted); }
+  aside .group td { color: var(--muted); font-size: 12px; padding-top: 10px; }
+  aside .relation { border-top: 1px solid var(--border); padding: 12px 0 4px; }
+  aside .relation .name { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-weight: 600; }
+  aside .relation .keys { color: var(--muted); font-size: 12.5px; margin-left: 8px; }
+  aside .relation p { margin: 6px 0 0; }
+  #relations { border: 1px solid var(--border); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 8px; cursor: pointer; }
+  #relations[hidden] { display: none; }
   aside .close { position: absolute; top: 14px; right: 16px; border: 0; background: none; color: var(--muted); font-size: 18px; cursor: pointer; }
   .empty { color: var(--muted); font-size: 13px; }
   @media (max-width: 640px) {
@@ -100,6 +108,7 @@
 <body>
 <header>
   <h1>Ontology <span id="meta"></span></h1>
+  <button id="relations" hidden>Relations</button>
   <nav id="tabs">
     <button data-l="layered" class="on">Layered</button>
     <button data-l="force">Force</button>
@@ -132,15 +141,18 @@ const dict = () => Object.create(null);
 const nodes = DATA.types.map(t => ({ id: t.type, count: t.count, kidRequired: t.kid_required, description: t.description, properties: t.properties, template: t.template, x: 0, y: 0, w: 0, h: 34 }));
 const byId = dict();
 for (const n of nodes) byId[n.id] = n;
-// DATA.edges: one per known target of each reference property, labelled with its path
-// (OntologyType.references(): "[]" for list items, ".*" for map values, ".field" for object fields).
+// DATA.edges: one per known target of each reference property, with its path
+// (OntologyType.references(): "[]" for list items, ".*" for map values, ".field" for object fields)
+// and the relation it names; an edge is labelled with the relation, else with the path.
 const edges = [], pairs = dict();
 for (const d of DATA.edges) {
   if (!byId[d.source] || !byId[d.target]) continue;
-  const e = { s: d.source, t: d.target, name: d.path, req: d.required };
+  const e = { s: d.source, t: d.target, path: d.path, relation: d.relation, name: d.relation || d.path, req: d.required };
   (pairs[JSON.stringify([e.s, e.t].sort())] ||= []).push(e);
   edges.push(e);
 }
+const referencedBy = dict();
+for (const r of DATA.referenced_by) referencedBy[r.type] = r.groups;
 // e.k: index among the edges joining the same two types (either direction); e.n: how many there are
 for (const key in pairs) pairs[key].forEach((e, i, all) => { e.k = i; e.n = all.length; });
 
@@ -452,20 +464,49 @@ const notation = a => {
   const inner = a.items || a.values;
   if (inner) return `${esc(a.type)} of ${notation(inner)}`;
   const targets = [...a.targets.map(link), ...a.unknown_targets.map(x => `<span class="unknown" title="no concept defines this type">${esc(x)} (unknown)</span>`)];
-  return targets.length ? `${esc(a.type)} → ${targets.join(" | ")}` : esc(a.type);
+  const rel = a.relation ? ` <span class="rel" title="relation">(${esc(a.relation)})</span>` : "";
+  return (targets.length ? `${esc(a.type)} → ${targets.join(" | ")}` : esc(a.type)) + rel;
 };
 const link = id => `<a data-go="${esc(id)}">${esc(id)}</a>`;
+let relationsOpen = false;
 function select(id) {
   const wasOpen = panel.classList.contains("open");
   selected = id === selected ? null : id;
+  relationsOpen = false;
   focusOn(selected);
   if (selected) showPanel(id); else panel.classList.remove("open");
   // the panel covers the right of the view: refit when it opens or closes
   if (wasOpen !== panel.classList.contains("open")) fit(true);
 }
+// DATA.relations: every relation file, listed with its keys, description and guidance (escaped)
+function showRelations() {
+  const wasOpen = panel.classList.contains("open");
+  if (relationsOpen) { relationsOpen = false; panel.classList.remove("open"); fit(true); return; }
+  selected = null; relationsOpen = true;
+  focusOn(null);
+  const keys = r => [r.inverse !== null ? `inverse: ${esc(r.inverse)}` : "", r.symmetric ? "symmetric" : "", r.acyclic ? "acyclic" : ""].filter(Boolean).join(" · ");
+  panel.innerHTML = `
+    <button class="close" aria-label="Close">×</button>
+    <h2>Relations</h2>
+    <div class="sub">${plural(DATA.relations.length, "relation", "relations")}</div>
+    ${DATA.relations.map(r => `<div class="relation">
+      <span class="name">${esc(r.name)}</span><span class="keys">${keys(r)}</span>
+      ${r.description ? `<p>${esc(r.description)}</p>` : ""}
+      ${r.guidance !== null ? `<pre>${esc(r.guidance)}</pre>` : ""}
+    </div>`).join("")}`;
+  panel.classList.add("open");
+  panel.querySelector(".close").onclick = showRelations;
+  if (!wasOpen) fit(true);
+}
+{
+  const button = document.getElementById("relations");
+  button.textContent = `Relations (${DATA.relations.length})`;
+  button.hidden = !DATA.relations.length;
+  button.onclick = showRelations;
+}
 function showPanel(id) {
   const n = byId[id];
-  const out = edges.filter(e => e.s === id), inc = edges.filter(e => e.t === id && e.s !== id);
+  const out = edges.filter(e => e.s === id);
   const row = (a, b, c, d, depth = 0) => `<tr><td${depth ? ` class="nested" style="padding-left:${depth * 14}px"` : ""}>${a}${d ? `<span class="d">${esc(d)}</span>` : ""}</td><td class="t">${b}${c ? ' <span class="req" title="required">●</span>' : ""}</td></tr>`;
   // Object fields are listed under their attribute, indented; a list's items or map's values
   // are folded into the notation ("list of object") with their description appended.
@@ -479,6 +520,11 @@ function showPanel(id) {
     }
     return row(esc(a.name), notation(a), a.required, notes.join(" · "), depth) + attrRows(node.fields || [], depth + 1);
   }).join("");
+  // DATA.referenced_by: per type, the properties that can point at it, grouped and
+  // labelled like `knott refs` (an inverse, a symmetric relation, "← relation", "← type.path")
+  const groups = referencedBy[id] || [];
+  const incRows = groups.map(g => `<tr class="group"><td colspan="2" title="${esc(g.kind)}">${esc(g.label)}</td></tr>` +
+    g.references.map(r => row(link(r.type) + "." + esc(r.path), "", r.required)).join("")).join("");
   const head = `<div class="sub">${plural(n.count, "entity", "entities")}${n.kidRequired ? " · kid required" : ""}</div>${n.description ? `<p>${esc(n.description)}</p>` : ""}`;
   panel.innerHTML = `
     <button class="close" aria-label="Close">×</button>
@@ -489,14 +535,14 @@ function showPanel(id) {
     <h3>Template</h3>
     ${n.template !== null ? `<details><summary>Entity body template</summary><pre>${esc(n.template)}</pre></details>` : '<div class="empty">None</div>'}
     <h3>References out</h3>
-    ${out.length ? `<table>${out.map(e => row(esc(e.name), "→ " + link(e.t), e.req)).join("")}</table>` : '<div class="empty">None</div>'}
+    ${out.length ? `<table>${out.map(e => row(esc(e.path) + (e.relation ? ` <span class="rel">(${esc(e.relation)})</span>` : ""), "→ " + link(e.t), e.req)).join("")}</table>` : '<div class="empty">None</div>'}
     <h3>Referenced by</h3>
-    ${inc.length ? `<table>${inc.map(e => row(link(e.s) + "." + esc(e.name), "", e.req)).join("")}</table>` : '<div class="empty">None</div>'}`;
+    ${groups.length ? `<table>${incRows}</table>` : '<div class="empty">None</div>'}`;
   panel.classList.add("open");
   panel.querySelector(".close").onclick = () => select(id);
   panel.querySelectorAll("[data-go]").forEach(a => a.onclick = () => { selected = null; select(a.dataset.go); });
 }
-svg.addEventListener("click", () => selected && select(selected));
+svg.addEventListener("click", () => { if (selected) select(selected); else if (relationsOpen) showRelations(); });
 
 // resize: refit force positions as they are; re-run the other layouts for the new size
 let resizeTimer = 0;
