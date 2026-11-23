@@ -1,8 +1,9 @@
 ---
 type: spec
 title: "0006: Relation definitions and reverse lookup"
-status: accepted
+status: implemented
 created_on: 2026-11-23
+released_in: "0.6.0"
 realizes:
   - "[Relation definitions](../intents/relation-definitions.md)"
 decisions:

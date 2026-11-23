@@ -66,7 +66,7 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 3. [Add list, object and map attributes](specs/0003-structured-attributes.md)
 4. [Give entities a knott-managed `kid`](specs/0004-kid-identity.md)
 5. [Define types in concept files, with references as properties](specs/0005-concept-files.md)
-6. [Relation definitions and reverse lookup](specs/0006-relation-definitions.md) (accepted)
+6. [Relation definitions and reverse lookup](specs/0006-relation-definitions.md)
 
 ### Intents
 
