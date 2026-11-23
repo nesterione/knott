@@ -220,11 +220,11 @@ properties:                     # optional map: name → definition
 - Modify: `src/knott/_skills/knott/SKILL.md`
 - Modify: `tests/test_skills.py` (if it asserts content)
 
-- [ ] describe concept files (`.knott/concepts/**/*.md`, `name:`, `properties`, `type: reference`), and tell agents to start new entity bodies from the concept's template, deleting the `<!-- -->` guidance once a section is filled
-- [ ] document cardinality (`reference` vs `list` of `reference`), nested references and union targets in the reference-writing section
-- [ ] add: on `schema-legacy-layout`, run `knott migrate` and review the diff
-- [ ] update skill tests if they check paths or headings
-- [ ] run tests - must pass before next task
+- [x] describe concept files (`.knott/concepts/**/*.md`, `name:`, `properties`, `type: reference`), and tell agents to start new entity bodies from the concept's template, deleting the `<!-- -->` guidance once a section is filled
+- [x] document cardinality (`reference` vs `list` of `reference`), nested references and union targets in the reference-writing section
+- [x] add: on `schema-legacy-layout`, run `knott migrate` and review the diff
+- [x] update skill tests if they check paths or headings (they check only the bundle, frontmatter start and install; no change needed)
+- [x] run tests - must pass before next task
 
 ### Task 8: Convert the docs vault and write templates
 
