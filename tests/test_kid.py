@@ -132,7 +132,7 @@ def test_index_is_built_only_when_needed(tmp_path: Path, monkeypatch: pytest.Mon
         calls.append(1)
         return real(*args, **kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr("knott.api.build_index", counting)
+    monkeypatch.setattr("knott.vault.index.build_index", counting)
     vault = _vault(tmp_path, {"a.md": "---\ntype: note\n---\n"})
     Knott.open(vault).validate()
     assert calls == []

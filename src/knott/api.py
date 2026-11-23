@@ -34,18 +34,16 @@ from knott.schema.models import (
 )
 from knott.schema.validator import validate_entity
 from knott.vault.discovery import CONCEPTS_DIR, KNOTT_DIR, find_vault_root, iter_markdown
-from knott.vault.entity import MarkdownFile, read_markdown
+from knott.vault.entity import read_markdown
 from knott.vault.fix import insert_kid
+from knott.vault.index import VaultSession
 from knott.vault.kid import (
     KID_KEY,
     Claim,
-    KidIndex,
-    build_index,
     format_claims,
     is_canonical,
     new_kid,
 )
-from knott.vault.links import ResolvedReference, resolve_reference
 
 CONFIG_FILE = Path(KNOTT_DIR) / "config.yaml"
 
@@ -184,27 +182,8 @@ class Knott:
         if any(i.code == "schema-legacy-layout" for i in issues):
             # Every entity would also be `entity-unknown-type`; report only the cause.
             return ValidationResult(issues=issues, stats=Stats(schemas=0, entities=0, relations=0))
-        files: dict[str, MarkdownFile] = {}
-
-        def lookup(rel_path: str) -> MarkdownFile:
-            parsed = files.get(rel_path)
-            if parsed is None:
-                parsed = read_markdown(self.root / rel_path, rel_path)
-                files[rel_path] = parsed
-            return parsed
-
-        all_markdown = iter_markdown(self.root)
-        kid_index: KidIndex | None = None
-
-        def kids() -> KidIndex:
-            """Built on first use, so vaults and runs that never touch a `kid` pay nothing."""
-            nonlocal kid_index
-            if kid_index is None:
-                kid_index = build_index(all_markdown, lookup)
-            return kid_index
-
-        def resolve(source: str, reference: str) -> ResolvedReference:
-            return resolve_reference(self.root, source, reference, kids)
+        session = VaultSession(self.root, schemas)
+        all_markdown = session.all_markdown
 
         if paths is None:
             in_scope = all_markdown
@@ -216,7 +195,7 @@ class Knott:
         relations = 0
         in_scope_kids: set[str] = set()
         for rel_path in in_scope:
-            parsed = lookup(rel_path)
+            parsed = session.lookup(rel_path)
             if parsed.error is not None:
                 issues.append(
                     Issue(
@@ -230,7 +209,7 @@ class Knott:
             if not parsed.is_entity:
                 continue
             entities += 1
-            report = validate_entity(parsed, schemas, resolve, lookup)
+            report = validate_entity(parsed, schemas, session.resolve, session.lookup)
             issues.extend(report.issues)
             relations += report.relations
             assert parsed.frontmatter is not None
@@ -240,7 +219,7 @@ class Knott:
 
         # A duplicate is reported only when one of its claimants is in scope.
         for kid in sorted(in_scope_kids):
-            claims = kids()[kid]
+            claims = session.kids()[kid]
             if len(claims) > 1:
                 issues.append(_duplicate_kid(kid, claims))
 
