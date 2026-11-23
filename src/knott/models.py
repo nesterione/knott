@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -59,13 +61,24 @@ class InitResult(_Frozen):
     created: bool
 
 
+class MigrateResult(_Frozen):
+    """What `Knott.migrate()` changed."""
+
+    written: list[str]
+    """Vault-relative paths of the concept files written, sorted."""
+    removed: str
+    """The legacy folder that was deleted (``.knott/schemas``)."""
+    list_fields: list[str]
+    """Relations converted to ``list`` of ``reference``, as ``<type>.<field>``."""
+
+
 class OntologyAttribute(_Frozen):
     """An attribute declared by a type's schema, or a nested part of one."""
 
     name: str | None
     """Field name; None for a list's `items` or a map's `values`."""
     type: str
-    """A scalar type name, or `list`, `object` or `map`."""
+    """A scalar type name, or `list`, `object`, `map` or `reference`."""
     required: bool
     description: str | None
     items: OntologyAttribute | None = None
@@ -74,23 +87,20 @@ class OntologyAttribute(_Frozen):
     """For a `map`: the definition of each value (keys are free strings)."""
     fields: list[OntologyAttribute] = []
     """For an `object`: its declared fields, in schema order."""
+    targets: list[str] = []
+    """For a `reference`: target types that some concept defines, in schema order."""
+    unknown_targets: list[str] = []
+    """For a `reference`: target types no concept defines (shown, never enforced)."""
 
     @property
     def notation(self) -> str:
-        """Compact form of the type, e.g. ``list of object`` or ``map of map of string``."""
+        """Compact form of the type, e.g. ``list of object`` or ``list of reference → a | b``."""
         inner = self.items or self.values
-        return self.type if inner is None else f"{self.type} of {inner.notation}"
-
-
-class OntologyRelation(_Frozen):
-    """A typed relation from one type to another."""
-
-    name: str
-    target: str
-    required: bool
-    description: str | None
-    target_known: bool
-    """False when no schema defines the target type."""
+        if inner is not None:
+            return f"{self.type} of {inner.notation}"
+        if self.targets:
+            return f"{self.type} → {' | '.join(self.targets)}"
+        return self.type
 
 
 class OntologyType(_Frozen):
@@ -104,12 +114,47 @@ class OntologyType(_Frozen):
     """Markdown files whose frontmatter `type` is this type."""
     kid_required: bool = False
     """The schema says `kid: required`."""
-    attributes: list[OntologyAttribute]
-    relations: list[OntologyRelation]
+    properties: list[OntologyAttribute]
+    """Top-level properties in schema order; references are properties too."""
+    template: str | None = None
+    """The concept file's body: a template for entity bodies. None when blank."""
+
+    def references(self) -> list[tuple[str, OntologyAttribute]]:
+        """Every reference property at any depth, in schema order, with its path.
+
+        Paths use ``[]`` for a list's items and ``*`` for a map's values, e.g.
+        ``derived_from``, ``sources[]``, ``speakers[].person``, ``roles.*``.
+        """
+        return [(path, node) for path, node, _ in iter_reference_paths(self.properties)]
+
+
+def iter_reference_paths(
+    properties: list[OntologyAttribute],
+) -> Iterator[tuple[str, OntologyAttribute, bool]]:
+    """Walk references like `OntologyType.references`, also yielding whether each is required.
+
+    A reference is required when every named step on its path is required, so every
+    valid entity holds at least one value there.
+    """
+    for prop in properties:
+        yield from _walk_references(prop, prop.name or "", prop.required)
+
+
+def _walk_references(
+    node: OntologyAttribute, path: str, required: bool
+) -> Iterator[tuple[str, OntologyAttribute, bool]]:
+    if node.type == "reference":
+        yield path, node, required
+    elif node.items is not None:
+        yield from _walk_references(node.items, f"{path}[]", required)
+    elif node.values is not None:
+        yield from _walk_references(node.values, f"{path}.*", required)
+    for field in node.fields:
+        yield from _walk_references(field, f"{path}.{field.name}", required and field.required)
 
 
 class Ontology(_Frozen):
-    """The vault's types and the typed relations between them."""
+    """The vault's types and the references between them."""
 
     vault: str
     """Directory name of the vault root."""

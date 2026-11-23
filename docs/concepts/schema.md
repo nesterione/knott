@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Schema
-summary: A YAML file in `.knott/schemas/` that defines one entity type, its attributes, and its relations.
+summary: The frontmatter of a concept file in `.knott/concepts/`, which defines one entity type and its properties.
 spec_section: "§4, §7"
 related:
   - "[Attribute](attribute.md)"
@@ -10,43 +10,71 @@ related:
 ---
 # Schema
 
-```yaml
-type: transcript
-description: >
-  Transcript of recorded spoken content.
-attributes:
-  title:
-    type: string
-    required: true
-    description: Human-readable title.
-relations:
-  derived_from:
-    target: script
-    description: The script this transcript was produced from.
+Each type is defined by one **concept file**, a Markdown file in `.knott/concepts/`. Its frontmatter is the type's **schema**. Its body is an optional **template** for the body of entities of that type.
+
+```markdown
+---
+name: transcript
+description: Transcript of recorded spoken content.
+properties:
+  title:        { type: string, required: true }
+  derived_from: { type: reference, target: script }
+  speakers:
+    type: list
+    items:
+      type: object
+      fields:
+        person: { type: reference, target: person }
+        role:   { type: string }
+---
+# Transcript
+
+<!-- One paragraph: who speaks and what it covers. -->
 ```
 
 ## Discovery
 
-Every `.knott/schemas/**/*.yaml` file is a schema (`.yml` is not recognized). Subfolders are only for your organization: the type's identity is the value of `type`, not the filename.
+Every `.knott/concepts/**/*.md` file is a concept file. Subfolders are only for your organization: the type's identity is the value of `name`, not the filename. Two files with the same `name` are an error that names both.
+
+Concept files use `name:`, not `type:`. Entities keep `type: transcript`, so a concept file is never mistaken for an entity.
 
 ## Allowed keys
 
 | Level | Key | Required | Notes |
 |---|---|---|---|
-| top | `type` | yes | `^[a-z][a-z0-9_-]*$` |
+| top | `name` | yes | `^[a-z][a-z0-9_-]*$` |
 | top | `description` | no | string |
-| top | `attributes` | no | field name → attribute definition |
-| top | `relations` | no | field name → relation definition |
-| attribute | `type` | yes | `string`, `integer`, `number`, `boolean`, `date`, `datetime` |
-| attribute | `required` | no | `true`/`false`, default `false` |
-| attribute | `description` | no | string |
-| relation | `target` | yes | an existing type (self-reference allowed) |
-| relation | `required` | no | `true`/`false`, default `false` |
-| relation | `description` | no | string |
+| top | `kid` | no | `required`: every entity needs a [kid](kid.md) |
+| top | `properties` | no | property name → definition, in the order you want them shown |
+| property | `type` | yes | a scalar type, `list`, `object`, `map` or `reference` |
+| property | `required` | no | `true`/`false`, default `false` |
+| property | `description` | no | string |
+| property | `items` / `fields` / `values` | with `list` / `object` / `map` | see [Attribute](attribute.md) |
+| property | `target` | with `reference` | a type name, or a list of type names: `target: [episode, meeting]` |
 
-Unknown keys are **errors** in schemas (Knott owns these files, so `atributes:` must not pass silently), unlike in entities.
+Unknown keys are **errors** in concept files (Knott owns these files, so `propertes:` must not pass silently), unlike in entities. A top-level property can't be named `type` or `kid`; both belong to knott.
 
-A field cannot be named `type`, and cannot be both an attribute and a relation.
+A property whose shape is `reference` is a [relation](relation.md). Every other property is an [attribute](attribute.md). Both live in the one `properties` map.
+
+## The template
+
+The body is stored as written. Knott never checks an entity's body against it. Agents copy it when they start a new entity, so write the body's sections as real headings and explain each one in a `<!-- … -->` comment:
+
+```markdown
+# <!-- The episode title. -->
+
+<!-- One paragraph: who speaks and what it covers. -->
+
+## Highlights
+
+<!-- Three to five bullets, each with a timestamp. -->
+```
+
+There is no placeholder syntax. Comments stay out of Obsidian's reading view, and the agent deletes them once a section is filled. `knott types --verbose` shows `template: yes` for a type that has one. An empty body means no template.
+
+## Upgrading from `.knott/schemas/`
+
+Before 0.5, a type was a YAML file in `.knott/schemas/` with separate `attributes` and `relations` maps. A vault that still has that folder reports only [`schema-legacy-layout`](../issues/schema-legacy-layout.md). Run [`knott migrate`](../commands/migrate.md) to convert it. See [decision 0010](../decisions/0010-concept-files-and-reference-properties.md).
 
 ## Three readers
 

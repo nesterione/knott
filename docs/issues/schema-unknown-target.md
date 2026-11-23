@@ -6,20 +6,21 @@ about: "[Relation](../concepts/relation.md)"
 ---
 # `schema-unknown-target`
 
-A relation's `target` names a type no schema defines.
+A reference's `target` names a type no concept file defines. With a list of targets, each unknown name is its own issue. `field` is the full key path, e.g. `properties.sources.items.target`.
 
 ## Example
 
 ```yaml
-relations:
+properties:
   about:
-    target: episode   # no episode.yaml
+    type: reference
+    target: [episode, podcast]   # no concept file has name: podcast
 ```
 
 ## Fix
 
-Create the target schema, or fix the spelling. The message lists the known types.
+Create the concept file, or fix the spelling. The message lists the known types.
 
 ## Notes
 
-Validation ignores the broken relation, so entity values for it are not checked until fixed. [`knott view`](../commands/view.md) still draws it, as an arrow to a dashed ghost box.
+The unknown name is dropped and the known ones are still enforced: above, an `about` value must point at an `episode`. If no target is left, values are still checked for shape and resolved, but any entity type passes. [`knott types --verbose`](../commands/types.md) shows the name as `podcast (unknown)`, and [`knott view`](../commands/view.md) draws no arrow for it.

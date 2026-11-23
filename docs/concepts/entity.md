@@ -25,7 +25,7 @@ The body is arbitrary Markdown. Knott does not read it.
 ```
 
 - **frontmatter** → structured metadata ([attributes](attribute.md) and [relations](relation.md))
-- **body** → free text, opaque to Knott
+- **body** → free text, opaque to Knott. The type's concept file may hold a [template](schema.md) to start from.
 
 ## Entity or note?
 
@@ -40,6 +40,6 @@ This very folder mixes both: `README.md` is a plain note, everything under `conc
 
 ## One type
 
-Each entity has exactly one `type`, which must name a [schema](schema.md). There is no inheritance and no multiple typing; connections to other concepts are expressed through relations.
+Each entity has exactly one `type`, which must be the `name` of a concept file ([schema](schema.md)). There is no inheritance and no multiple typing; connections to other concepts are expressed through relations.
 
-Keys the schema does not declare are allowed and never checked, so personal metadata (`tags`, `aliases`, …) can live alongside typed fields.
+Top-level keys the schema does not declare are allowed and never checked, so personal metadata (`tags`, `aliases`, …) can live alongside typed fields.

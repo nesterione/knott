@@ -14,25 +14,26 @@ from knott.models import (
     FixedEntity,
     InitResult,
     Issue,
+    MigrateResult,
     Ontology,
     OntologyAttribute,
-    OntologyRelation,
     OntologyType,
     SchemaInfo,
     Stats,
     ValidationResult,
 )
-from knott.schema.loader import SCHEMAS_DIR, load_schemas
+from knott.schema.loader import load_schemas
+from knott.schema.migrate import migrate_vault
 from knott.schema.models import (
     AttributeDef,
     ListShape,
     MapShape,
     ObjectShape,
-    RelationDef,
+    ReferenceShape,
     shape_kind,
 )
 from knott.schema.validator import validate_entity
-from knott.vault.discovery import KNOTT_DIR, find_vault_root, iter_markdown
+from knott.vault.discovery import CONCEPTS_DIR, KNOTT_DIR, find_vault_root, iter_markdown
 from knott.vault.entity import MarkdownFile, read_markdown
 from knott.vault.fix import insert_kid
 from knott.vault.kid import (
@@ -78,7 +79,7 @@ class Knott:
 
     @staticmethod
     def init(path: str | Path = ".") -> InitResult:
-        """Create ``.knott/schemas/`` and ``.knott/config.yaml`` in ``path``.
+        """Create ``.knott/concepts/`` and ``.knott/config.yaml`` in ``path``.
 
         Changes nothing if ``.knott/`` already exists.
         """
@@ -88,9 +89,24 @@ class Knott:
         knott_dir = root / KNOTT_DIR
         if knott_dir.exists():
             return InitResult(root=str(root.resolve()), created=False)
-        (root / SCHEMAS_DIR).mkdir(parents=True)
+        (root / CONCEPTS_DIR).mkdir(parents=True)
         (root / CONFIG_FILE).write_text(f"knott_version: {version()}\n", encoding="utf-8")
         return InitResult(root=str(root.resolve()), created=True)
+
+    def migrate(self) -> MigrateResult:
+        """Convert ``.knott/schemas/**/*.yaml`` into ``.knott/concepts/**/*.md``.
+
+        Works without loading schemas, so it runs on a vault that reports
+        ``schema-legacy-layout``. A relation that any entity stores as a YAML list
+        becomes ``list`` of ``reference``. Raises ``MigrateError`` (nothing written
+        or removed) when there is no legacy folder, the legacy folder is a symbolic
+        link, a legacy file can't be read or converted, a target concept file or a
+        non-folder on its path already exists, or writing a concept file fails
+        (files written so far are removed again). If only deleting
+        ``.knott/schemas/`` fails, the concept files are kept and ``MigrateError``
+        says to delete the legacy folder by hand.
+        """
+        return migrate_vault(self.root)
 
     def types(self) -> list[str]:
         """Discovered type names, sorted. Schemas with errors may be missing."""
@@ -110,11 +126,12 @@ class Knott:
         return _sorted(issues)
 
     def ontology(self) -> Ontology:
-        """The vault's types, their attributes and relations, and entity counts.
+        """The vault's types, their properties and templates, and entity counts.
 
-        Types are sorted by name; attributes and relations keep their schema order,
-        with relations to undefined types last (``target_known=False``). Files with
-        invalid frontmatter are not counted.
+        Types are sorted by name; properties keep their schema order, references
+        included (``type == "reference"``, at any depth). Target types no concept
+        defines are listed in ``unknown_targets``. Files with invalid frontmatter
+        are not counted.
         """
         schemas, issues = load_schemas(self.root)
         counts: dict[str, int] = {}
@@ -123,15 +140,6 @@ class Knott:
             if parsed.error is None and parsed.is_entity and isinstance(parsed.type, str):
                 counts[parsed.type] = counts.get(parsed.type, 0) + 1
 
-        def relation(r: RelationDef, known: bool) -> OntologyRelation:
-            return OntologyRelation(
-                name=r.name,
-                target=r.target,
-                required=r.required,
-                description=r.description,
-                target_known=known,
-            )
-
         types = [
             OntologyType(
                 type=s.type,
@@ -139,9 +147,8 @@ class Knott:
                 path=s.path,
                 count=counts.get(s.type, 0),
                 kid_required=s.kid_required,
-                attributes=[_ontology_attribute(a) for a in s.attributes.values()],
-                relations=[relation(r, True) for r in s.relations.values()]
-                + [relation(r, False) for r in s.unknown_relations.values()],
+                properties=[_ontology_attribute(a) for a in s.properties.values()],
+                template=s.template,
             )
             for _, s in sorted(schemas.items())
         ]
@@ -174,6 +181,9 @@ class Knott:
 
     def _validate(self, paths: Sequence[str | Path] | None) -> ValidationResult:
         schemas, issues = load_schemas(self.root)
+        if any(i.code == "schema-legacy-layout" for i in issues):
+            # Every entity would also be `entity-unknown-type`; report only the cause.
+            return ValidationResult(issues=issues, stats=Stats(schemas=0, entities=0, relations=0))
         files: dict[str, MarkdownFile] = {}
 
         def lookup(rel_path: str) -> MarkdownFile:
@@ -311,6 +321,8 @@ def _ontology_attribute(a: AttributeDef) -> OntologyAttribute:
             if isinstance(shape, ObjectShape)
             else []
         ),
+        targets=list(shape.targets) if isinstance(shape, ReferenceShape) else [],
+        unknown_targets=list(shape.unknown) if isinstance(shape, ReferenceShape) else [],
     )
 
 

@@ -18,7 +18,13 @@ from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent, merge_key_bin
 
 from knott.api import Knott, version
 from knott.errors import KnottError
-from knott.models import Issue, OntologyAttribute, OntologyType, ValidationResult
+from knott.models import (
+    Issue,
+    MigrateResult,
+    OntologyAttribute,
+    OntologyType,
+    ValidationResult,
+)
 from knott.skills import InstallResult, InstallStatus, SkillTarget, install_skill
 from knott.view import render_ontology
 
@@ -70,34 +76,36 @@ def format_issue(issue: Issue) -> str:
 
 
 def format_type(t: OntologyType) -> str:
-    """A type with its description, attributes (nested shapes indented) and relations."""
+    """A type with its description, summary lines and properties (nested shapes indented)."""
     lines = [f"{t.type}  ({t.path})"]
     if t.description:
         lines += [f"  {line}" for line in t.description.strip().splitlines()]
     if t.kid_required:
         lines.append("  kid: required")
-    if t.attributes:
-        lines.append("  attributes:")
-        lines += _attribute_lines(t.attributes, "    ")
-    if t.relations:
-        lines.append("  relations:")
-        width = max(len(_label(r.name, r.required)) for r in t.relations)
-        for r in t.relations:
-            line = f"    {_label(r.name, r.required):<{width}}  → {r.target}"
-            if not r.target_known:
-                line += " (undefined type)"
-            if r.description:
-                line += f"  {_one_line(r.description)}"
-            lines.append(line)
+    lines.append(f"  template: {'yes' if t.template is not None else 'no'}")
+    paths = [path for path, _ in t.references()]
+    lines.append(f"  references: {', '.join(paths) if paths else 'none'}")
+    if t.properties:
+        lines.append("  properties:")
+        lines += _attribute_lines(t.properties, "    ")
     return "\n".join(lines)
+
+
+def _notation(a: OntologyAttribute) -> str:
+    """`OntologyAttribute.notation`, with targets no concept defines marked `(unknown)`."""
+    inner = a.items or a.values
+    if inner is not None:
+        return f"{a.type} of {_notation(inner)}"
+    targets = [*a.targets, *(f"{name} (unknown)" for name in a.unknown_targets)]
+    return f"{a.type} → {' | '.join(targets)}" if targets else a.type
 
 
 def _attribute_lines(attributes: list[OntologyAttribute], indent: str) -> list[str]:
     width = max(len(_label(a.name or "", a.required)) for a in attributes)
-    type_width = max(len(a.notation) for a in attributes)
+    type_width = max(len(_notation(a)) for a in attributes)
     lines: list[str] = []
     for a in attributes:
-        line = f"{indent}{_label(a.name or '', a.required):<{width}}  {a.notation:<{type_width}}"
+        line = f"{indent}{_label(a.name or '', a.required):<{width}}  {_notation(a):<{type_width}}"
         if a.description:
             line += f"  {_one_line(a.description)}"
         lines.append(line.rstrip())
@@ -142,7 +150,7 @@ def init(
         Path, typer.Argument(help="Directory to initialize (default: current directory).")
     ] = Path("."),
 ) -> None:
-    """Create .knott/schemas/ and .knott/config.yaml."""
+    """Create .knott/concepts/ and .knott/config.yaml."""
     try:
         result = Knott.init(path)
     except KnottError as error:
@@ -151,6 +159,33 @@ def init(
         typer.echo(f"Initialized Knott vault in {result.root}")
     else:
         typer.echo(f"Knott vault already initialized in {result.root}")
+
+
+def format_migrate(result: MigrateResult) -> str:
+    lines = [f"+ {path}" for path in result.written]
+    lines += [f"  list of reference: {field}" for field in result.list_fields]
+    lines.append(f"- {result.removed}/")
+    return "\n".join(lines)
+
+
+@app.command()
+def migrate(
+    path: Annotated[
+        Path, typer.Argument(help="A path inside the vault (default: current directory).")
+    ] = Path("."),
+) -> None:
+    """Convert a pre-0.5 vault's .knott/schemas/ into .knott/concepts/, then validate."""
+    try:
+        vault = Knott.open(path)
+        migrated = vault.migrate()
+        result = vault.validate()
+    except KnottError as error:
+        raise _fail(error) from None
+    typer.echo(format_migrate(migrated))
+    typer.echo()
+    typer.echo(format_result(result))
+    if not result.ok:
+        raise typer.Exit(EXIT_INVALID)
 
 
 @app.command()
@@ -200,7 +235,7 @@ def types(
         typer.Option(
             "--verbose",
             "-v",
-            help="Show each type's schema file, description, attributes and relations.",
+            help="Show each type's concept file, description, template, references and properties.",
         ),
     ] = False,
 ) -> None:
@@ -210,7 +245,9 @@ def types(
     except KnottError as error:
         raise _fail(error) from None
     if verbose:
-        typer.echo("\n\n".join(format_type(t) for t in vault.ontology().types))
+        found = vault.ontology().types
+        if found:
+            typer.echo("\n\n".join(format_type(t) for t in found))
     else:
         for info in vault.schemas():
             typer.echo(info.type)
@@ -237,11 +274,17 @@ def view(
 ) -> None:
     """Draw the vault's ontology as an HTML page and open it in the browser."""
     try:
-        ontology = Knott.open(path).ontology()
+        vault = Knott.open(path)
+        ontology = vault.ontology()
     except KnottError as error:
         raise _fail(error) from None
+    legacy = [i for i in vault.schema_issues() if i.code == "schema-legacy-layout"]
+    if legacy:
+        # A pre-0.5 vault has no types to draw; say why instead of "no types".
+        typer.echo("\n\n".join(format_issue(issue) for issue in legacy), err=True)
+        raise typer.Exit(EXIT_INVALID)
     if not ontology.types:
-        raise _fail(KnottError("no types to show (add schemas to .knott/schemas/)"))
+        raise _fail(KnottError("no types to show (add concept files to .knott/concepts/)"))
     target = output or _private_temp_dir() / f"knott-ontology-{ontology.vault}.html"
     try:
         if output is None:

@@ -61,9 +61,9 @@ def test_kid_problem_suggests_the_canonical_form() -> None:
     assert "got integer `42`" in kid_problem(42)
 
 
-def _vault(tmp_path: Path, files: dict[str, str], schema: str = "type: note\n") -> Path:
+def _vault(tmp_path: Path, files: dict[str, str], schema: str = "name: note\n") -> Path:
     Knott.init(tmp_path)
-    (tmp_path / ".knott/schemas/note.yaml").write_text(schema)
+    (tmp_path / ".knott/concepts/note.md").write_text(f"---\n{schema}---\n")
     for name, text in files.items():
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -86,7 +86,7 @@ def test_kid_is_optional_by_default_but_always_checked(tmp_path: Path) -> None:
 
 def test_empty_kid_on_required_type_points_at_its_line(tmp_path: Path) -> None:
     vault = _vault(
-        tmp_path, {"a.md": "---\ntype: note\nkid: ''\n---\n"}, "type: note\nkid: required\n"
+        tmp_path, {"a.md": "---\ntype: note\nkid: ''\n---\n"}, "name: note\nkid: required\n"
     )
     result = Knott.open(vault).validate()
     assert [(i.line, i.code) for i in result.issues] == [(3, "kid-missing")]
@@ -147,18 +147,22 @@ def test_index_is_built_only_when_needed(tmp_path: Path, monkeypatch: pytest.Mon
 
 def test_kid_references_in_fixture() -> None:
     result = validate_fixture("kid-identity")
-    relation_issues = [(i.path, i.line, i.code) for i in result.issues if i.field == "includes"]
+    relation_issues = [
+        (i.path, i.line, i.field, i.code)
+        for i in result.issues
+        if (i.field or "").startswith("includes")
+    ]
     assert relation_issues == [
-        ("topics/broken.md", 5, "relation-target-ambiguous"),
-        ("topics/broken.md", 6, "relation-target-not-found"),
-        ("topics/broken.md", 7, "relation-target-type-mismatch"),
-        ("topics/broken.md", 8, "relation-invalid-value"),
-        ("topics/broken.md", 9, "relation-invalid-value"),
+        ("topics/broken.md", 5, "includes[0]", "relation-target-ambiguous"),
+        ("topics/broken.md", 6, "includes[1]", "relation-target-not-found"),
+        ("topics/broken.md", 7, "includes[2]", "relation-target-type-mismatch"),
+        ("topics/broken.md", 8, "includes[3]", "relation-invalid-value"),
+        ("topics/broken.md", 9, "includes[4]", "relation-invalid-value"),
     ]
     messages = {i.line: i.message for i in result.issues if i.path == "topics/broken.md"}
     assert "fix the `kid-duplicate` first" in messages[5]
     assert messages[6] == (
-        "relation `includes`: no entity has `kid` 55555555-5555-4555-8555-555555555555"
+        "relation `includes[1]`: no entity has `kid` 55555555-5555-4555-8555-555555555555"
     )
     # The type mismatch names the kid as written and where it was found.
     assert "(`topics/broken.md`) has type `topic`" in messages[7]
@@ -182,7 +186,7 @@ def test_kid_reference_accepts_surrounding_space(tmp_path: Path) -> None:
             "a.md": f"---\ntype: note\nkid: {A}\n---\n",
             "b.md": f'---\ntype: note\nsee: " kid: {A} "\n---\n',
         },
-        "type: note\nrelations:\n  see:\n    target: note\n",
+        "name: note\nproperties:\n  see:\n    type: reference\n    target: note\n",
     )
     result = Knott.open(vault).validate()
     assert result.ok, result.issues
@@ -200,5 +204,5 @@ def test_ontology_and_types_verbose_show_kid_required(monkeypatch: pytest.Monkey
     assert {t.type: t.kid_required for t in ontology.types} == {"lexeme": True, "topic": False}
     monkeypatch.chdir(fixture_path("kid-identity"))
     output = CliRunner().invoke(app, ["types", "--verbose"]).output
-    assert output.startswith("lexeme  (.knott/schemas/lexeme.yaml)\n  kid: required\n")
+    assert output.startswith("lexeme  (.knott/concepts/lexeme.md)\n  kid: required\n")
     assert output.count("kid: required") == 1

@@ -27,3 +27,5 @@ The rule is: an empty container *of the declared kind* is absent, and one of ano
 **Amended 2026-10-19** by [0008](0008-structured-attributes.md): attributes can now be lists, objects and maps, so the table gained their columns and the `{}` row. The scalar column is unchanged.
 
 **Consequences.** A blank optional field never fails, and a `required` list needs at least one item. A required one reports `attribute-missing` / `relation-missing`, pointing at the key's line when the key is present.
+
+**Amended 2026-11-23** by [0010](0010-concept-files-and-reference-properties.md): a relation is now a `reference` shape, single or in a `list`, so the Relation column splits the same way as the attribute columns. For a single `reference`, `[]` and `{}` are `relation-invalid-value`. For a `list` of references, `[]` is absent and `{}` is `relation-invalid-value`. `null` and `""` stay absent for both.

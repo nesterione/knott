@@ -4,7 +4,7 @@ This folder is itself a **Knott vault**: the documentation is written as typed M
 
 ```sh
 cd docs
-knott types --verbose   # the five documentation types
+knott types --verbose   # the five documentation types, with their body templates
 knott validate          # every page and link is checked
 ```
 
@@ -29,13 +29,13 @@ This README has no frontmatter, so Knott treats it as an ordinary note.
 
 ## Commands
 
-[init](commands/init.md) · [validate](commands/validate.md) · [types](commands/types.md) · [version](commands/version.md) · [skill](commands/skill.md) · [view](commands/view.md)
+[init](commands/init.md) · [validate](commands/validate.md) · [types](commands/types.md) · [migrate](commands/migrate.md) · [version](commands/version.md) · [skill](commands/skill.md) · [view](commands/view.md)
 
 ## Issue codes
 
 | Stage | Codes |
 |---|---|
-| schema | [schema-invalid-yaml](issues/schema-invalid-yaml.md) · [schema-invalid-field](issues/schema-invalid-field.md) · [schema-duplicate-type](issues/schema-duplicate-type.md) · [schema-unknown-target](issues/schema-unknown-target.md) · [schema-field-conflict](issues/schema-field-conflict.md) |
+| schema | [schema-invalid-yaml](issues/schema-invalid-yaml.md) · [schema-invalid-field](issues/schema-invalid-field.md) · [schema-duplicate-type](issues/schema-duplicate-type.md) · [schema-unknown-target](issues/schema-unknown-target.md) · [schema-legacy-layout](issues/schema-legacy-layout.md) |
 | entity | [entity-invalid-frontmatter](issues/entity-invalid-frontmatter.md) · [entity-unknown-type](issues/entity-unknown-type.md) · [not-an-entity](issues/not-an-entity.md) |
 | kid | [kid-missing](issues/kid-missing.md) · [kid-invalid](issues/kid-invalid.md) · [kid-duplicate](issues/kid-duplicate.md) |
 | attribute | [attribute-missing](issues/attribute-missing.md) · [attribute-type-mismatch](issues/attribute-type-mismatch.md) · [attribute-unknown-field](issues/attribute-unknown-field.md) |
@@ -52,3 +52,4 @@ This README has no frontmatter, so Knott treats it as an ordinary note.
 7. [Hostile YAML is reported, never crashes or hangs](decisions/0007-parser-robustness.md)
 8. [Structured attributes use explicit keywords, and objects are closed](decisions/0008-structured-attributes.md)
 9. [Entities get a knott-managed `kid`](decisions/0009-kid-identity.md)
+10. [Concepts are Markdown files, and references are properties](decisions/0010-concept-files-and-reference-properties.md)

@@ -17,7 +17,7 @@ from knott.schema.models import (
     ListShape,
     MapShape,
     ObjectShape,
-    RelationDef,
+    ReferenceShape,
     ScalarType,
     Schema,
     Shape,
@@ -47,11 +47,6 @@ def is_absent(value: Any) -> bool:
     return value is None or value == ""
 
 
-def is_absent_relation(value: Any) -> bool:
-    """Relations: null, empty string, or an empty list counts as absent."""
-    return is_absent(value) or value == []
-
-
 def validate_entity(
     entity: MarkdownFile,
     schemas: dict[str, Schema],
@@ -59,35 +54,27 @@ def validate_entity(
     lookup: FileLookup,
 ) -> EntityReport:
     assert entity.frontmatter is not None
-    issues: list[Issue] = []
     entity_type = entity.type
     schema = schemas.get(entity_type) if isinstance(entity_type, str) else None
     if schema is None:
         known = ", ".join(f"`{t}`" for t in sorted(schemas)) or "none"
-        issues.append(
-            Issue(
-                code="entity-unknown-type",
-                path=entity.path,
-                line=entity.key_lines.get("type"),
-                field="type",
-                message=(
-                    f"type {show(entity_type, entity.raw.get('type'))} has no schema "
-                    f"in .knott/schemas/ (known types: {known})"
-                ),
-            )
+        issue = Issue(
+            code="entity-unknown-type",
+            path=entity.path,
+            line=entity.key_lines.get("type"),
+            field="type",
+            message=(
+                f"type {show(entity_type, entity.raw.get('type'))} has no schema "
+                f"in .knott/concepts/ (known types: {known})"
+            ),
         )
-        return EntityReport(issues, 0)
+        return EntityReport([issue], 0)
 
-    issues.extend(_check_kid(entity, schema))
-    for attribute in schema.attributes.values():
-        issues.extend(_check_attribute(entity, attribute))
-
-    relations = 0
-    for relation in schema.relations.values():
-        rel_issues, count = _check_relation(entity, relation, resolve, lookup)
-        issues.extend(rel_issues)
-        relations += count
-    return EntityReport(issues, relations)
+    checker = _ValueChecker(entity, resolve, lookup)
+    checker.issues.extend(_check_kid(entity, schema))
+    for name, prop in schema.properties.items():
+        checker.check(prop, (name,), entity.frontmatter.get(name))
+    return EntityReport(checker.issues, checker.relations)
 
 
 def _check_kid(entity: MarkdownFile, schema: Schema) -> list[Issue]:
@@ -121,84 +108,184 @@ def _check_kid(entity: MarkdownFile, schema: Schema) -> list[Issue]:
     ]
 
 
-def _check_attribute(entity: MarkdownFile, attribute: AttributeDef) -> list[Issue]:
-    assert entity.frontmatter is not None and attribute.name is not None
-    issues: list[Issue] = []
-    path: KeyPath = (attribute.name,)
-    _check_value(entity, attribute, path, entity.frontmatter.get(attribute.name), issues)
-    return issues
+def holds_references(shape: Shape) -> bool:
+    """A reference, or a list or map whose items are references (at any depth).
+
+    Such a property reports `relation-*` codes rather than `attribute-*` ones
+    (amended decision 0005)."""
+    if isinstance(shape, ReferenceShape):
+        return True
+    if isinstance(shape, ListShape):
+        return holds_references(shape.items.shape)
+    if isinstance(shape, MapShape):
+        return holds_references(shape.values.shape)
+    return False
 
 
-def _check_value(
-    entity: MarkdownFile,
-    definition: AttributeDef,
-    path: KeyPath,
-    value: Any,
-    issues: list[Issue],
-) -> None:
-    """Check ``value`` at ``path`` against ``definition``, descending into lists, objects
-    and maps. A value of the wrong kind is reported once, without checking its contents."""
-    shape = definition.shape
-    field = format_field_path(path)
+class _ValueChecker:
+    """Checks one entity's frontmatter values; counts references that resolve."""
 
-    def report(code: str, message: str, at: KeyPath = path) -> None:
-        issues.append(
+    def __init__(self, entity: MarkdownFile, resolve: Resolver, lookup: FileLookup) -> None:
+        self.entity = entity
+        self.resolve = resolve
+        self.lookup = lookup
+        self.issues: list[Issue] = []
+        self.relations = 0
+
+    def report(self, code: str, message: str, at: KeyPath) -> None:
+        self.issues.append(
             Issue(
                 code=code,
-                path=entity.path,
-                line=entity.line_of(at),
+                path=self.entity.path,
+                line=self.entity.line_of(at),
                 field=format_field_path(at),
                 message=message,
             )
         )
 
-    if _is_empty(value, shape):
-        if definition.name is None:
-            what = "list item" if isinstance(path[-1], int) else "map value"
-            report(
-                "attribute-type-mismatch",
-                f"attribute `{field}` is an empty {what}; remove it or give it a value",
-            )
-        elif definition.required:
-            hint = "; add at least one item" if isinstance(shape, ListShape) else ""
-            report(
-                "attribute-missing",
-                f"required attribute `{field}` ({notation(shape)}) is missing or empty{hint}",
-            )
-        return
+    def check(self, definition: AttributeDef, path: KeyPath, value: Any) -> None:
+        """Check ``value`` at ``path`` against ``definition``, descending into lists,
+        objects and maps. A value of the wrong kind is reported once, without checking
+        its contents."""
+        shape = definition.shape
+        field = format_field_path(path)
+        references = holds_references(shape)
+        noun = "relation" if references else "attribute"
 
-    if isinstance(shape, ScalarType):
-        problem = type_mismatch(shape, value, entity.raws.get(path))
-        if problem is not None:
-            report("attribute-type-mismatch", f"attribute `{field}` {problem}")
-        return
-
-    raw = entity.raws.get(path)
-    if isinstance(shape, ListShape) and type(value) is list:
-        for index, item in enumerate(value):
-            _check_value(entity, shape.items, (*path, index), item, issues)
-    elif isinstance(shape, ObjectShape) and type(value) is dict:
-        for name, field_def in shape.fields.items():
-            _check_value(entity, field_def, (*path, name), value.get(name), issues)
-        for key in value:
-            if key not in shape.fields:
-                report(
-                    "attribute-unknown-field",
-                    _unknown_field_message(field, key, list(shape.fields)),
-                    (*path, str(key)),
+        if _is_empty(value, shape):
+            if definition.name is None:
+                what = "list item" if isinstance(path[-1], int) else "map value"
+                if references:
+                    self.report(
+                        "relation-invalid-value",
+                        f"relation `{field}` is an empty {what}; remove it or give it a reference",
+                        path,
+                    )
+                else:
+                    self.report(
+                        "attribute-type-mismatch",
+                        f"attribute `{field}` is an empty {what}; remove it or give it a value",
+                        path,
+                    )
+            elif definition.required:
+                code = "relation-missing" if references else "attribute-missing"
+                if isinstance(shape, ListShape):
+                    hint = "; add at least one " + ("reference" if references else "item")
+                elif references:
+                    hint = "; add a reference"
+                else:
+                    hint = ""
+                self.report(
+                    code,
+                    f"required {noun} `{field}` ({notation(shape)}) is missing or empty{hint}",
+                    path,
                 )
-    elif isinstance(shape, MapShape) and type(value) is dict:
-        for key, item in value.items():
-            if isinstance(key, str):
-                _check_value(entity, shape.values, (*path, key), item, issues)
+            return
+
+        if isinstance(shape, ReferenceShape):
+            self._check_reference(shape, path, value)
+            return
+
+        if isinstance(shape, ScalarType):
+            problem = type_mismatch(shape, value, self.entity.raws.get(path))
+            if problem is not None:
+                self.report("attribute-type-mismatch", f"attribute `{field}` {problem}", path)
+            return
+
+        if isinstance(shape, ListShape) and type(value) is list:
+            for index, item in enumerate(value):
+                self.check(shape.items, (*path, index), item)
+        elif isinstance(shape, ObjectShape) and type(value) is dict:
+            for name, field_def in shape.fields.items():
+                self.check(field_def, (*path, name), value.get(name))
+            for key in value:
+                if key not in shape.fields:
+                    self.report(
+                        "attribute-unknown-field",
+                        _unknown_field_message(field, key, list(shape.fields)),
+                        (*path, str(key)),
+                    )
+        elif isinstance(shape, MapShape) and type(value) is dict:
+            for key, item in value.items():
+                if isinstance(key, str):
+                    self.check(shape.values, (*path, key), item)
+                else:
+                    code = "relation-invalid-value" if references else "attribute-type-mismatch"
+                    self.report(code, _map_key_message(noun, field, key), path)
+        elif references:
+            raw = self.entity.raws.get(path)
+            message = (
+                f"relation `{field}` expects {notation(shape)} "
+                f"but got {kind(value)} {show(value, raw)}"
+            )
+            if isinstance(shape, ListShape) and isinstance(value, str):
+                message += "; write it as a list of references, even for one"
+            self.report("relation-invalid-value", message, path)
+        else:
+            raw = self.entity.raws.get(path)
+            self.report(
+                "attribute-type-mismatch",
+                f"attribute `{field}` expects {notation(shape)} "
+                f"but got {kind(value)} {show(value, raw)}",
+                path,
+            )
+
+    def _check_reference(self, shape: ReferenceShape, path: KeyPath, value: Any) -> None:
+        field = format_field_path(path)
+        if type(value) is list:
+            if any(type(item) is list for item in value):
+                message = _nested_list_hint(field)
+            elif not value:
+                message = (
+                    f"relation `{field}` expects one reference but got an empty list; "
+                    "leave the value empty when there is none"
+                )
             else:
-                report("attribute-type-mismatch", _map_key_message(field, key))
-    else:
-        report(
-            "attribute-type-mismatch",
-            f"attribute `{field}` expects {notation(shape)} "
-            f"but got {kind(value)} {show(value, raw)}",
-        )
+                message = (
+                    f"relation `{field}` expects one reference but got a list; "
+                    "declare `type: list` with reference `items` for several"
+                )
+            self.report("relation-invalid-value", message, path)
+            return
+        if not isinstance(value, str):
+            raw = self.entity.raws.get(path)
+            self.report(
+                "relation-invalid-value",
+                f"relation `{field}` must be a reference string, "
+                f"got {kind(value)} {show(value, raw)}",
+                path,
+            )
+            return
+
+        try:
+            resolved = self.resolve(self.entity.path, value)
+        except LinkError as exc:
+            self.report(exc.code, f"relation `{field}`: {exc.message}", path)
+            return
+        target = self.lookup(resolved.target)
+        if not target.is_entity:
+            reason = (
+                f"its frontmatter is invalid ({target.error})"
+                if target.error is not None
+                else "it has no frontmatter `type`"
+            )
+            self.report(
+                "relation-target-not-entity",
+                f"relation `{field}` points to {resolved.label}, "
+                f"which is not a Knott entity: {reason}",
+                path,
+            )
+            return
+        if shape.targets and target.type not in shape.targets:
+            expected = " or ".join(f"`{t}`" for t in shape.targets)
+            self.report(
+                "relation-target-type-mismatch",
+                f"relation `{field}` expects target type {expected}\n"
+                f"but {resolved.label} has type {show(target.type, target.raw.get('type'))}",
+                path,
+            )
+            return
+        self.relations += 1
 
 
 def _is_empty(value: Any, shape: Shape) -> bool:
@@ -234,9 +321,9 @@ def _unknown_field_message(field: str, key: Any, allowed: list[str]) -> str:
     return message
 
 
-def _map_key_message(field: str, key: Any) -> str:
+def _map_key_message(noun: str, field: str, key: Any) -> str:
     message = (
-        f"attribute `{field}` has map key {show(key)}, which YAML reads as {kind(key)}; "
+        f"{noun} `{field}` has map key {show(key)}, which YAML reads as {kind(key)}; "
         "map keys must be strings"
     )
     if type(key) is bool:
@@ -299,104 +386,9 @@ def _is_iso_datetime(text: str) -> bool:
     return True
 
 
-def _check_relation(
-    entity: MarkdownFile,
-    relation: RelationDef,
-    resolve: Resolver,
-    lookup: FileLookup,
-) -> tuple[list[Issue], int]:
-    assert entity.frontmatter is not None
-    name = relation.name
-    value = entity.frontmatter.get(name)
-    key_line = entity.key_lines.get(name)
-
-    def issue(code: str, message: str, line: int | None = key_line) -> Issue:
-        return Issue(code=code, path=entity.path, line=line, field=name, message=message)
-
-    if is_absent_relation(value):
-        if not relation.required:
-            return [], 0
-        return [
-            issue(
-                "relation-missing",
-                f"required relation `{name}` (target type `{relation.target}`) "
-                "is missing or empty; add at least one reference",
-            )
-        ], 0
-
-    references: list[tuple[str, int | None]] = []
-    if isinstance(value, str):
-        references.append((value, key_line))
-    elif isinstance(value, list):
-        problems: list[Issue] = []
-        for index, item in enumerate(value):
-            item_line = entity.item_lines.get((name, index), key_line)
-            if isinstance(item, str) and item:
-                references.append((item, item_line))
-            elif isinstance(item, list):
-                problems.append(issue("relation-invalid-value", _nested_list_hint(name), item_line))
-            else:
-                problems.append(
-                    issue(
-                        "relation-invalid-value",
-                        f"relation `{name}` item {index + 1} must be a non-empty string, "
-                        f"got {kind(item)} {show(item)}",
-                        item_line,
-                    )
-                )
-        if problems:
-            return problems, 0
-    else:
-        return [
-            issue(
-                "relation-invalid-value",
-                f"relation `{name}` must be a reference string or a list of them, "
-                f"got {kind(value)} {show(value, entity.raw.get(name))}",
-            )
-        ], 0
-
-    issues: list[Issue] = []
-    resolved_count = 0
-    for reference, line in references:
-        try:
-            resolved = resolve(entity.path, reference)
-        except LinkError as exc:
-            issues.append(issue(exc.code, f"relation `{name}`: {exc.message}", line))
-            continue
-        target = lookup(resolved.target)
-        if not target.is_entity:
-            reason = (
-                f"its frontmatter is invalid ({target.error})"
-                if target.error is not None
-                else "it has no frontmatter `type`"
-            )
-            issues.append(
-                issue(
-                    "relation-target-not-entity",
-                    f"relation `{name}` points to {resolved.label}, "
-                    f"which is not a Knott entity: {reason}",
-                    line,
-                )
-            )
-            continue
-        if target.type != relation.target:
-            issues.append(
-                issue(
-                    "relation-target-type-mismatch",
-                    f"relation `{name}` expects target type `{relation.target}`\n"
-                    f"but {resolved.label} has type "
-                    f"{show(target.type, target.raw.get('type'))}",
-                    line,
-                )
-            )
-            continue
-        resolved_count += 1
-    return issues, resolved_count
-
-
-def _nested_list_hint(name: str) -> str:
+def _nested_list_hint(field: str) -> str:
     return (
-        f"relation `{name}` contains a nested list; an unquoted [[...]] is parsed by YAML "
+        f"relation `{field}` contains a nested list; an unquoted [[...]] is parsed by YAML "
         f"as a list. Quote the value; note that wikilinks are not supported, so use a "
         f"Markdown link such as {LINK_EXAMPLE}"
     )

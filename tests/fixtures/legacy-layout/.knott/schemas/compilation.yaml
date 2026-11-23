@@ -1,0 +1,11 @@
+type: compilation
+attributes:
+  title:
+    type: string
+relations:
+  sources:
+    target: script
+    required: true
+    description: Scripts collected here.
+  featured:
+    target: episode

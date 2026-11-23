@@ -10,7 +10,7 @@ concepts:
 ---
 # knott validate
 
-The primary command. It loads all schemas, then validates entities.
+The primary command. It loads every [concept file](../concepts/schema.md) in `.knott/concepts/`, then validates entities. A vault that still has `.knott/schemas/` reports only [`schema-legacy-layout`](../issues/schema-legacy-layout.md); run [`knott migrate`](migrate.md).
 
 | Invocation | Schemas checked | Entities checked |
 |---|---|---|
@@ -30,7 +30,7 @@ Success:
 ✓ vault is valid
 ```
 
-"Relations" counts each resolved reference, so a list of three counts as 3. On failure, each issue is printed, then `N validation errors`.
+"Schemas" counts the types loaded from concept files. "Relations" counts each resolved reference at any depth, so a list of three counts as 3. On failure, each issue is printed, then `N validation errors`.
 
 `--format json` prints `{"ok": …, "stats": {…}, "issues": [{code, path, line, field, message}]}`, the form agents should parse.
 

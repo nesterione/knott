@@ -25,3 +25,5 @@ affects:
 **Why.** Keywords nest the same way at every level, and an agent can read them without learning a mini-language. Closed objects exist because a misspelled nested key slipping through is exactly the problem this solves. Map keys are strings because issue paths and Obsidian both assume them.
 
 **Consequences.** Obsidian's property editor shows nested values as raw YAML; lists of text still edit natively. `knott types --verbose` and `knott view` show shapes in a compact form (`list of object`, `map of map of string`) with object fields indented below.
+
+**Amended 2026-11-23** by [0010](0010-concept-files-and-reference-properties.md): `attributes` and `relations` merge into one `properties` map, and `reference` becomes a shape. References may now appear inside structured values, which this decision left out. Union targets (#1) are `target: [a, b]` on the reference shape.

@@ -18,9 +18,9 @@ UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a
 runner = CliRunner()
 
 
-def _vault(tmp_path: Path, schema: str = "type: note\nkid: required\n") -> Path:
+def _vault(tmp_path: Path, schema: str = "name: note\nkid: required\n") -> Path:
     Knott.init(tmp_path)
-    (tmp_path / ".knott/schemas/note.yaml").write_text(schema)
+    (tmp_path / ".knott/concepts/note.md").write_text(f"---\n{schema}---\n")
     return tmp_path
 
 
@@ -127,7 +127,7 @@ def test_validate_fix_assigns_then_validates(tmp_path: Path) -> None:
 
 
 def test_validate_fix_respects_scope_and_optional_types(tmp_path: Path) -> None:
-    vault = _vault(tmp_path, "type: note\n")
+    vault = _vault(tmp_path, "name: note\n")
     _write(vault, "a.md", b"---\ntype: note\n---\n")
     _write(vault, "b.md", b"---\ntype: note\n---\n")
     result = Knott.open(vault).validate(["b.md"], fix=True)

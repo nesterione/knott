@@ -8,6 +8,12 @@ from pathlib import Path
 from knott.errors import VaultNotFoundError
 
 KNOTT_DIR = ".knott"
+CONCEPTS_DIR = f"{KNOTT_DIR}/concepts"
+"""Concept files: one Markdown file per type (decision 0010)."""
+RELATIONS_DIR = f"{KNOTT_DIR}/relations"
+"""Reserved for relation definitions (decision 0010), not supported yet."""
+LEGACY_SCHEMAS_DIR = f"{KNOTT_DIR}/schemas"
+"""The pre-0.5 schema folder; `knott migrate` converts it."""
 
 
 def find_vault_root(start: Path) -> Path:
