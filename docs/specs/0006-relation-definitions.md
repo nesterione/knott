@@ -49,7 +49,7 @@ description: This entity replaces the target. The target stays as history.
   | `acyclic` | no | `true` / `false`, default `false` |
 
 - `transitive` is reserved: using it is `schema-invalid-field` ("reserved, not supported yet"). Any other key is `schema-invalid-field` with a "did you mean" suggestion.
-- A file with no frontmatter, or invalid YAML, is `schema-invalid-yaml`. Two files with the same `name` are `schema-duplicate-relation`, reported at the second file in path order and naming both.
+- A file with no frontmatter, frontmatter that isn't a mapping, or invalid YAML, is `schema-invalid-yaml`. A file with a valid `name` still loads when an optional key is invalid; that key is dropped. Two files with the same `name` are `schema-duplicate-relation`, reported at the second file in path order and naming both.
 - A relation no property names is valid. It is listed by `types --verbose`.
 
 ### Naming a relation from a property
@@ -63,7 +63,7 @@ properties:
     items: { type: reference, target: concept, relation: about }
 ```
 
-- `relation:` is allowed on a `reference` shape only, at any depth. On a `list` or `map` it is `schema-invalid-field` with "put `relation:` on `items`" (or `values`). Its value must be a string.
+- `relation:` is allowed on a `reference` shape only, at any depth. On a `list` or `map` it is `schema-invalid-field` with "put `relation:` on `items`" (or `values`); on another shape, "only allowed when `type` is reference". Its value must be a string.
 - The property keeps its own `target`, `required` and `description`. The relation declares no source or target types and never adds a key to a concept.
 - A name no relation file defines is `relation-unknown`, at the `relation:` line. The reference still works as a plain reference.
 - Many properties may name one relation, in one concept or across concepts, under any key names.
@@ -77,7 +77,7 @@ Run when the vault loads, on every command, after all concept and relation files
 | Two relations declare the same `inverse` | `relation-inverse-conflict` | the second file's `inverse:` line, naming both |
 | An `inverse` equals any relation's `name` | `relation-inverse-conflict` | the `inverse:` line |
 | An `inverse` equals its own `name` | `relation-inverse-conflict`, message suggests `symmetric: true` | the `inverse:` line |
-| An `inverse` equals a top-level property name of a concept that a property naming this relation can target | `relation-inverse-conflict`, naming the concept and property | the `inverse:` line |
+| An `inverse` equals a top-level property name of a concept that a property naming this relation can target | `relation-inverse-conflict`, naming the concept and property | the `inverse:` line, one issue per concept |
 | `symmetric: true` with an `inverse` | `relation-symmetric-mismatch` | the `inverse:` line |
 | `symmetric: true` with `acyclic: true` (every symmetric link is a two-step loop) | `relation-symmetric-mismatch` | the `acyclic:` line |
 | A property names a symmetric relation, but its known targets don't include the property's own concept | `relation-symmetric-mismatch` | the concept file's `relation:` line |
@@ -139,8 +139,8 @@ discussed_in
   issues/relation-invalid-value.md         issue_code  about
 
 related
-  concepts/entity.md   concept  related[0]  ⇄
-  concepts/schema.md   concept  related[1]  ←
+  concepts/entity.md  concept  related[0]  ⇄
+  concepts/schema.md  concept  related[1]  ←
 
 ← guide.concepts[]
   guides/writing-schemas.md  guide  concepts[2]

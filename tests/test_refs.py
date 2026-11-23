@@ -211,6 +211,55 @@ def test_api_invalid_frontmatter(copy_fixture: Callable[[str], Path]) -> None:
         _refs("concepts/broken.md", root)
 
 
+def test_api_hidden_folder_is_not_an_entity(copy_fixture: Callable[[str], Path]) -> None:
+    root = copy_fixture(VAULT)
+    (root / ".drafts").mkdir()
+    (root / ".drafts/x.md").write_text("---\ntype: concept\n---\n")
+    with pytest.raises(KnottError, match=r"not a Knott entity: \.drafts/x\.md"):
+        _refs(".drafts/x.md", root)
+
+
+def test_non_string_type_is_shown_in_yaml_form(copy_fixture: Callable[[str], Path]) -> None:
+    # Regression: a list `type` was shown as "[…]` (2 items)".
+    root = copy_fixture(VAULT)
+    (root / "concepts/odd.md").write_text("---\ntype: [concept, guide]\n---\n")
+    (root / "concepts/num.md").write_text("---\ntype: 7\n---\n")
+    assert _refs("concepts/odd.md", root).entity.type == "[concept, guide]"
+    assert _refs("concepts/num.md", root).entity.type == "7"
+
+
+def test_shared_inverse_symmetric_inverse_and_field_order(tmp_path: Path) -> None:
+    Knott.init(tmp_path)
+    knott_dir = tmp_path / ".knott"
+    (knott_dir / "concepts/n.md").write_text(
+        "---\nname: n\nproperties:\n"
+        "  b: {type: reference, target: n, relation: rb}\n"
+        "  a: {type: list, items: {type: reference, target: n, relation: ra}}\n"
+        "  s: {type: reference, target: n, relation: symi}\n---\n"
+    )
+    (knott_dir / "relations").mkdir()
+    # `ra` and `rb` share an inverse (relation-inverse-conflict); `symi` is symmetric
+    # with an inverse (relation-symmetric-mismatch). Both still group.
+    (knott_dir / "relations/rb.md").write_text("---\nname: rb\ninverse: back\n---\n")
+    (knott_dir / "relations/ra.md").write_text("---\nname: ra\ninverse: back\n---\n")
+    (knott_dir / "relations/symi.md").write_text(
+        "---\nname: symi\nsymmetric: true\ninverse: symback\n---\n"
+    )
+    (tmp_path / "t.md").write_text("---\ntype: n\n---\n")
+    items = "".join("  - t.md\n" for _ in range(11))
+    (tmp_path / "src.md").write_text(f"---\ntype: n\nb: t.md\na:\n{items}s: t.md\n---\n")
+    groups = _brief(_refs("t.md", tmp_path))
+    # Two groups labelled `back`, one per relation, by relation name.
+    assert [(label, kind, rel) for label, kind, rel, _ in groups] == [
+        ("back", "inverse", "ra"),
+        ("back", "inverse", "rb"),
+        ("symback", "inverse", "symi"),
+    ]
+    # List items in list order: a[10] after a[9], not after a[1].
+    assert [field for _, field, _ in groups[0][3]] == [f"a[{i}]" for i in range(11)]
+    assert groups[2][3] == [("src.md", "s", "in")]
+
+
 # CLI
 
 

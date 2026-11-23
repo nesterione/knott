@@ -168,6 +168,8 @@ def test_empty_relations_folder_is_valid(tmp_path: Path) -> None:
             "a relation file needs YAML frontmatter",
         ),
         ("---\nname: [a\n---\n", 2, None, "schema-invalid-yaml", ""),
+        ("---\n- a\n---\n", 1, None, "schema-invalid-yaml", "must be a YAML mapping"),
+        ("---\n---\nbody\n", 1, None, "schema-invalid-yaml", "must be a YAML mapping"),
         ("---\nname: a\n", 1, None, "schema-invalid-yaml", "no closing `---` line"),
     ],
 )

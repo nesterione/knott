@@ -41,7 +41,7 @@ Types are separated by a blank line.
 
 ## Relations
 
-A vault with relation files gets a `relations:` section after the types, sorted by name. Each relation is one line with its name, then `inverse: <x>`, `symmetric` and `acyclic` as they apply, followed by its description and its guidance (the file's body), indented. From this folder:
+A vault with relation files gets a `relations:` section after the types, sorted by name. Each relation is one line with its name, then `inverse: <x>`, `symmetric` and `acyclic` as they apply, followed by its description and its guidance (the file's body), indented. From this folder, shortened (`amends` and most guidance left out):
 
 ```
 relations:

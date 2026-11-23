@@ -11,7 +11,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Protocol
 
-from knott._values import show
+import yaml
+
 from knott.models import Ref, RefDirection, RefGroup, RefKind
 from knott.vault.index import IndexedReference, VaultSession
 from knott.vault.kid import KID_KEY, is_canonical
@@ -58,7 +59,13 @@ def group_order(key: GroupKey) -> tuple[int, str, str]:
 
 def type_name(value: Any) -> str:
     """A frontmatter `type` as text: strings as written, other values in YAML form."""
-    return value if isinstance(value, str) else show(value).strip("`")
+    if isinstance(value, str):
+        return value
+    text = yaml.safe_dump(
+        value, default_flow_style=True, allow_unicode=True, sort_keys=False, width=float("inf")
+    ).strip()
+    # A plain scalar is dumped as a document with an explicit end marker.
+    return text.removesuffix("\n...")
 
 
 def entity_kid(session: VaultSession, path: str) -> str | None:
