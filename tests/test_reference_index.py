@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from pathlib import Path
+
 import pytest
 
 from knott import Knott
@@ -120,10 +123,17 @@ def test_index_is_built_once_per_session(monkeypatch: pytest.MonkeyPatch) -> Non
     assert len(calls) == len(session.all_markdown)
 
 
-def test_validate_does_not_build_the_index(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_validate_does_not_build_the_index_without_acyclic_relations(
+    monkeypatch: pytest.MonkeyPatch, copy_fixture: Callable[[str], Path]
+) -> None:
+    root = copy_fixture("reference-index")
+    (root / ".knott/relations/supersedes.md").write_text(
+        "---\nname: supersedes\ninverse: superseded_by\n---\n", encoding="utf-8"
+    )
+
     def fail(self: VaultSession) -> None:
         raise AssertionError("index built")
 
     monkeypatch.setattr(VaultSession, "references", fail)
-    result = Knott.open(fixture_path("reference-index")).validate()
+    result = Knott.open(root).validate()
     assert result.stats.relations == 8  # all indexed references but the wrong-type `see`

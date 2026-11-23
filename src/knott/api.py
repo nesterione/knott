@@ -22,7 +22,7 @@ from knott.models import (
     Stats,
     ValidationResult,
 )
-from knott.schema.loader import load_schemas
+from knott.schema.loader import load_ontology, load_schemas
 from knott.schema.migrate import migrate_vault
 from knott.schema.models import (
     AttributeDef,
@@ -33,6 +33,7 @@ from knott.schema.models import (
     shape_kind,
 )
 from knott.schema.validator import validate_entity
+from knott.vault.cycles import checked_relations, cycle_issues
 from knott.vault.discovery import CONCEPTS_DIR, KNOTT_DIR, find_vault_root, iter_markdown
 from knott.vault.entity import read_markdown
 from knott.vault.fix import insert_kid
@@ -178,7 +179,7 @@ class Knott:
         return fixed
 
     def _validate(self, paths: Sequence[str | Path] | None) -> ValidationResult:
-        schemas, issues = load_schemas(self.root)
+        schemas, relation_defs, issues = load_ontology(self.root)
         if any(i.code == "schema-legacy-layout" for i in issues):
             # Every entity would also be `entity-unknown-type`; report only the cause.
             return ValidationResult(issues=issues, stats=Stats(schemas=0, entities=0, relations=0))
@@ -222,6 +223,11 @@ class Knott:
             claims = session.kids()[kid]
             if len(claims) > 1:
                 issues.append(_duplicate_kid(kid, claims))
+
+        # The reference graph is built only when some property names an acyclic relation.
+        scope = None if paths is None else set(in_scope)
+        for name in checked_relations(schemas, relation_defs):
+            issues.extend(cycle_issues(session.references(), name, scope))
 
         stats = Stats(schemas=len(schemas), entities=entities, relations=relations)
         return ValidationResult(issues=_sorted(issues), stats=stats)
