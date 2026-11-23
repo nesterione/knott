@@ -24,3 +24,7 @@ class PathNotFoundError(KnottError):
 
 class PathOutsideVaultError(KnottError):
     """A path argument lies outside the vault root."""
+
+
+class MigrateError(KnottError):
+    """A legacy ``.knott/schemas/`` file cannot be converted to a concept file."""

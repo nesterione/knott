@@ -121,12 +121,12 @@ properties:                     # optional map: name → definition
 - Create: `src/knott/schema/migrate.py`
 - Create: `tests/test_migrate.py`
 
-- [ ] add `convert_legacy(data: dict, list_fields: set[str]) -> str` returning concept-file text (frontmatter only), following the conversion rules in Technical Details
-- [ ] add `legacy_list_fields(schema_type, relation_names, entities)` that returns the relation names any entity of that type stores as a YAML list
-- [ ] keep key order: `name`, `description`, `kid`, `properties` (attributes, then relations, each in file order)
-- [ ] write tests: scalar/nested attributes pass through unchanged; a relation becomes `reference`; a list-used relation becomes `list` of `reference` with `required` on the list; descriptions (incl. multi-line) survive; output re-parses to the expected dict
-- [ ] write tests for error cases: non-mapping input, missing `type`, unknown top-level keys raise `MigrateError` with the offending key
-- [ ] run tests - must pass before next task
+- [x] add `convert_legacy(data: dict, list_fields: set[str]) -> str` returning concept-file text (frontmatter only), following the conversion rules in Technical Details
+- [x] add `legacy_list_fields(schema_type, relation_names, entities)` that returns the relation names any entity of that type stores as a YAML list
+- [x] keep key order: `name`, `description`, `kid`, `properties` (attributes, then relations, each in file order)
+- [x] write tests: scalar/nested attributes pass through unchanged; a relation becomes `reference`; a list-used relation becomes `list` of `reference` with `required` on the list; descriptions (incl. multi-line) survive; output re-parses to the expected dict
+- [x] write tests for error cases: non-mapping input, missing `type`, unknown top-level keys raise `MigrateError` with the offending key
+- [x] run tests - must pass before next task
 
 ### Task 2: Reference shape, concept loader and fixture conversion
 
