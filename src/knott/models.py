@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -160,3 +161,57 @@ class Ontology(_Frozen):
     """Directory name of the vault root."""
     types: list[OntologyType]
     schema_issues: int
+
+
+RefKind = Literal["inverse", "symmetric", "relation", "property"]
+RefDirection = Literal["in", "out", "both"]
+
+
+class EntityRef(_Frozen):
+    """The entity whose references `Knott.refs()` lists."""
+
+    path: str
+    """Vault-relative POSIX path."""
+    type: str
+    """The frontmatter `type`, as written."""
+    kid: str | None
+    """The entity's `kid`, when it has a valid one."""
+
+
+class Ref(_Frozen):
+    """One linked entity in a reverse-lookup group."""
+
+    path: str
+    """Vault-relative path of the linked entity."""
+    type: str
+    """The linked entity's frontmatter `type`."""
+    kid: str | None
+    """The linked entity's `kid`, when it has a valid one."""
+    field: str
+    """Where the link is stored, e.g. ``affects[0]``: in the linked entity, or, for
+    direction ``out``, in the looked-up entity."""
+    line: int | None
+    """1-based line of that reference, in the file that stores it."""
+    direction: RefDirection
+    """``in`` (the linked entity stores it), ``out`` (only the looked-up entity stores
+    it) or ``both``. Always ``in`` outside symmetric groups."""
+
+
+class RefGroup(_Frozen):
+    """References that share a label: an inverse name, a relation, or a property."""
+
+    label: str
+    """``superseded_by``, ``related``, ``← about`` or ``← guide.concepts[]``."""
+    kind: RefKind
+    relation: str | None
+    """The relation the referring properties name; None for ``property`` groups."""
+    references: list[Ref]
+
+
+class Refs(_Frozen):
+    """Every reference in the vault that resolves to one entity (spec 0006)."""
+
+    entity: EntityRef
+    groups: list[RefGroup]
+    """``inverse``, ``symmetric`` and ``relation`` groups by label, then ``property``
+    groups by label."""

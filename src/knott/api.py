@@ -9,8 +9,9 @@ from importlib.metadata import version as _dist_version
 from pathlib import Path
 
 from knott import _yaml
-from knott.errors import ConfigError, PathNotFoundError, PathOutsideVaultError
+from knott.errors import ConfigError, KnottError, PathNotFoundError, PathOutsideVaultError
 from knott.models import (
+    EntityRef,
     FixedEntity,
     InitResult,
     Issue,
@@ -18,6 +19,7 @@ from knott.models import (
     Ontology,
     OntologyAttribute,
     OntologyType,
+    Refs,
     SchemaInfo,
     Stats,
     ValidationResult,
@@ -45,6 +47,8 @@ from knott.vault.kid import (
     is_canonical,
     new_kid,
 )
+from knott.vault.links import KID_PREFIX, LinkError
+from knott.vault.refs import entity_kid, reverse_lookup, type_name
 
 CONFIG_FILE = Path(KNOTT_DIR) / "config.yaml"
 
@@ -168,6 +172,45 @@ class Knott:
         result = self._validate(paths)
         return result.model_copy(update={"fixed": fixed}) if fixed else result
 
+    def refs(self, path_or_kid: str | Path) -> Refs:
+        """Every reference in the vault that resolves to one entity, grouped (spec 0006).
+
+        ``path_or_kid`` is an entity file (relative paths are resolved against the
+        vault root) or ``kid:<uuid>``. Does not validate: it works with the concepts
+        and relations that load. Raises ``PathNotFoundError`` when the path doesn't
+        exist, ``PathOutsideVaultError`` when it is outside the vault, and
+        ``KnottError`` when it isn't an entity or a `kid` matches no entity or several.
+        """
+        schemas, relations, _ = load_ontology(self.root)
+        session = VaultSession(self.root, schemas)
+        if isinstance(path_or_kid, str) and path_or_kid.strip().startswith(KID_PREFIX):
+            try:
+                target = session.resolve("", path_or_kid).target
+            except LinkError as error:
+                raise KnottError(error.message) from None
+        else:
+            target = self._entity_path(path_or_kid, session)
+        entity = session.lookup(target)
+        return Refs(
+            entity=EntityRef(
+                path=target, type=type_name(entity.type), kid=entity_kid(session, target)
+            ),
+            groups=reverse_lookup(session, relations, target),
+        )
+
+    def _entity_path(self, given: str | Path, session: VaultSession) -> str:
+        """The vault-relative path of the entity file ``given``."""
+        rel_posix = self._vault_relative(given)
+        parsed = session.lookup(rel_posix) if rel_posix in session.all_markdown else None
+        if parsed is not None and parsed.error is not None:
+            raise KnottError(f"cannot read the frontmatter of {rel_posix}: {parsed.error}")
+        if parsed is None or not parsed.is_entity:
+            raise KnottError(
+                f"not a Knott entity: {rel_posix}; expected a Markdown file in the vault "
+                "(outside `.knott/` and hidden folders) whose YAML frontmatter has a `type` key"
+            )
+        return rel_posix
+
     def _assign_kids(self, paths: Sequence[str | Path] | None) -> list[FixedEntity]:
         all_markdown = iter_markdown(self.root)
         in_scope = all_markdown if paths is None else self._scope(paths, all_markdown)[0]
@@ -240,21 +283,8 @@ class Knott:
         selected: set[str] = set()
         issues: list[Issue] = []
         for given in paths:
-            candidate = Path(given)
-            if not candidate.is_absolute():
-                candidate = self.root / candidate
-            if not candidate.exists():
-                raise PathNotFoundError(f"path does not exist: {given}")
-            # Resolve symlinks in the parent only, so a symlinked file keeps its own path.
-            absolute = Path(os.path.abspath(candidate))
-            absolute = absolute.parent.resolve() / absolute.name
-            try:
-                rel = absolute.relative_to(self.root)
-            except ValueError:
-                raise PathOutsideVaultError(
-                    f"path is outside the vault {self.root}: {given}"
-                ) from None
-            rel_posix = rel.as_posix()
+            rel_posix = self._vault_relative(given)
+            absolute = self.root / rel_posix
             if absolute.is_dir():
                 prefix = "" if rel_posix == "." else rel_posix + "/"
                 selected.update(p for p in all_markdown if p.startswith(prefix))
@@ -274,6 +304,26 @@ class Knott:
                     )
                 )
         return sorted(selected), issues
+
+    def _vault_relative(self, given: str | Path) -> str:
+        """``given`` as a vault-relative POSIX path (``.`` for the root).
+
+        Relative paths are resolved against the vault root. Raises
+        ``PathNotFoundError`` or ``PathOutsideVaultError``.
+        """
+        candidate = Path(given)
+        if not candidate.is_absolute():
+            candidate = self.root / candidate
+        if not candidate.exists():
+            raise PathNotFoundError(f"path does not exist: {given}")
+        # Resolve symlinks in the parent only, so a symlinked file keeps its own path.
+        absolute = Path(os.path.abspath(candidate))
+        absolute = absolute.parent.resolve() / absolute.name
+        try:
+            rel = absolute.relative_to(self.root)
+        except ValueError:
+            raise PathOutsideVaultError(f"path is outside the vault {self.root}: {given}") from None
+        return rel.as_posix()
 
     def _check_config(self) -> None:
         config = self.root / CONFIG_FILE

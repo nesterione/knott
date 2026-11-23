@@ -108,7 +108,9 @@ References are grouped by a **label**:
 
 - Properties from different concepts that name the same relation share one group. That is how `decision.affects` and `issue_code.about` both appear under `discussed_in`.
 - **Symmetric groups also include E's own outgoing references** at properties naming that relation. Each linked entity appears once, with direction `in` (only the other side stores it), `out` (only E stores it) or `both`. Storing a symmetric link on both sides is valid and is never reported.
-- Groups are ordered: `inverse`, `symmetric` and `relation` groups by label, then `property` groups by label. Within a group, references are ordered by source path, then field.
+- In a symmetric group, `field` and `line` say where the link is stored: the linked entity's reference for `in` and `both` (its first one, in schema order, when it has several), E's own reference for `out`. A self-reference at a symmetric property is `both`.
+- A relation that is both `symmetric` and has an `inverse` (already `relation-symmetric-mismatch`) is grouped by its inverse. Two relations that declare the same `inverse` (already `relation-inverse-conflict`) give two groups with the same label, one per relation.
+- Groups are ordered: `inverse`, `symmetric` and `relation` groups by label (then relation name), then `property` groups by label. Within a group, references are ordered by source path, then field in schema order (list items in list order); symmetric groups by linked entity's path.
 
 ## Issue codes
 
@@ -133,8 +135,8 @@ $ knott refs docs/concepts/relation.md
 concepts/relation.md  concept
 
 discussed_in
-  decisions/0003-source-side-relations.md   decision    affects[0]
-  issues/relation-invalid-value.md          issue_code  about
+  decisions/0003-source-side-relations.md  decision    affects[0]
+  issues/relation-invalid-value.md         issue_code  about
 
 related
   concepts/entity.md   concept  related[0]  ⇄
@@ -144,7 +146,15 @@ related
   guides/writing-schemas.md  guide  concepts[2]
 ```
 
-- Paths are vault-relative. In symmetric groups the last column is the direction: `←` (in), `→` (out), `⇄` (both). An entity nobody references prints its header line and `no references`.
+- The header line is the entity's vault-relative path, two spaces, and its type. Each group is preceded by a blank line, then its label, then one line per reference indented by two spaces. Within a group, every column but the last is padded to the group's widest value plus two spaces; lines have no trailing spaces.
+- Paths are vault-relative. In symmetric groups the last column is the direction: `←` (in), `→` (out), `⇄` (both). An entity nobody references prints its header line, a blank line and `no references`:
+
+  ```
+  $ knott refs docs/concepts/lonely.md
+  concepts/lonely.md  concept
+
+  no references
+  ```
 - `--format json`:
 
   ```json
@@ -159,7 +169,8 @@ related
   ```
 
   `relation` is `null` for `property` groups. `direction` is always `in` outside symmetric groups.
-- Exit codes: `0` on success, including no references. `1` when the vault has the legacy layout (the `schema-legacy-layout` issue goes to stderr, as for `types` and `view`). `2` when PATH doesn't exist, isn't inside the vault, isn't an entity, or a `kid:` matches no entity or several.
+- The vault is found from PATH's location, or from the current directory for `kid:`.
+- Exit codes: `0` on success, including no references. `1` when the vault has the legacy layout (the `schema-legacy-layout` issue goes to stderr, as for `types` and `view`). `2` when PATH doesn't exist, isn't inside the vault, isn't an entity (a file under `.knott/` or another hidden folder, a folder, a note without `type`, a file whose frontmatter can't be read), or a `kid:` is malformed or matches no entity or several.
 - `refs` does not validate the vault. Schema issues don't stop it; it works with the concepts and relations that loaded.
 
 ### `knott types --verbose`
@@ -175,7 +186,7 @@ related
 
 ### Python API
 
-- `Knott.refs(path_or_kid: str | Path) -> Refs`. `Refs` has `entity: EntityRef(path, type, kid)` and `groups: list[RefGroup(label, kind, relation, references: list[Ref(path, type, kid, field, line, direction)])]`. Raises `PathNotFoundError` / `KnottError` for the exit-2 cases.
+- `Knott.refs(path_or_kid: str | Path) -> Refs`. A relative path is resolved against the vault root, as in `validate`; the CLI passes an absolute path. `Refs` has `entity: EntityRef(path, type, kid)` and `groups: list[RefGroup(label, kind, relation, references: list[Ref(path, type, kid, field, line, direction)])]`. Raises `PathNotFoundError`, `PathOutsideVaultError` or `KnottError` for the exit-2 cases. `type` is the frontmatter `type` as written (a non-string in YAML form).
 - `Ontology.relations: list[RelationDefinition(name, description, inverse, symmetric, acyclic, guidance, path)]`.
 - `OntologyAttribute.relation: str | None` on reference nodes.
 
