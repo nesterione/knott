@@ -65,7 +65,7 @@ class OntologyAttribute(_Frozen):
     name: str | None
     """Field name; None for a list's `items` or a map's `values`."""
     type: str
-    """A scalar type name, or `list`, `object` or `map`."""
+    """A scalar type name, or `list`, `object`, `map` or `reference`."""
     required: bool
     description: str | None
     items: OntologyAttribute | None = None
@@ -74,23 +74,20 @@ class OntologyAttribute(_Frozen):
     """For a `map`: the definition of each value (keys are free strings)."""
     fields: list[OntologyAttribute] = []
     """For an `object`: its declared fields, in schema order."""
+    targets: list[str] = []
+    """For a `reference`: target types that some concept defines, in schema order."""
+    unknown_targets: list[str] = []
+    """For a `reference`: target types no concept defines (shown, never enforced)."""
 
     @property
     def notation(self) -> str:
-        """Compact form of the type, e.g. ``list of object`` or ``map of map of string``."""
+        """Compact form of the type, e.g. ``list of object`` or ``list of reference → a | b``."""
         inner = self.items or self.values
-        return self.type if inner is None else f"{self.type} of {inner.notation}"
-
-
-class OntologyRelation(_Frozen):
-    """A typed relation from one type to another."""
-
-    name: str
-    target: str
-    required: bool
-    description: str | None
-    target_known: bool
-    """False when no schema defines the target type."""
+        if inner is not None:
+            return f"{self.type} of {inner.notation}"
+        if self.targets:
+            return f"{self.type} → {' | '.join(self.targets)}"
+        return self.type
 
 
 class OntologyType(_Frozen):
@@ -104,12 +101,38 @@ class OntologyType(_Frozen):
     """Markdown files whose frontmatter `type` is this type."""
     kid_required: bool = False
     """The schema says `kid: required`."""
-    attributes: list[OntologyAttribute]
-    relations: list[OntologyRelation]
+    properties: list[OntologyAttribute]
+    """Top-level properties in schema order; references are properties too."""
+    template: str | None = None
+    """The concept file's body: a template for entity bodies. None when blank."""
+
+    def references(self) -> list[tuple[str, OntologyAttribute]]:
+        """Every reference property at any depth, in schema order, with its path.
+
+        Paths use ``[]`` for a list's items and ``*`` for a map's values, e.g.
+        ``derived_from``, ``sources[]``, ``speakers[].person``, ``roles.*``.
+        """
+        found: list[tuple[str, OntologyAttribute]] = []
+        for prop in self.properties:
+            _collect_references(prop, prop.name or "", found)
+        return found
+
+
+def _collect_references(
+    node: OntologyAttribute, path: str, found: list[tuple[str, OntologyAttribute]]
+) -> None:
+    if node.type == "reference":
+        found.append((path, node))
+    elif node.items is not None:
+        _collect_references(node.items, f"{path}[]", found)
+    elif node.values is not None:
+        _collect_references(node.values, f"{path}.*", found)
+    for field in node.fields:
+        _collect_references(field, f"{path}.{field.name}", found)
 
 
 class Ontology(_Frozen):
-    """The vault's types and the typed relations between them."""
+    """The vault's types and the references between them."""
 
     vault: str
     """Directory name of the vault root."""

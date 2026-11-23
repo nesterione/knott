@@ -16,7 +16,6 @@ from knott.models import (
     Issue,
     Ontology,
     OntologyAttribute,
-    OntologyRelation,
     OntologyType,
     SchemaInfo,
     Stats,
@@ -110,11 +109,12 @@ class Knott:
         return _sorted(issues)
 
     def ontology(self) -> Ontology:
-        """The vault's types, their attributes and relations, and entity counts.
+        """The vault's types, their properties and templates, and entity counts.
 
-        Types are sorted by name; attributes and relations keep their schema order,
-        with relations to undefined types last (``target_known=False``). Files with
-        invalid frontmatter are not counted.
+        Types are sorted by name; properties keep their schema order, references
+        included (``type == "reference"``, at any depth). Target types no concept
+        defines are listed in ``unknown_targets``. Files with invalid frontmatter
+        are not counted.
         """
         schemas, issues = load_schemas(self.root)
         counts: dict[str, int] = {}
@@ -123,25 +123,6 @@ class Knott:
             if parsed.error is None and parsed.is_entity and isinstance(parsed.type, str):
                 counts[parsed.type] = counts.get(parsed.type, 0) + 1
 
-        # TODO(Task 4): `properties` replaces `attributes` / `relations` in the public model.
-        def is_relation(a: AttributeDef) -> bool:
-            shape = a.shape.items.shape if isinstance(a.shape, ListShape) else a.shape
-            return isinstance(shape, ReferenceShape)
-
-        def relations(a: AttributeDef, known: bool) -> list[OntologyRelation]:
-            shape = a.shape.items.shape if isinstance(a.shape, ListShape) else a.shape
-            assert isinstance(shape, ReferenceShape) and a.name is not None
-            return [
-                OntologyRelation(
-                    name=a.name,
-                    target=target,
-                    required=a.required,
-                    description=a.description,
-                    target_known=known,
-                )
-                for target in (shape.targets if known else shape.unknown)
-            ]
-
         types = [
             OntologyType(
                 type=s.type,
@@ -149,13 +130,8 @@ class Knott:
                 path=s.path,
                 count=counts.get(s.type, 0),
                 kid_required=s.kid_required,
-                attributes=[
-                    _ontology_attribute(a) for a in s.properties.values() if not is_relation(a)
-                ],
-                relations=[
-                    r for a in s.properties.values() if is_relation(a) for r in relations(a, True)
-                ]
-                + [r for a in s.properties.values() if is_relation(a) for r in relations(a, False)],
+                properties=[_ontology_attribute(a) for a in s.properties.values()],
+                template=s.template,
             )
             for _, s in sorted(schemas.items())
         ]
@@ -328,6 +304,8 @@ def _ontology_attribute(a: AttributeDef) -> OntologyAttribute:
             if isinstance(shape, ObjectShape)
             else []
         ),
+        targets=list(shape.targets) if isinstance(shape, ReferenceShape) else [],
+        unknown_targets=list(shape.unknown) if isinstance(shape, ReferenceShape) else [],
     )
 
 

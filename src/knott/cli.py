@@ -70,25 +70,15 @@ def format_issue(issue: Issue) -> str:
 
 
 def format_type(t: OntologyType) -> str:
-    """A type with its description, attributes (nested shapes indented) and relations."""
+    """A type with its description and properties (nested shapes indented)."""
     lines = [f"{t.type}  ({t.path})"]
     if t.description:
         lines += [f"  {line}" for line in t.description.strip().splitlines()]
     if t.kid_required:
         lines.append("  kid: required")
-    if t.attributes:
-        lines.append("  attributes:")
-        lines += _attribute_lines(t.attributes, "    ")
-    if t.relations:
-        lines.append("  relations:")
-        width = max(len(_label(r.name, r.required)) for r in t.relations)
-        for r in t.relations:
-            line = f"    {_label(r.name, r.required):<{width}}  → {r.target}"
-            if not r.target_known:
-                line += " (undefined type)"
-            if r.description:
-                line += f"  {_one_line(r.description)}"
-            lines.append(line)
+    if t.properties:
+        lines.append("  properties:")
+        lines += _attribute_lines(t.properties, "    ")
     return "\n".join(lines)
 
 

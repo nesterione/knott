@@ -199,7 +199,7 @@ def test_types_verbose(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "  Transcript of recorded spoken content.\n" in result.output
 
 
-def test_types_verbose_shows_nested_attributes_and_relations(
+def test_types_verbose_shows_nested_properties_and_references(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(fixture_path("structured-attributes"))
@@ -208,7 +208,7 @@ def test_types_verbose_shows_nested_attributes_and_relations(
     assert result.output == (
         "lexeme  (.knott/concepts/lexeme.md)\n"
         "  A word with its senses and forms.\n"
-        "  attributes:\n"
+        "  properties:\n"
         "    lemma*   string\n"
         "    tags     list of string\n"
         "    senses*  list of object        The meanings of the word.\n"
@@ -222,7 +222,9 @@ def test_types_verbose_shows_nested_attributes_and_relations(
     )
     monkeypatch.chdir(fixture_path("valid-vault"))
     result = runner.invoke(app, ["types", "--verbose"])
-    assert "  relations:\n    reviews*  → transcript\n    sources   → script\n" in result.output
+    assert (
+        "    reviews*     reference → transcript\n    sources      reference → script\n"
+    ) in result.output
     assert "\n\nscript  (" in result.output
 
 

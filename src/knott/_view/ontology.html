@@ -126,16 +126,30 @@ const DATA = /*__DATA__*/;
 // ---------- model ----------
 // Lookups keyed by type name have no prototype, so names like "constructor" stay plain keys.
 const dict = () => Object.create(null);
-const nodes = DATA.types.map(t => ({ id: t.type, ghost: false, count: t.count, kidRequired: t.kid_required, description: t.description, attributes: t.attributes, x: 0, y: 0, w: 0, h: 34 }));
+const nodes = DATA.types.map(t => ({ id: t.type, ghost: false, count: t.count, kidRequired: t.kid_required, description: t.description, properties: t.properties, x: 0, y: 0, w: 0, h: 34 }));
 const byId = dict();
 for (const n of nodes) byId[n.id] = n;
 const edges = [], pairs = dict();
-for (const t of DATA.types) for (const r of t.relations) {
-  if (!r.target_known && !byId[r.target]) { // relation to a type with no schema: synthetic ghost node
-    const g = { id: r.target, ghost: true, x: 0, y: 0, w: 0, h: 34 };
+// Reference properties at any depth, as OntologyType.references() walks them:
+// "[]" for a list's items, ".*" for a map's values, ".field" for an object's fields.
+const references = (list, out = []) => {
+  for (const a of list) {
+    const walk = (node, path, required) => {
+      if (node.type === "reference") out.push({ path, node, required });
+      else if (node.items) walk(node.items, path + "[]", required);
+      else if (node.values) walk(node.values, path + ".*", required);
+      for (const f of node.fields || []) walk(f, path + "." + f.name, f.required);
+    };
+    walk(a, a.name, a.required);
+  }
+  return out;
+};
+for (const t of DATA.types) for (const r of references(t.properties)) for (const [target, known] of [...r.node.targets.map(x => [x, true]), ...r.node.unknown_targets.map(x => [x, false])]) {
+  if (!known && !byId[target]) { // reference to a type with no concept: synthetic ghost node
+    const g = { id: target, ghost: true, x: 0, y: 0, w: 0, h: 34 };
     nodes.push(g); byId[g.id] = g;
   }
-  const e = { s: t.type, t: r.target, name: r.name, req: r.required, desc: r.description };
+  const e = { s: t.type, t: target, name: r.path, req: r.required, desc: r.node.description };
   (pairs[JSON.stringify([e.s, e.t].sort())] ||= []).push(e);
   edges.push(e);
 }
@@ -444,7 +458,7 @@ function focusOn(id) {
   }
   for (const n of nodes) { n.g.classList.toggle("hot", near.has(n.id)); n.g.classList.toggle("sel", n.id === selected); }
 }
-const notation = a => (a.items || a.values) ? `${a.type} of ${notation(a.items || a.values)}` : a.type;
+const notation = a => (a.items || a.values) ? `${a.type} of ${notation(a.items || a.values)}` : a.targets && a.targets.length ? `${a.type} → ${a.targets.join(" | ")}` : a.type;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const link = id => `<a data-go="${esc(id)}">${esc(id)}</a>`;
 function select(id) {
@@ -475,8 +489,8 @@ function showPanel(id) {
     ? `<div class="sub ghostnote">undefined type — no schema</div>`
     : `<div class="sub">${plural(n.count, "entity", "entities")}${n.kidRequired ? " · kid required" : ""}</div>${n.description ? `<p>${esc(n.description)}</p>` : ""}`;
   const own = n.ghost ? "" : `
-    <h3>Attributes</h3>
-    ${n.attributes.length ? `<table>${attrRows(n.attributes)}</table>` : '<div class="empty">None</div>'}
+    <h3>Properties</h3>
+    ${n.properties.length ? `<table>${attrRows(n.properties)}</table>` : '<div class="empty">None</div>'}
     <h3>Relations out</h3>
     ${out.length ? `<table>${out.map(e => row(esc(e.name), "→ " + link(e.t), e.req, e.desc)).join("")}</table>` : '<div class="empty">None</div>'}`;
   panel.innerHTML = `

@@ -109,7 +109,7 @@ def _ontology_vault(root: Path) -> Path:
     return root
 
 
-def test_ontology_types_relations_and_counts(tmp_path: Path) -> None:
+def test_ontology_types_properties_and_counts(tmp_path: Path) -> None:
     ontology = Knott.open(_ontology_vault(tmp_path / "vault")).ontology()
 
     assert ontology.vault == "vault"
@@ -117,22 +117,36 @@ def test_ontology_types_relations_and_counts(tmp_path: Path) -> None:
     assert [t.type for t in ontology.types] == ["company", "person"]
     company, person = ontology.types
     assert company.count == 1
-    assert company.attributes == []
-    assert company.relations == []
+    assert company.properties == []
+    assert company.template is None
+    assert company.references() == []
     assert person.count == 2  # broken.md (invalid frontmatter) is skipped
     assert person.description == "A human."
     assert person.path == ".knott/concepts/person.md"
-    scalar: dict[str, object] = {"items": None, "values": None, "fields": []}
-    assert [a.model_dump() for a in person.attributes] == [
+    scalar: dict[str, object] = {
+        "items": None,
+        "values": None,
+        "fields": [],
+        "targets": [],
+        "unknown_targets": [],
+    }
+    assert [a.model_dump() for a in person.properties[:2]] == [
         {"name": "name", "type": "string", "required": True, "description": "Full name.", **scalar},
         {"name": "born", "type": "date", "required": False, "description": None, **scalar},
     ]
-    assert [(r.name, r.target, r.required, r.target_known) for r in person.relations] == [
-        ("manager", "person", False, True),
-        ("employer", "company", True, True),
-        ("pet", "animal", False, False),
+    assert [
+        (a.name, a.type, a.required, a.targets, a.unknown_targets, a.description)
+        for a in person.properties[2:]
+    ] == [
+        ("manager", "reference", False, ["person"], [], None),
+        ("pet", "reference", False, [], ["animal"], "Missing type."),
+        ("employer", "reference", True, ["company"], [], None),
     ]
-    assert person.relations[2].description == "Missing type."
+    assert [(path, a.notation) for path, a in person.references()] == [
+        ("manager", "reference → person"),
+        ("pet", "reference"),
+        ("employer", "reference → company"),
+    ]
 
 
 def test_ontology_type_without_entities_has_zero_count(tmp_path: Path) -> None:
@@ -169,7 +183,7 @@ def test_ontology_is_json_serialisable(tmp_path: Path) -> None:
 def test_ontology_mirrors_structured_attributes() -> None:
     ontology = Knott.open(fixture_path("structured-attributes")).ontology()
     (lexeme,) = ontology.types
-    by_name = {a.name: a for a in lexeme.attributes}
+    by_name = {a.name: a for a in lexeme.properties}
     assert by_name["lemma"] == OntologyAttribute(
         name="lemma", type="string", required=True, description=None
     )
@@ -190,4 +204,61 @@ def test_ontology_mirrors_structured_attributes() -> None:
     assert forms.values is not None and forms.values.values is not None
     assert forms.values.values.type == "string"
     assert [f.name for f in by_name["review"].fields] == ["type", "done"]
+    assert type(ontology).model_validate_json(ontology.model_dump_json()) == ontology
+
+
+def test_ontology_nested_references() -> None:
+    ontology = Knott.open(fixture_path("nested-references")).ontology()
+    episode = next(t for t in ontology.types if t.type == "episode")
+    assert [a.name for a in episode.properties] == ["title", "speakers", "hosts", "production"]
+    speakers = episode.properties[1]
+    assert speakers.notation == "list of object"
+    assert speakers.items is not None
+    person = speakers.items.fields[0]
+    assert (person.name, person.type, person.required, person.targets) == (
+        "person",
+        "reference",
+        True,
+        ["person"],
+    )
+    assert episode.properties[2].notation == "map of reference → person"
+    assert [(path, a.targets) for path, a in episode.references()] == [
+        ("speakers[].person", ["person"]),
+        ("hosts.*", ["person"]),
+        ("production.team", ["team"]),
+    ]
+    assert episode.template is None
+
+
+def test_ontology_union_and_unknown_targets() -> None:
+    ontology = Knott.open(fixture_path("union-target")).ontology()
+    note = next(t for t in ontology.types if t.type == "note")
+    refs = {path: a for path, a in note.references()}
+    assert list(refs) == ["about", "sources[]", "mystery"]
+    assert (refs["about"].targets, refs["about"].unknown_targets) == (["episode", "meeting"], [])
+    assert (refs["sources[]"].targets, refs["sources[]"].unknown_targets) == (
+        ["episode", "meeting"],
+        ["podcast"],
+    )
+    assert note.properties[1].notation == "list of reference → episode | meeting"
+    # every target unknown: the reference stays, with no known targets
+    assert (refs["mystery"].targets, refs["mystery"].unknown_targets) == ([], ["podcast", "show"])
+    assert refs["mystery"].notation == "reference"
+    assert ontology.schema_issues == 3  # podcast (sources), podcast and show (mystery)
+
+
+def test_ontology_template_is_the_concept_body(tmp_path: Path) -> None:
+    concepts = tmp_path / ".knott" / "concepts"
+    body = "## Summary\n<!-- One paragraph: what was decided. -->\n\n## Why\n"
+    _write(concepts / "decision.md", f"---\nname: decision\n---\n{body}")
+    _write(concepts / "blank.md", "---\nname: blank\n---\n\n   \n")
+    _write(concepts / "bare.md", "---\nname: bare\n---\n")
+    types = {t.type: t for t in Knott.open(tmp_path).ontology().types}
+    assert types["decision"].template == body
+    assert types["blank"].template is None
+    assert types["bare"].template is None
+    for t in types.values():
+        assert t.properties == []
+        assert t.references() == []
+    ontology = Knott.open(tmp_path).ontology()
     assert type(ontology).model_validate_json(ontology.model_dump_json()) == ontology

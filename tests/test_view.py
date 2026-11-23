@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
-from knott import Knott, Ontology, OntologyAttribute, OntologyRelation, OntologyType, view
+from knott import Knott, Ontology, OntologyAttribute, OntologyType, view
 from knott.view import PLACEHOLDER, render_ontology
 
 HOSTILE = "Ends here </script><script>alert(1)</script> and <!--<script> too."
@@ -21,27 +21,32 @@ def _ontology(description: str | None = "A task.") -> Ontology:
             OntologyType(
                 type="task",
                 description=description,
-                path=".knott/schemas/task.yaml",
+                path=".knott/concepts/task.md",
                 count=3,
-                attributes=[
-                    OntologyAttribute(name="title", type="string", required=True, description=None)
-                ],
-                relations=[
-                    OntologyRelation(
+                properties=[
+                    OntologyAttribute(name="title", type="string", required=True, description=None),
+                    OntologyAttribute(
                         name="blocked_by",
-                        target="task",
+                        type="list",
                         required=False,
                         description="Tasks that must finish first.",
-                        target_known=True,
+                        items=OntologyAttribute(
+                            name=None,
+                            type="reference",
+                            required=False,
+                            description=None,
+                            targets=["task"],
+                        ),
                     ),
-                    OntologyRelation(
+                    OntologyAttribute(
                         name="owner",
-                        target="person",
+                        type="reference",
                         required=True,
                         description=None,
-                        target_known=False,
+                        unknown_targets=["person"],
                     ),
                 ],
+                template="## Notes\n<!-- What is left to do. -->\n",
             )
         ],
     )
@@ -104,9 +109,18 @@ def test_template_reads_model_fields() -> None:
     template = view._template()
     reads: dict[type[BaseModel], list[str]] = {
         Ontology: ["vault", "types", "schema_issues"],
-        OntologyType: ["type", "description", "count", "kid_required", "attributes", "relations"],
-        OntologyAttribute: ["name", "type", "required", "description", "items", "values", "fields"],
-        OntologyRelation: ["name", "target", "required", "description", "target_known"],
+        OntologyType: ["type", "description", "count", "kid_required", "properties"],
+        OntologyAttribute: [
+            "name",
+            "type",
+            "required",
+            "description",
+            "items",
+            "values",
+            "fields",
+            "targets",
+            "unknown_targets",
+        ],
     }
     for model, names in reads.items():
         for name in names:
@@ -130,6 +144,6 @@ def test_render_keeps_nested_attribute_shapes() -> None:
     ontology = Knott.open(Path(__file__).parent / "fixtures" / "structured-attributes").ontology()
     embedded = _embedded(render_ontology(ontology))
     assert embedded == ontology
-    senses = next(a for a in embedded.types[0].attributes if a.name == "senses")
+    senses = next(a for a in embedded.types[0].properties if a.name == "senses")
     assert senses.items is not None
     assert [f.name for f in senses.items.fields] == ["id", "ru"]

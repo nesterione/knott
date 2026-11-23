@@ -174,12 +174,13 @@ properties:                     # optional map: name → definition
 - Modify: `src/knott/__init__.py`
 - Modify: `tests/test_api.py`
 
-- [ ] add `targets` / `unknown_targets` to `OntologyAttribute`, extend `notation`
-- [ ] replace `OntologyType.attributes`/`relations` with `properties`. Add `template` and `references()`. Delete `OntologyRelation` and its export
-- [ ] build properties recursively from `AttributeDef`, references included
-- [ ] write tests: ontology for a vault with nested + union references (`properties` order, `targets`, `unknown_targets`, `references()` paths like `speakers[].person`, `template` text)
-- [ ] write tests for edge cases: concept with no properties, blank body → `template is None`, all targets unknown
-- [ ] run tests - must pass before next task
+- [x] add `targets` / `unknown_targets` to `OntologyAttribute`, extend `notation`
+- [x] replace `OntologyType.attributes`/`relations` with `properties`. Add `template` and `references()`. Delete `OntologyRelation` and its export
+- [x] build properties recursively from `AttributeDef`, references included
+- [x] write tests: ontology for a vault with nested + union references (`properties` order, `targets`, `unknown_targets`, `references()` paths like `speakers[].person`, `template` text)
+- [x] write tests for edge cases: concept with no properties, blank body → `template is None`, all targets unknown
+- [x] run tests - must pass before next task
+- ➕ interim adaptation for Task 5: `types --verbose` prints one `properties:` list (references via `notation`), and the view walks `properties` for edges (ghost nodes for `unknown_targets`) and shows a "Properties" table; CLI/view tests updated accordingly
 
 ### Task 5: `knott types --verbose` and `knott view`
 
