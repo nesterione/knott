@@ -56,8 +56,6 @@
   .node .name { font-size: 13.5px; font-weight: 550; fill: var(--ink); }
   .node .count { font-size: 12px; fill: var(--muted); font-variant-numeric: tabular-nums; }
   .node:hover rect { stroke: var(--line); }
-  .node.ghost rect { fill: var(--bg); stroke: var(--line); stroke-dasharray: 4 3; }
-  .node.ghost .name { fill: var(--muted); font-style: italic; }
   .node.sel rect { stroke: var(--accent); fill: var(--accent-soft); }
   .dim .edge:not(.hot) { opacity: .15; }
   .dim .node:not(.hot) { opacity: .3; }
@@ -84,7 +82,12 @@
   aside td .d { display: block; color: var(--muted); font-family: inherit; font-size: 12px; margin-top: 1px; }
   aside a { color: var(--accent); text-decoration: none; cursor: pointer; }
   aside .req { color: var(--accent); }
-  aside .ghostnote { color: var(--muted); font-style: italic; }
+  aside .unknown { color: var(--muted); font-style: italic; }
+  aside details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+  aside pre {
+    margin: 8px 0 0; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere;
+  }
   aside .close { position: absolute; top: 14px; right: 16px; border: 0; background: none; color: var(--muted); font-size: 18px; cursor: pointer; }
   .empty { color: var(--muted); font-size: 13px; }
   @media (max-width: 640px) {
@@ -126,30 +129,15 @@ const DATA = /*__DATA__*/;
 // ---------- model ----------
 // Lookups keyed by type name have no prototype, so names like "constructor" stay plain keys.
 const dict = () => Object.create(null);
-const nodes = DATA.types.map(t => ({ id: t.type, ghost: false, count: t.count, kidRequired: t.kid_required, description: t.description, properties: t.properties, x: 0, y: 0, w: 0, h: 34 }));
+const nodes = DATA.types.map(t => ({ id: t.type, count: t.count, kidRequired: t.kid_required, description: t.description, properties: t.properties, template: t.template, x: 0, y: 0, w: 0, h: 34 }));
 const byId = dict();
 for (const n of nodes) byId[n.id] = n;
+// DATA.edges: one per known target of each reference property, labelled with its path
+// (OntologyType.references(): "[]" for list items, ".*" for map values, ".field" for object fields).
 const edges = [], pairs = dict();
-// Reference properties at any depth, as OntologyType.references() walks them:
-// "[]" for a list's items, ".*" for a map's values, ".field" for an object's fields.
-const references = (list, out = []) => {
-  for (const a of list) {
-    const walk = (node, path, required) => {
-      if (node.type === "reference") out.push({ path, node, required });
-      else if (node.items) walk(node.items, path + "[]", required);
-      else if (node.values) walk(node.values, path + ".*", required);
-      for (const f of node.fields || []) walk(f, path + "." + f.name, f.required);
-    };
-    walk(a, a.name, a.required);
-  }
-  return out;
-};
-for (const t of DATA.types) for (const r of references(t.properties)) for (const [target, known] of [...r.node.targets.map(x => [x, true]), ...r.node.unknown_targets.map(x => [x, false])]) {
-  if (!known && !byId[target]) { // reference to a type with no concept: synthetic ghost node
-    const g = { id: target, ghost: true, x: 0, y: 0, w: 0, h: 34 };
-    nodes.push(g); byId[g.id] = g;
-  }
-  const e = { s: t.type, t: target, name: r.path, req: r.required, desc: r.node.description };
+for (const d of DATA.edges) {
+  if (!byId[d.source] || !byId[d.target]) continue;
+  const e = { s: d.source, t: d.target, name: d.path, req: d.required };
   (pairs[JSON.stringify([e.s, e.t].sort())] ||= []).push(e);
   edges.push(e);
 }
@@ -169,7 +157,7 @@ const cubic = (t, p0, p1, p2, p3) => { const u = 1 - t; return u * u * u * p0 + 
 {
   const known = DATA.types.length, entities = DATA.types.reduce((a, t) => a + t.count, 0);
   document.getElementById("meta").textContent =
-    [DATA.vault, plural(known, "type", "types"), plural(edges.length, "relation", "relations"), plural(entities, "entity", "entities")].join(" · ");
+    [DATA.vault, plural(known, "type", "types"), plural(edges.length, "reference", "references"), plural(entities, "entity", "entities")].join(" · ");
   document.title = `${DATA.vault} · Knott Ontology`;
   if (DATA.schema_issues > 0) {
     const box = document.getElementById("issues");
@@ -181,12 +169,12 @@ const cubic = (t, p0, p1, p2, p3) => { const u = 1 - t; return u * u * u * p0 + 
 // ---------- render nodes ----------
 for (const n of nodes) {
   const nameW = textW(n.id, "550 13.5px -apple-system, system-ui, sans-serif");
-  const cntW = n.ghost ? 0 : textW(String(n.count), "12px -apple-system, system-ui, sans-serif") + 14;
+  const cntW = textW(String(n.count), "12px -apple-system, system-ui, sans-serif") + 14;
   n.w = Math.round(nameW + cntW + 32);
-  const g = el("g", { class: "node" + (n.ghost ? " ghost" : "") }, gN);
+  const g = el("g", { class: "node" }, gN);
   el("rect", { x: -n.w / 2, y: -n.h / 2, width: n.w, height: n.h, rx: n.h / 2 }, g);
   const t1 = el("text", { class: "name", x: -n.w / 2 + 16, y: 4.5 }, g); t1.textContent = n.id;
-  if (!n.ghost) { const t2 = el("text", { class: "count", x: n.w / 2 - 16, y: 4.5, "text-anchor": "end" }, g); t2.textContent = n.count; }
+  const t2 = el("text", { class: "count", x: n.w / 2 - 16, y: 4.5, "text-anchor": "end" }, g); t2.textContent = n.count;
   n.g = g;
   g.addEventListener("click", ev => { if (!dragMoved) select(n.id); ev.stopPropagation(); });
   g.addEventListener("mouseenter", () => focusOn(n.id));
@@ -295,7 +283,7 @@ function layered() {
   for (const n of nodes) rank[n.id] = 0;
   for (let i = 0; i < nodes.length; i++) for (const e of dag) rank[e.t] = Math.max(rank[e.t], rank[e.s] + 1);
   for (const e of edges) if (e.s !== e.t) { linked.add(e.s); linked.add(e.t); }
-  // types with no relations to others get their own trailing column
+  // types with no references to others get their own trailing column
   let cols = [];
   const lone = [];
   for (const n of nodes) if (linked.has(n.id)) (cols[rank[n.id]] ||= []).push(n); else lone.push(n);
@@ -331,8 +319,8 @@ function radial() {
   const indeg = dict();
   for (const n of nodes) indeg[n.id] = 0;
   for (const e of edges) if (e.s !== e.t) indeg[e.t]++;
-  // hub: a defined type with the highest in-degree; a tie goes to the first type by name
-  const hub = nodes.slice().sort((a, b) => a.ghost - b.ghost || indeg[b.id] - indeg[a.id] || a.id.localeCompare(b.id))[0];
+  // hub: the type with the highest in-degree; a tie goes to the first type by name
+  const hub = nodes.slice().sort((a, b) => indeg[b.id] - indeg[a.id] || a.id.localeCompare(b.id))[0];
   const [W, H] = size(), R = Math.max(Math.min(W, H) * 0.32, nodes.length * 26);
   hub.tx = W / 2; hub.ty = H / 2;
   const rest = nodes.filter(n => n !== hub);
@@ -458,8 +446,14 @@ function focusOn(id) {
   }
   for (const n of nodes) { n.g.classList.toggle("hot", near.has(n.id)); n.g.classList.toggle("sel", n.id === selected); }
 }
-const notation = a => (a.items || a.values) ? `${a.type} of ${notation(a.items || a.values)}` : a.targets && a.targets.length ? `${a.type} → ${a.targets.join(" | ")}` : a.type;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// escaped HTML; known targets link to their type, targets no concept defines are marked unknown
+const notation = a => {
+  const inner = a.items || a.values;
+  if (inner) return `${esc(a.type)} of ${notation(inner)}`;
+  const targets = [...a.targets.map(link), ...a.unknown_targets.map(x => `<span class="unknown" title="no concept defines this type">${esc(x)} (unknown)</span>`)];
+  return targets.length ? `${esc(a.type)} → ${targets.join(" | ")}` : esc(a.type);
+};
 const link = id => `<a data-go="${esc(id)}">${esc(id)}</a>`;
 function select(id) {
   const wasOpen = panel.classList.contains("open");
@@ -483,20 +477,19 @@ function showPanel(id) {
       if (inner.description) notes.push(`${node.items ? "each item" : "each value"}: ${inner.description}`);
       node = inner;
     }
-    return row(esc(a.name), esc(notation(a)), a.required, notes.join(" · "), depth) + attrRows(node.fields || [], depth + 1);
+    return row(esc(a.name), notation(a), a.required, notes.join(" · "), depth) + attrRows(node.fields || [], depth + 1);
   }).join("");
-  const head = n.ghost
-    ? `<div class="sub ghostnote">undefined type — no schema</div>`
-    : `<div class="sub">${plural(n.count, "entity", "entities")}${n.kidRequired ? " · kid required" : ""}</div>${n.description ? `<p>${esc(n.description)}</p>` : ""}`;
-  const own = n.ghost ? "" : `
-    <h3>Properties</h3>
-    ${n.properties.length ? `<table>${attrRows(n.properties)}</table>` : '<div class="empty">None</div>'}
-    <h3>Relations out</h3>
-    ${out.length ? `<table>${out.map(e => row(esc(e.name), "→ " + link(e.t), e.req, e.desc)).join("")}</table>` : '<div class="empty">None</div>'}`;
+  const head = `<div class="sub">${plural(n.count, "entity", "entities")}${n.kidRequired ? " · kid required" : ""}</div>${n.description ? `<p>${esc(n.description)}</p>` : ""}`;
   panel.innerHTML = `
     <button class="close" aria-label="Close">×</button>
     <h2>${esc(n.id)}</h2>
-    ${head}${own}
+    ${head}
+    <h3>Properties</h3>
+    ${n.properties.length ? `<table>${attrRows(n.properties)}</table>` : '<div class="empty">None</div>'}
+    <h3>Template</h3>
+    ${n.template !== null ? `<details><summary>Entity body template</summary><pre>${esc(n.template)}</pre></details>` : '<div class="empty">None</div>'}
+    <h3>References out</h3>
+    ${out.length ? `<table>${out.map(e => row(esc(e.name), "→ " + link(e.t), e.req)).join("")}</table>` : '<div class="empty">None</div>'}
     <h3>Referenced by</h3>
     ${inc.length ? `<table>${inc.map(e => row(link(e.s) + "." + esc(e.name), "", e.req)).join("")}</table>` : '<div class="empty">None</div>'}`;
   panel.classList.add("open");
@@ -513,7 +506,7 @@ addEventListener("resize", () => {
 });
 
 if (nodes.length) setMode(initialMode(), true);
-else document.querySelector(".hint").textContent = "No types to show — add schemas to .knott/schemas/";
+else document.querySelector(".hint").textContent = "No types to show — add concept files to .knott/concepts/";
 </script>
 </body>
 </html>

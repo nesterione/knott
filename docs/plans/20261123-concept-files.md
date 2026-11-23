@@ -190,11 +190,11 @@ properties:                     # optional map: name → definition
 - Modify: `src/knott/view.py` (if the payload builder lives there)
 - Modify: `tests/test_cli.py`, `tests/test_view.py`
 
-- [ ] `types --verbose`: one properties list in schema order, references shown as `derived_from → script`, `sources: list of reference → script | episode`, nested under objects as today. Add a `references` summary line per type, and show `template: yes/no`
-- [ ] view: draw edges from `references()` (one edge per target, labelled with the property path). The side panel shows one properties table and the template in a collapsible block
-- [ ] write tests: CLI output snapshot for nested/union references and unknown targets
-- [ ] write tests: view payload has edges for nested and union references and none for unknown targets; template included
-- [ ] run tests - must pass before next task
+- [x] `types --verbose`: one properties list in schema order, references shown as `derived_from → script`, `sources: list of reference → script | episode`, nested under objects as today. Add a `references` summary line per type, and show `template: yes/no`
+- [x] view: draw edges from `references()` (one edge per target, labelled with the property path). The side panel shows one properties table and the template in a collapsible block
+- [x] write tests: CLI output snapshot for nested/union references and unknown targets
+- [x] write tests: view payload has edges for nested and union references and none for unknown targets; template included
+- [x] run tests - must pass before next task
 
 ### Task 6: `knott migrate` and `knott init`
 

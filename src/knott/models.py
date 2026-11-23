@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -112,23 +114,32 @@ class OntologyType(_Frozen):
         Paths use ``[]`` for a list's items and ``*`` for a map's values, e.g.
         ``derived_from``, ``sources[]``, ``speakers[].person``, ``roles.*``.
         """
-        found: list[tuple[str, OntologyAttribute]] = []
-        for prop in self.properties:
-            _collect_references(prop, prop.name or "", found)
-        return found
+        return [(path, node) for path, node, _ in iter_reference_paths(self.properties)]
 
 
-def _collect_references(
-    node: OntologyAttribute, path: str, found: list[tuple[str, OntologyAttribute]]
-) -> None:
+def iter_reference_paths(
+    properties: list[OntologyAttribute],
+) -> Iterator[tuple[str, OntologyAttribute, bool]]:
+    """Walk references like `OntologyType.references`, also yielding whether each is required.
+
+    A reference is required when every named step on its path is required, so every
+    valid entity holds at least one value there.
+    """
+    for prop in properties:
+        yield from _walk_references(prop, prop.name or "", prop.required)
+
+
+def _walk_references(
+    node: OntologyAttribute, path: str, required: bool
+) -> Iterator[tuple[str, OntologyAttribute, bool]]:
     if node.type == "reference":
-        found.append((path, node))
+        yield path, node, required
     elif node.items is not None:
-        _collect_references(node.items, f"{path}[]", found)
+        yield from _walk_references(node.items, f"{path}[]", required)
     elif node.values is not None:
-        _collect_references(node.values, f"{path}.*", found)
+        yield from _walk_references(node.values, f"{path}.*", required)
     for field in node.fields:
-        _collect_references(field, f"{path}.{field.name}", found)
+        yield from _walk_references(field, f"{path}.{field.name}", required and field.required)
 
 
 class Ontology(_Frozen):

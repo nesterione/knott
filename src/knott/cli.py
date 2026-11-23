@@ -70,24 +70,36 @@ def format_issue(issue: Issue) -> str:
 
 
 def format_type(t: OntologyType) -> str:
-    """A type with its description and properties (nested shapes indented)."""
+    """A type with its description, summary lines and properties (nested shapes indented)."""
     lines = [f"{t.type}  ({t.path})"]
     if t.description:
         lines += [f"  {line}" for line in t.description.strip().splitlines()]
     if t.kid_required:
         lines.append("  kid: required")
+    lines.append(f"  template: {'yes' if t.template is not None else 'no'}")
+    paths = [path for path, _ in t.references()]
+    lines.append(f"  references: {', '.join(paths) if paths else 'none'}")
     if t.properties:
         lines.append("  properties:")
         lines += _attribute_lines(t.properties, "    ")
     return "\n".join(lines)
 
 
+def _notation(a: OntologyAttribute) -> str:
+    """`OntologyAttribute.notation`, with targets no concept defines marked `(unknown)`."""
+    inner = a.items or a.values
+    if inner is not None:
+        return f"{a.type} of {_notation(inner)}"
+    targets = [*a.targets, *(f"{name} (unknown)" for name in a.unknown_targets)]
+    return f"{a.type} → {' | '.join(targets)}" if targets else a.type
+
+
 def _attribute_lines(attributes: list[OntologyAttribute], indent: str) -> list[str]:
     width = max(len(_label(a.name or "", a.required)) for a in attributes)
-    type_width = max(len(a.notation) for a in attributes)
+    type_width = max(len(_notation(a)) for a in attributes)
     lines: list[str] = []
     for a in attributes:
-        line = f"{indent}{_label(a.name or '', a.required):<{width}}  {a.notation:<{type_width}}"
+        line = f"{indent}{_label(a.name or '', a.required):<{width}}  {_notation(a):<{type_width}}"
         if a.description:
             line += f"  {_one_line(a.description)}"
         lines.append(line.rstrip())
@@ -190,7 +202,7 @@ def types(
         typer.Option(
             "--verbose",
             "-v",
-            help="Show each type's schema file, description, attributes and relations.",
+            help="Show each type's concept file, description, template, references and properties.",
         ),
     ] = False,
 ) -> None:

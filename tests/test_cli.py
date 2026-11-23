@@ -208,6 +208,8 @@ def test_types_verbose_shows_nested_properties_and_references(
     assert result.output == (
         "lexeme  (.knott/concepts/lexeme.md)\n"
         "  A word with its senses and forms.\n"
+        "  template: no\n"
+        "  references: none\n"
         "  properties:\n"
         "    lemma*   string\n"
         "    tags     list of string\n"
@@ -226,6 +228,53 @@ def test_types_verbose_shows_nested_properties_and_references(
         "    reviews*     reference → transcript\n    sources      reference → script\n"
     ) in result.output
     assert "\n\nscript  (" in result.output
+
+
+def test_types_verbose_shows_nested_and_union_references(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(fixture_path("nested-references"))
+    result = runner.invoke(app, ["types", "--verbose"])
+    assert result.exit_code == 0
+    assert result.output.startswith(
+        "episode  (.knott/concepts/episode.md)\n"
+        "  template: no\n"
+        "  references: speakers[].person, hosts.*, production.team\n"
+        "  properties:\n"
+        "    title       string\n"
+        "    speakers    list of object\n"
+        "      person*  reference → person\n"
+        "      role     string\n"
+        "    hosts       map of reference → person\n"
+        "    production  object\n"
+        "      team  reference → team\n"
+        "\n"
+    )
+    monkeypatch.chdir(fixture_path("union-target"))
+    result = runner.invoke(app, ["types", "--verbose"])
+    assert result.exit_code == 1  # the unknown targets are schema issues
+    assert (
+        "note  (.knott/concepts/note.md)\n"
+        "  template: no\n"
+        "  references: about, sources[], mystery\n"
+        "  properties:\n"
+        "    about    reference → episode | meeting\n"
+        "    sources  list of reference → episode | meeting | podcast (unknown)\n"
+        "    mystery  reference → podcast (unknown) | show (unknown)\n"
+    ) in result.stdout
+    assert "  references: none\n" in result.stdout
+
+
+def test_types_verbose_shows_template(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    Knott.init(tmp_path)
+    concepts = tmp_path / ".knott" / "concepts"
+    (concepts / "note.md").write_text("---\nname: note\n---\n## Summary\n<!-- one line -->\n")
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["types", "--verbose"])
+    assert result.exit_code == 0
+    assert result.output == (
+        "note  (.knott/concepts/note.md)\n  template: yes\n  references: none\n"
+    )
 
 
 def test_types_lists_names_only(monkeypatch: pytest.MonkeyPatch) -> None:

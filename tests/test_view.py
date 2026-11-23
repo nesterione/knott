@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import BaseModel
@@ -58,9 +59,22 @@ def _json_slice(html: str) -> tuple[int, int]:
     return start, end
 
 
-def _embedded(html: str) -> Ontology:
+def _payload(html: str) -> dict[str, Any]:
     start, end = _json_slice(html)
-    return Ontology.model_validate(json.loads(html[start:end]))
+    data: dict[str, Any] = json.loads(html[start:end])
+    return data
+
+
+def _embedded(html: str) -> Ontology:
+    data = _payload(html)
+    data.pop("edges")
+    return Ontology.model_validate(data)
+
+
+def _edges(fixture: str) -> list[tuple[str, str, str, bool]]:
+    ontology = Knott.open(Path(__file__).parent / "fixtures" / fixture).ontology()
+    edges = _payload(render_ontology(ontology))["edges"]
+    return [(e["source"], e["target"], e["path"], e["required"]) for e in edges]
 
 
 def test_render_replaces_placeholder_with_model_json() -> None:
@@ -109,7 +123,7 @@ def test_template_reads_model_fields() -> None:
     template = view._template()
     reads: dict[type[BaseModel], list[str]] = {
         Ontology: ["vault", "types", "schema_issues"],
-        OntologyType: ["type", "description", "count", "kid_required", "properties"],
+        OntologyType: ["type", "description", "count", "kid_required", "properties", "template"],
         OntologyAttribute: [
             "name",
             "type",
@@ -126,6 +140,10 @@ def test_template_reads_model_fields() -> None:
         for name in names:
             assert name in model.model_fields, (model.__name__, name)
             assert re.search(rf"\.{name}\b", template), (model.__name__, name)
+    assert re.search(r"DATA\.edges\b", template)
+    edge = view.ontology_edges(_ontology())[0]
+    for key in edge:
+        assert re.search(rf"\.{key}\b", template), key
 
 
 def test_render_docs_vault() -> None:
@@ -147,3 +165,48 @@ def test_render_keeps_nested_attribute_shapes() -> None:
     senses = next(a for a in embedded.types[0].properties if a.name == "senses")
     assert senses.items is not None
     assert [f.name for f in senses.items.fields] == ["id", "ru"]
+
+
+def test_view_edges_for_nested_references() -> None:
+    # one edge per reference, labelled with its path; required only when every step is
+    assert _edges("nested-references") == [
+        ("episode", "person", "speakers[].person", False),
+        ("episode", "person", "hosts.*", False),
+        ("episode", "team", "production.team", False),
+    ]
+
+
+def test_view_edges_for_union_targets_skip_unknown_targets() -> None:
+    # `podcast` and `show` have no concept: no edge, and `mystery` (all unknown) has none
+    assert _edges("union-target") == [
+        ("note", "episode", "about", False),
+        ("note", "meeting", "about", False),
+        ("note", "episode", "sources[]", False),
+        ("note", "meeting", "sources[]", False),
+    ]
+
+
+def test_view_edge_required_follows_the_path() -> None:
+    ontology = _ontology()
+    assert view.ontology_edges(ontology) == [
+        {"source": "task", "target": "task", "path": "blocked_by[]", "required": False}
+    ]
+    owner = ontology.types[0].properties[2]
+    required = ontology.model_copy(
+        update={
+            "types": [
+                ontology.types[0].model_copy(
+                    update={"properties": [owner.model_copy(update={"targets": ["task"]})]}
+                )
+            ]
+        }
+    )
+    assert view.ontology_edges(required) == [
+        {"source": "task", "target": "task", "path": "owner", "required": True}
+    ]
+
+
+def test_view_payload_includes_template() -> None:
+    html = render_ontology(_ontology())
+    assert _payload(html)["types"][0]["template"] == "## Notes\n<!-- What is left to do. -->\n"
+    assert "<details>" in html
