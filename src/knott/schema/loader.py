@@ -1,4 +1,4 @@
-"""Schema discovery and parsing: ``.knott/schemas/**/*.yaml``."""
+"""Concept discovery and parsing: ``.knott/concepts/**/*.md`` (decision 0010)."""
 
 from __future__ import annotations
 
@@ -11,51 +11,90 @@ from knott._values import BOOLEAN_SPELLINGS, kind, show
 from knott.models import Issue
 from knott.schema.models import (
     COMPOUND_KINDS,
+    REFERENCE_KIND,
     AttributeDef,
     ListShape,
     MapShape,
     ObjectShape,
-    RelationDef,
+    ReferenceShape,
     ScalarType,
     Schema,
+    SchemaPath,
     Shape,
 )
-from knott.vault.discovery import KNOTT_DIR
+from knott.vault.discovery import CONCEPTS_DIR, LEGACY_SCHEMAS_DIR, RELATIONS_DIR
+from knott.vault.entity import FRONTMATTER_DELIMITER, MarkdownFile, parse_markdown
 
-SCHEMAS_DIR = Path(KNOTT_DIR) / "schemas"
 TYPE_NAME = re.compile(r"^[a-z][a-z0-9_-]*$")
+_LINE_BREAK = re.compile(r"\r?\n")
 
-_TOP_KEYS = ("type", "description", "kid", "attributes", "relations")
-# Top-level frontmatter keys that belong to knott, not to a schema's fields.
+_TOP_KEYS = ("name", "description", "kid", "properties")
+# Top-level keys with a targeted hint instead of the generic "unknown key".
+_TOP_KEY_HINTS = {
+    "type": "concept files use `name:`; `type:` belongs to entities",
+    "attributes": "merged into `properties` (decision 0010); run `knott migrate`",
+    "relations": "merged into `properties` (decision 0010); run `knott migrate`",
+}
+# Top-level frontmatter keys that belong to knott, not to a concept's properties.
 _RESERVED_FIELDS = {
     "type": "it is reserved for the entity type",
     "kid": "it is reserved for the knott-managed entity identity",
 }
 _DEFINITION_KEYS = ("type", "required", "description")
-_RELATION_KEYS = ("target", "required", "description")
-_ATTRIBUTE_TYPES = ", ".join([*(t.value for t in ScalarType), *COMPOUND_KINDS])
-# The key that nests the inner definition, by compound kind.
-_NESTING_KEYS = {"list": "items", "object": "fields", "map": "values"}
+_RESERVED_RELATION = "reserved for relation definitions, not supported yet"
+_PROPERTY_TYPES = ", ".join([*(t.value for t in ScalarType), *COMPOUND_KINDS, REFERENCE_KIND])
+# The key that nests the inner definition, by kind.
+_NESTING_KEYS = {"list": "items", "object": "fields", "map": "values", REFERENCE_KIND: "target"}
 _NESTING_EXAMPLES = {
     "list": "items: {type: string}",
     "object": "fields: {name: {type: string}}",
     "map": "values: {type: string}",
+    REFERENCE_KIND: "target: script",
 }
 
 
 def discover_schema_files(root: Path) -> list[str]:
-    schemas_dir = root / SCHEMAS_DIR
-    if not schemas_dir.is_dir():
+    """Vault-relative paths of every concept file, sorted."""
+    concepts_dir = root / CONCEPTS_DIR
+    if not concepts_dir.is_dir():
         return []
-    return sorted(
-        p.relative_to(root).as_posix() for p in schemas_dir.rglob("*.yaml") if p.is_file()
+    return sorted(p.relative_to(root).as_posix() for p in concepts_dir.rglob("*.md") if p.is_file())
+
+
+def legacy_layout_issue() -> Issue:
+    return Issue(
+        code="schema-legacy-layout",
+        path=LEGACY_SCHEMAS_DIR,
+        message=(
+            f"`{LEGACY_SCHEMAS_DIR}/` is the pre-0.5 schema layout; knott now reads concept "
+            f"files from `{CONCEPTS_DIR}/` (decision 0010)\n"
+            "run `knott migrate` to convert the schemas, then review the diff"
+        ),
     )
 
 
 def load_schemas(root: Path) -> tuple[dict[str, Schema], list[Issue]]:
-    """Load every schema. Returns the usable schemas by type, and all schema issues."""
+    """Load every concept. Returns the usable schemas by type, and all schema issues.
+
+    A vault that still has ``.knott/schemas/`` gets one ``schema-legacy-layout``
+    issue and an empty registry.
+    """
+    if (root / LEGACY_SCHEMAS_DIR).exists():
+        return {}, [legacy_layout_issue()]
     issues: list[Issue] = []
+    if (root / RELATIONS_DIR).exists():
+        issues.append(
+            Issue(
+                code="schema-invalid-field",
+                path=RELATIONS_DIR,
+                message=(
+                    f"`{RELATIONS_DIR}/` is reserved for relation definitions "
+                    "(decision 0010), not supported yet"
+                ),
+            )
+        )
     registry: dict[str, Schema] = {}
+    parsers: dict[str, _SchemaParser] = {}
     for rel_path in discover_schema_files(root):
         parser = _SchemaParser(rel_path, issues)
         schema = parser.parse(root / rel_path)
@@ -67,47 +106,69 @@ def load_schemas(root: Path) -> tuple[dict[str, Schema], list[Issue]]:
                 Issue(
                     code="schema-duplicate-type",
                     path=rel_path,
-                    line=parser.line(("type",)),
-                    field="type",
+                    line=parser.line(("name",)),
+                    field="name",
                     message=(
-                        f"type `{schema.type}` is defined twice: in `{existing.path}` "
+                        f"concept `{schema.type}` is defined twice: in `{existing.path}` "
                         f"and in `{rel_path}`\n"
-                        "each type must be defined by exactly one schema file"
+                        "each concept must be defined by exactly one concept file"
                     ),
                 )
             )
             continue
         registry[schema.type] = schema
+        parsers[schema.type] = parser
 
     for schema in registry.values():
-        for name, relation in list(schema.relations.items()):
-            if relation.target not in registry:
-                known = ", ".join(f"`{t}`" for t in sorted(registry)) or "none"
-                issues.append(
-                    Issue(
-                        code="schema-unknown-target",
-                        path=schema.path,
-                        line=relation.line,
-                        field=f"relations.{name}.target",
-                        message=(
-                            f"relation `{name}` targets type `{relation.target}`, "
-                            f"which no schema defines (known types: {known})"
-                        ),
-                    )
-                )
-                schema.unknown_relations[name] = schema.relations.pop(name)
+        parser = parsers[schema.type]
+        schema.properties = {
+            name: _resolve_targets(definition, (name,), registry, parser)
+            for name, definition in schema.properties.items()
+        }
     return registry, issues
+
+
+def _resolve_targets(
+    definition: AttributeDef,
+    path: SchemaPath,
+    registry: dict[str, Schema],
+    parser: _SchemaParser,
+) -> AttributeDef:
+    """Move target types no concept defines into ``ReferenceShape.unknown``, reporting each."""
+    shape = definition.shape
+    new_shape: Shape = shape
+    if isinstance(shape, ReferenceShape):
+        known = tuple(t for t in shape.targets if t in registry)
+        unknown = tuple(t for t in shape.targets if t not in registry)
+        for target in unknown:
+            parser.unknown_target(path, target, registry)
+        new_shape = ReferenceShape(known, unknown)
+    elif isinstance(shape, ListShape):
+        new_shape = ListShape(_resolve_targets(shape.items, (*path, "items"), registry, parser))
+    elif isinstance(shape, MapShape):
+        new_shape = MapShape(_resolve_targets(shape.values, (*path, "values"), registry, parser))
+    elif isinstance(shape, ObjectShape):
+        new_shape = ObjectShape(
+            {
+                name: _resolve_targets(field_def, (*path, "fields", name), registry, parser)
+                for name, field_def in shape.fields.items()
+            }
+        )
+    if new_shape is shape:
+        return definition
+    return AttributeDef(definition.name, new_shape, definition.required, definition.description)
 
 
 class _SchemaParser:
     def __init__(self, rel_path: str, issues: list[Issue]) -> None:
         self.path = rel_path
         self.issues = issues
-        self.locs: dict[_yaml.KeyPath, _yaml.Loc] = {}
+        self.file = MarkdownFile(path=rel_path)
+        self.target_lines: dict[SchemaPath, dict[str, int | None]] = {}
+        """Line of each target name, by the reference's path inside `properties`."""
 
     def line(self, key_path: _yaml.KeyPath) -> int | None:
-        loc = self.locs.get(key_path)
-        return loc.line + 1 if loc is not None else None
+        return self.file.lines.get(key_path)
 
     def error(self, code: str, key_path: _yaml.KeyPath, message: str) -> None:
         field = ".".join(str(p) for p in key_path) or None
@@ -115,48 +176,61 @@ class _SchemaParser:
             Issue(code=code, path=self.path, line=self.line(key_path), field=field, message=message)
         )
 
+    def unknown_target(self, path: SchemaPath, target: str, registry: dict[str, Schema]) -> None:
+        known = ", ".join(f"`{t}`" for t in sorted(registry)) or "none"
+        field = ".".join(("properties", *path, "target"))
+        self.issues.append(
+            Issue(
+                code="schema-unknown-target",
+                path=self.path,
+                line=self.target_lines.get(path, {}).get(target),
+                field=field,
+                message=(
+                    f"`{field}` names type `{target}`, which no concept defines "
+                    f"(known types: {known})"
+                ),
+            )
+        )
+
     def parse(self, abs_path: Path) -> Schema | None:
         try:
-            text = abs_path.read_text(encoding="utf-8").removeprefix("﻿")
+            text = abs_path.read_bytes().decode("utf-8")
         except (OSError, UnicodeDecodeError) as exc:
             self.issues.append(
                 Issue(code="schema-invalid-yaml", path=self.path, message=f"cannot read: {exc}")
             )
             return None
-        try:
-            doc = _yaml.load(text)
-        except _yaml.YamlParseError as exc:
-            line = exc.line + 1 if exc.line is not None else None
-            self.issues.append(
-                Issue(code="schema-invalid-yaml", path=self.path, line=line, message=exc.message)
-            )
-            return None
-        self.locs = doc.locs
-        data = doc.data
-        if not isinstance(data, dict):
-            actual = "empty" if data is None else f"a {kind(data)}"
+        self.file = parse_markdown(text, self.path)
+        if self.file.error is not None:
             self.issues.append(
                 Issue(
                     code="schema-invalid-yaml",
                     path=self.path,
-                    message=f"schema file must be a YAML mapping, but it is {actual}",
+                    line=self.file.error_line,
+                    message=self.file.error,
+                )
+            )
+            return None
+        data = self.file.frontmatter
+        if data is None:
+            self.issues.append(
+                Issue(
+                    code="schema-invalid-yaml",
+                    path=self.path,
+                    line=1,
+                    message=(
+                        "a concept file needs YAML frontmatter: start the file with a `---` "
+                        "line, then `name: <type>`, then a closing `---` line"
+                    ),
                 )
             )
             return None
 
-        self._check_keys(data, (), _TOP_KEYS)
-        type_name = self._check_type(data)
+        self._check_top_keys(data)
+        type_name = self._check_name(data)
         description = self._optional_str(data, ("description",))
         kid_required = self._kid_required(data)
-        attributes = self._parse_attributes(data.get("attributes"))
-        relations = self._parse_relations(data.get("relations"))
-        for name in sorted(set(attributes) & set(relations)):
-            self.error(
-                "schema-field-conflict",
-                ("relations", name),
-                f"field `{name}` is declared both as an attribute and as a relation",
-            )
-            del relations[name]
+        properties = self._parse_properties(data.get("properties"))
         if type_name is None:
             return None
         return Schema(
@@ -164,37 +238,40 @@ class _SchemaParser:
             path=self.path,
             description=description,
             kid_required=kid_required,
-            attributes=attributes,
-            relations=relations,
+            properties=properties,
+            template=_template(text),
         )
 
-    def _check_keys(
-        self, mapping: dict[Any, Any], path: _yaml.KeyPath, allowed: tuple[str, ...]
-    ) -> None:
-        for key in mapping:
-            if key not in allowed:
-                where = "schema" if not path else f"`{'.'.join(str(p) for p in path)}`"
+    def _check_top_keys(self, data: dict[str, Any]) -> None:
+        for key in data:
+            if key in _TOP_KEY_HINTS:
                 self.error(
                     "schema-invalid-field",
-                    (*path, str(key)),
-                    f"unknown key `{key}` in {where}; allowed keys: {', '.join(allowed)}",
+                    (key,),
+                    f"unknown key `{key}` in concept file: {_TOP_KEY_HINTS[key]}",
+                )
+            elif key not in _TOP_KEYS:
+                self.error(
+                    "schema-invalid-field",
+                    (key,),
+                    f"unknown key `{key}` in concept file; allowed keys: {', '.join(_TOP_KEYS)}",
                 )
 
-    def _check_type(self, data: dict[Any, Any]) -> str | None:
-        if "type" not in data or data["type"] is None:
-            self.error("schema-invalid-field", ("type",), "missing required key `type`")
+    def _check_name(self, data: dict[str, Any]) -> str | None:
+        if data.get("name") is None:
+            self.error("schema-invalid-field", ("name",), "missing required key `name`")
             return None
-        value = data["type"]
+        value = data["name"]
         if not isinstance(value, str) or not TYPE_NAME.match(value):
             self.error(
                 "schema-invalid-field",
-                ("type",),
-                f"type name must match ^[a-z][a-z0-9_-]*$, got {show(value)}",
+                ("name",),
+                f"concept name must match ^[a-z][a-z0-9_-]*$, got {show(value)}",
             )
             return None
         return value
 
-    def _kid_required(self, data: dict[Any, Any]) -> bool:
+    def _kid_required(self, data: dict[str, Any]) -> bool:
         value = data.get("kid")
         if value is None or value == "required":
             return value == "required"
@@ -218,8 +295,8 @@ class _SchemaParser:
         value = mapping.get("required", False)
         if value is None:
             return False
-        loc = self.locs.get(key_path)
-        if type(value) is bool and (loc is None or loc.raw in BOOLEAN_SPELLINGS):
+        raw = self.file.raws.get(key_path)
+        if type(value) is bool and (raw is None or raw in BOOLEAN_SPELLINGS):
             return value
         self.error(
             "schema-invalid-field",
@@ -249,12 +326,12 @@ class _SchemaParser:
                     f"field name must be a string, got {kind(name)} {show(name)}",
                 )
                 continue
-            # Only top-level fields share the frontmatter with `type` and `kid`.
+            # Only top-level properties share the frontmatter with `type` and `kid`.
             if name in _RESERVED_FIELDS and len(base) == 1:
                 self.error(
-                    "schema-field-conflict",
+                    "schema-invalid-field",
                     (*base, name),
-                    f"a field cannot be named `{name}`; {_RESERVED_FIELDS[name]}",
+                    f"a property cannot be named `{name}`; {_RESERVED_FIELDS[name]}",
                 )
                 continue
             if not isinstance(definition, dict):
@@ -267,18 +344,18 @@ class _SchemaParser:
             result.append((name, definition))
         return result
 
-    def _parse_attributes(self, value: Any) -> dict[str, AttributeDef]:
-        attributes: dict[str, AttributeDef] = {}
-        for name, definition in self._fields(("attributes",), value):
-            attribute = self._parse_definition(definition, ("attributes", name), name)
-            if attribute is not None:
-                attributes[name] = attribute
-        return attributes
+    def _parse_properties(self, value: Any) -> dict[str, AttributeDef]:
+        properties: dict[str, AttributeDef] = {}
+        for name, definition in self._fields(("properties",), value):
+            prop = self._parse_definition(definition, ("properties", name), name)
+            if prop is not None:
+                properties[name] = prop
+        return properties
 
     def _parse_definition(
         self, definition: dict[Any, Any], base: _yaml.KeyPath, name: str | None
     ) -> AttributeDef | None:
-        """Parse an attribute, an object field, or a list's `items` / map's `values` (no name).
+        """Parse a property, an object field, or a list's `items` / map's `values` (no name).
 
         Returns None when anything inside is invalid; every problem is still reported.
         """
@@ -289,19 +366,19 @@ class _SchemaParser:
         if name is not None:
             required = self._required_flag(definition, (*base, "required"))
         description = self._optional_str(definition, (*base, "description"))
-        label = f"attribute `{name}`" if len(base) == 2 else f"`{'.'.join(map(str, base))}`"
+        label = f"property `{name}`" if len(base) == 2 else f"`{'.'.join(map(str, base))}`"
         if raw_type is None:
             self.error(
                 "schema-invalid-field",
                 base,
-                f"{label} is missing `type` (one of: {_ATTRIBUTE_TYPES})",
+                f"{label} is missing `type` (one of: {_PROPERTY_TYPES})",
             )
             return None
         if kind_name is None:
             self.error(
                 "schema-invalid-field",
                 (*base, "type"),
-                f"unknown attribute type {show(raw_type)}; expected one of: {_ATTRIBUTE_TYPES}",
+                f"unknown property type {show(raw_type)}; expected one of: {_PROPERTY_TYPES}",
             )
             return None
         shape = self._parse_shape(kind_name, definition, base, label)
@@ -327,6 +404,12 @@ class _SchemaParser:
                     (*base, "required"),
                     f"`required` is not allowed on `{base[-1]}`: an item or value can never "
                     f"be empty; put `required` on the {container} itself",
+                )
+            elif key == "relation":
+                self.error(
+                    "schema-invalid-field",
+                    (*base, "relation"),
+                    f"`relation` is {_RESERVED_RELATION} (decision 0010); remove it",
                 )
             elif key in _NESTING_KEYS.values():
                 owner = next(k for k, v in _NESTING_KEYS.items() if v == key)
@@ -359,6 +442,8 @@ class _SchemaParser:
                 f"{label} has type {kind_name} but no `{key}`, e.g. {_NESTING_EXAMPLES[kind_name]}",
             )
             return None
+        if kind_name == REFERENCE_KIND:
+            return self._parse_reference(inner, (*base, key))
         if kind_name == "object":
             return self._parse_object(inner, (*base, key))
         if not isinstance(inner, dict):
@@ -373,6 +458,46 @@ class _SchemaParser:
         if node is None:
             return None
         return ListShape(node) if kind_name == "list" else MapShape(node)
+
+    def _parse_reference(self, value: Any, base: _yaml.KeyPath) -> ReferenceShape | None:
+        """Parse `target`: one type name, or a non-empty list of unique type names."""
+        lines: dict[str, int | None] = {}
+        if isinstance(value, str) and value:
+            lines[value] = self.line(base)
+        elif isinstance(value, list) and value:
+            ok = True
+            for index, item in enumerate(value):
+                if not isinstance(item, str) or not item:
+                    self.error(
+                        "schema-invalid-field",
+                        (*base, index),
+                        f"`target` item {index + 1} must be a type name, "
+                        f"got {kind(item)} {show(item)}",
+                    )
+                    ok = False
+                elif item in lines:
+                    self.error(
+                        "schema-invalid-field",
+                        (*base, index),
+                        f"`target` lists type `{item}` twice; name each type once",
+                    )
+                    ok = False
+                else:
+                    lines[item] = self.line((*base, index))
+            if not ok:
+                return None
+        else:
+            got = "an empty list" if value == [] or value == "" else f"{kind(value)} {show(value)}"
+            self.error(
+                "schema-invalid-field",
+                base,
+                f"`target` must be a type name or a non-empty list of type names, got {got}, "
+                "e.g. target: script or target: [episode, meeting]",
+            )
+            return None
+        # `base` is ("properties", ..., "target"); key the lines by the path in between.
+        self.target_lines[tuple(str(p) for p in base[1:-1])] = lines
+        return ReferenceShape(tuple(lines))
 
     def _parse_object(self, value: Any, base: _yaml.KeyPath) -> ObjectShape | None:
         if not isinstance(value, dict) or not value:
@@ -393,33 +518,19 @@ class _SchemaParser:
             return None
         return ObjectShape(fields)
 
-    def _parse_relations(self, value: Any) -> dict[str, RelationDef]:
-        relations: dict[str, RelationDef] = {}
-        for name, definition in self._fields(("relations",), value):
-            base = ("relations", name)
-            self._check_keys(definition, base, _RELATION_KEYS)
-            required = self._required_flag(definition, (*base, "required"))
-            description = self._optional_str(definition, (*base, "description"))
-            target = definition.get("target")
-            if target is None:
-                self.error("schema-invalid-field", base, f"relation `{name}` is missing `target`")
-                continue
-            if not isinstance(target, str):
-                self.error(
-                    "schema-invalid-field",
-                    (*base, "target"),
-                    f"`target` must be a type name, got {kind(target)} {show(target)}",
-                )
-                continue
-            line = self.line((*base, "target"))
-            relations[name] = RelationDef(name, target, required, description, line)
-        return relations
+
+def _template(text: str) -> str | None:
+    """The body after the closing frontmatter line, verbatim; None when blank."""
+    lines = _LINE_BREAK.split(text.removeprefix("﻿"))
+    end = lines.index(FRONTMATTER_DELIMITER, 1)
+    body = "\n".join(lines[end + 1 :])
+    return body if body.strip() else None
 
 
 def _kind_name(raw_type: Any) -> str | None:
-    """The attribute kind named by a schema `type` value, or None if it names none."""
+    """The property kind named by a schema `type` value, or None if it names none."""
     if not isinstance(raw_type, str):
         return None
-    if raw_type in COMPOUND_KINDS or raw_type in {t.value for t in ScalarType}:
+    if raw_type in (*COMPOUND_KINDS, REFERENCE_KIND) or raw_type in {t.value for t in ScalarType}:
         return raw_type
     return None

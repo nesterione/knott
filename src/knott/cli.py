@@ -142,7 +142,7 @@ def init(
         Path, typer.Argument(help="Directory to initialize (default: current directory).")
     ] = Path("."),
 ) -> None:
-    """Create .knott/schemas/ and .knott/config.yaml."""
+    """Create .knott/concepts/ and .knott/config.yaml."""
     try:
         result = Knott.init(path)
     except KnottError as error:
@@ -241,7 +241,7 @@ def view(
     except KnottError as error:
         raise _fail(error) from None
     if not ontology.types:
-        raise _fail(KnottError("no types to show (add schemas to .knott/schemas/)"))
+        raise _fail(KnottError("no types to show (add concept files to .knott/concepts/)"))
     target = output or _private_temp_dir() / f"knott-ontology-{ontology.vault}.html"
     try:
         if output is None:

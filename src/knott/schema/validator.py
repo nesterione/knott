@@ -17,7 +17,7 @@ from knott.schema.models import (
     ListShape,
     MapShape,
     ObjectShape,
-    RelationDef,
+    ReferenceShape,
     ScalarType,
     Schema,
     Shape,
@@ -72,22 +72,35 @@ def validate_entity(
                 field="type",
                 message=(
                     f"type {show(entity_type, entity.raw.get('type'))} has no schema "
-                    f"in .knott/schemas/ (known types: {known})"
+                    f"in .knott/concepts/ (known types: {known})"
                 ),
             )
         )
         return EntityReport(issues, 0)
 
     issues.extend(_check_kid(entity, schema))
-    for attribute in schema.attributes.values():
-        issues.extend(_check_attribute(entity, attribute))
-
     relations = 0
-    for relation in schema.relations.values():
-        rel_issues, count = _check_relation(entity, relation, resolve, lookup)
+    for prop in schema.properties.values():
+        reference = _top_reference(prop)
+        if reference is None:
+            issues.extend(_check_attribute(entity, prop))
+            continue
+        rel_issues, count = _check_relation(entity, prop, reference, resolve, lookup)
         issues.extend(rel_issues)
         relations += count
     return EntityReport(issues, relations)
+
+
+def _top_reference(prop: AttributeDef) -> ReferenceShape | None:
+    """The reference shape of a top-level `reference` or `list` of `reference` property.
+
+    TODO(Task 3): references at any depth, with strict cardinality, go through
+    `_check_value`; this top-level shortcut keeps the pre-0010 relation checks.
+    """
+    shape = prop.shape
+    if isinstance(shape, ListShape):
+        shape = shape.items.shape
+    return shape if isinstance(shape, ReferenceShape) else None
 
 
 def _check_kid(entity: MarkdownFile, schema: Schema) -> list[Issue]:
@@ -164,6 +177,15 @@ def _check_value(
             report(
                 "attribute-missing",
                 f"required attribute `{field}` ({notation(shape)}) is missing or empty{hint}",
+            )
+        return
+
+    if isinstance(shape, ReferenceShape):
+        # TODO(Task 3): resolve nested references and check their target type.
+        if not isinstance(value, str):
+            report(
+                "relation-invalid-value",
+                f"relation `{field}` must be a reference string, got {kind(value)} {show(value)}",
             )
         return
 
@@ -301,12 +323,14 @@ def _is_iso_datetime(text: str) -> bool:
 
 def _check_relation(
     entity: MarkdownFile,
-    relation: RelationDef,
+    relation: AttributeDef,
+    reference_shape: ReferenceShape,
     resolve: Resolver,
     lookup: FileLookup,
 ) -> tuple[list[Issue], int]:
-    assert entity.frontmatter is not None
+    assert entity.frontmatter is not None and relation.name is not None
     name = relation.name
+    targets = " or ".join(f"`{t}`" for t in reference_shape.targets + reference_shape.unknown)
     value = entity.frontmatter.get(name)
     key_line = entity.key_lines.get(name)
 
@@ -319,7 +343,7 @@ def _check_relation(
         return [
             issue(
                 "relation-missing",
-                f"required relation `{name}` (target type `{relation.target}`) "
+                f"required relation `{name}` (target type {targets}) "
                 "is missing or empty; add at least one reference",
             )
         ], 0
@@ -379,11 +403,12 @@ def _check_relation(
                 )
             )
             continue
-        if target.type != relation.target:
+        if reference_shape.targets and target.type not in reference_shape.targets:
+            expected = " or ".join(f"`{t}`" for t in reference_shape.targets)
             issues.append(
                 issue(
                     "relation-target-type-mismatch",
-                    f"relation `{name}` expects target type `{relation.target}`\n"
+                    f"relation `{name}` expects target type {expected}\n"
                     f"but {resolved.label} has type "
                     f"{show(target.type, target.raw.get('type'))}",
                     line,

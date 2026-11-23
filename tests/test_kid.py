@@ -61,9 +61,9 @@ def test_kid_problem_suggests_the_canonical_form() -> None:
     assert "got integer `42`" in kid_problem(42)
 
 
-def _vault(tmp_path: Path, files: dict[str, str], schema: str = "type: note\n") -> Path:
+def _vault(tmp_path: Path, files: dict[str, str], schema: str = "name: note\n") -> Path:
     Knott.init(tmp_path)
-    (tmp_path / ".knott/schemas/note.yaml").write_text(schema)
+    (tmp_path / ".knott/concepts/note.md").write_text(f"---\n{schema}---\n")
     for name, text in files.items():
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -86,7 +86,7 @@ def test_kid_is_optional_by_default_but_always_checked(tmp_path: Path) -> None:
 
 def test_empty_kid_on_required_type_points_at_its_line(tmp_path: Path) -> None:
     vault = _vault(
-        tmp_path, {"a.md": "---\ntype: note\nkid: ''\n---\n"}, "type: note\nkid: required\n"
+        tmp_path, {"a.md": "---\ntype: note\nkid: ''\n---\n"}, "name: note\nkid: required\n"
     )
     result = Knott.open(vault).validate()
     assert [(i.line, i.code) for i in result.issues] == [(3, "kid-missing")]
@@ -182,7 +182,7 @@ def test_kid_reference_accepts_surrounding_space(tmp_path: Path) -> None:
             "a.md": f"---\ntype: note\nkid: {A}\n---\n",
             "b.md": f'---\ntype: note\nsee: " kid: {A} "\n---\n',
         },
-        "type: note\nrelations:\n  see:\n    target: note\n",
+        "name: note\nproperties:\n  see:\n    type: reference\n    target: note\n",
     )
     result = Knott.open(vault).validate()
     assert result.ok, result.issues
@@ -200,5 +200,5 @@ def test_ontology_and_types_verbose_show_kid_required(monkeypatch: pytest.Monkey
     assert {t.type: t.kid_required for t in ontology.types} == {"lexeme": True, "topic": False}
     monkeypatch.chdir(fixture_path("kid-identity"))
     output = CliRunner().invoke(app, ["types", "--verbose"]).output
-    assert output.startswith("lexeme  (.knott/schemas/lexeme.yaml)\n  kid: required\n")
+    assert output.startswith("lexeme  (.knott/concepts/lexeme.md)\n  kid: required\n")
     assert output.count("kid: required") == 1

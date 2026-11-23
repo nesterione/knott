@@ -22,17 +22,17 @@ from knott.models import (
     Stats,
     ValidationResult,
 )
-from knott.schema.loader import SCHEMAS_DIR, load_schemas
+from knott.schema.loader import load_schemas
 from knott.schema.models import (
     AttributeDef,
     ListShape,
     MapShape,
     ObjectShape,
-    RelationDef,
+    ReferenceShape,
     shape_kind,
 )
 from knott.schema.validator import validate_entity
-from knott.vault.discovery import KNOTT_DIR, find_vault_root, iter_markdown
+from knott.vault.discovery import CONCEPTS_DIR, KNOTT_DIR, find_vault_root, iter_markdown
 from knott.vault.entity import MarkdownFile, read_markdown
 from knott.vault.fix import insert_kid
 from knott.vault.kid import (
@@ -78,7 +78,7 @@ class Knott:
 
     @staticmethod
     def init(path: str | Path = ".") -> InitResult:
-        """Create ``.knott/schemas/`` and ``.knott/config.yaml`` in ``path``.
+        """Create ``.knott/concepts/`` and ``.knott/config.yaml`` in ``path``.
 
         Changes nothing if ``.knott/`` already exists.
         """
@@ -88,7 +88,7 @@ class Knott:
         knott_dir = root / KNOTT_DIR
         if knott_dir.exists():
             return InitResult(root=str(root.resolve()), created=False)
-        (root / SCHEMAS_DIR).mkdir(parents=True)
+        (root / CONCEPTS_DIR).mkdir(parents=True)
         (root / CONFIG_FILE).write_text(f"knott_version: {version()}\n", encoding="utf-8")
         return InitResult(root=str(root.resolve()), created=True)
 
@@ -123,14 +123,24 @@ class Knott:
             if parsed.error is None and parsed.is_entity and isinstance(parsed.type, str):
                 counts[parsed.type] = counts.get(parsed.type, 0) + 1
 
-        def relation(r: RelationDef, known: bool) -> OntologyRelation:
-            return OntologyRelation(
-                name=r.name,
-                target=r.target,
-                required=r.required,
-                description=r.description,
-                target_known=known,
-            )
+        # TODO(Task 4): `properties` replaces `attributes` / `relations` in the public model.
+        def is_relation(a: AttributeDef) -> bool:
+            shape = a.shape.items.shape if isinstance(a.shape, ListShape) else a.shape
+            return isinstance(shape, ReferenceShape)
+
+        def relations(a: AttributeDef, known: bool) -> list[OntologyRelation]:
+            shape = a.shape.items.shape if isinstance(a.shape, ListShape) else a.shape
+            assert isinstance(shape, ReferenceShape) and a.name is not None
+            return [
+                OntologyRelation(
+                    name=a.name,
+                    target=target,
+                    required=a.required,
+                    description=a.description,
+                    target_known=known,
+                )
+                for target in (shape.targets if known else shape.unknown)
+            ]
 
         types = [
             OntologyType(
@@ -139,9 +149,13 @@ class Knott:
                 path=s.path,
                 count=counts.get(s.type, 0),
                 kid_required=s.kid_required,
-                attributes=[_ontology_attribute(a) for a in s.attributes.values()],
-                relations=[relation(r, True) for r in s.relations.values()]
-                + [relation(r, False) for r in s.unknown_relations.values()],
+                attributes=[
+                    _ontology_attribute(a) for a in s.properties.values() if not is_relation(a)
+                ],
+                relations=[
+                    r for a in s.properties.values() if is_relation(a) for r in relations(a, True)
+                ]
+                + [r for a in s.properties.values() if is_relation(a) for r in relations(a, False)],
             )
             for _, s in sorted(schemas.items())
         ]

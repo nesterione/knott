@@ -110,8 +110,8 @@ def test_rejected_values(expected: ScalarType, value: Any) -> None:
 def _validate_lexeme(tmp_path: Path, frontmatter: str) -> list[tuple[str | None, int | None, str]]:
     """Validate one entity against the structured-attributes fixture's `lexeme` schema."""
     Knott.init(tmp_path)
-    schema = fixture_path("structured-attributes") / ".knott/schemas/lexeme.yaml"
-    (tmp_path / ".knott/schemas/lexeme.yaml").write_bytes(schema.read_bytes())
+    schema = fixture_path("structured-attributes") / ".knott/concepts/lexeme.md"
+    (tmp_path / ".knott/concepts/lexeme.md").write_bytes(schema.read_bytes())
     senses = "" if "senses:" in frontmatter else "senses: [{id: a, ru: b}]\n"
     text = "---\ntype: lexeme\nlemma: x\n" + senses + frontmatter + "---\n"
     (tmp_path / "a.md").write_text(text, encoding="utf-8")
@@ -144,9 +144,9 @@ def test_structured_attributes_fixture() -> None:
 
 def test_required_list_needs_an_item(tmp_path: Path) -> None:
     Knott.init(tmp_path)
-    (tmp_path / ".knott/schemas/t.yaml").write_text(
-        "type: t\nattributes:\n  tags:\n    type: list\n    required: true\n"
-        "    items: {type: string}\n"
+    (tmp_path / ".knott/concepts/t.md").write_text(
+        "---\nname: t\nproperties:\n  tags:\n    type: list\n    required: true\n"
+        "    items: {type: string}\n---\n"
     )
     (tmp_path / "a.md").write_text("---\ntype: t\ntags: []\n---\n")
     (tmp_path / "b.md").write_text("---\ntype: t\n---\n")

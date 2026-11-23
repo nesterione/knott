@@ -118,7 +118,9 @@ def test_symlink_out_of_vault_is_outside(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     vault.mkdir()
     Knott.init(vault)
-    (vault / ".knott/schemas/t.yaml").write_text("type: t\nrelations:\n  ref:\n    target: t\n")
+    (vault / ".knott/concepts/t.md").write_text(
+        "---\nname: t\nproperties:\n  ref: {type: reference, target: t}\n---\n"
+    )
     outside = tmp_path / "outside"
     outside.mkdir()
     (outside / "b.md").write_text("---\ntype: t\n---\n")

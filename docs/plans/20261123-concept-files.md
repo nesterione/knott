@@ -137,14 +137,18 @@ properties:                     # optional map: name → definition
 - Modify: `tests/fixtures/*/.knott/` (all fixtures: `schemas/*.yaml` → `concepts/*.md`)
 - Modify: `tests/test_schemas.py`
 
-- [ ] add `ReferenceShape(targets: tuple[str, ...], unknown: tuple[str, ...] = ())` to the `Shape` union. Update `shape_kind` / `notation`, and add `iter_references(schema)`
-- [ ] replace `Schema.attributes` / `relations` / `unknown_relations` with `properties: dict[str, AttributeDef]` plus `template: str | None`. Delete `RelationDef`
-- [ ] rewrite discovery and parsing: `.knott/concepts/**/*.md` via `parse_markdown`. Top-level keys `name`/`description`/`kid`/`properties`, with the targeted messages for `type`, `attributes`, `relations`, and no frontmatter
-- [ ] parse `type: reference` (`target` string or list, `relation` reserved) at any depth. Resolve targets after all files load (`schema-unknown-target` per unknown name, full field path). Report `.knott/relations/` as reserved. Remove `schema-field-conflict`
-- [ ] detect `.knott/schemas/`: `load_schemas` returns a single `schema-legacy-layout` issue (path `.knott/schemas`, message names `knott migrate`) and an empty registry
-- [ ] convert every fixture with Task 1's converter (one-off script in the session scratchpad, not committed; cardinality from each fixture's entities). Hand-fix fixtures whose entities rely on one-or-list leniency, and record each one in this plan with ➕
-- [ ] update `tests/test_schemas.py` for the new paths and keys. Drop the `schema-field-conflict` cases. Add cases: `type:` in a concept file, `attributes:`/`relations:` keys, no frontmatter, `relation:` key, empty/duplicate `target` list, unknown target inside `items` and object `fields`, `.knott/relations/` present, legacy layout, duplicate `name`, template stored verbatim / `None` when blank
-- [ ] run tests - schema tests must pass. Entity/relation tests may fail until Task 3 (mark them with a TODO naming Task 3)
+- [x] add `ReferenceShape(targets: tuple[str, ...], unknown: tuple[str, ...] = ())` to the `Shape` union. Update `shape_kind` / `notation`, and add `iter_references(schema)`
+- [x] replace `Schema.attributes` / `relations` / `unknown_relations` with `properties: dict[str, AttributeDef]` plus `template: str | None`. Delete `RelationDef`
+- [x] rewrite discovery and parsing: `.knott/concepts/**/*.md` via `parse_markdown`. Top-level keys `name`/`description`/`kid`/`properties`, with the targeted messages for `type`, `attributes`, `relations`, and no frontmatter
+- [x] parse `type: reference` (`target` string or list, `relation` reserved) at any depth. Resolve targets after all files load (`schema-unknown-target` per unknown name, full field path). Report `.knott/relations/` as reserved. Remove `schema-field-conflict`
+- [x] detect `.knott/schemas/`: `load_schemas` returns a single `schema-legacy-layout` issue (path `.knott/schemas`, message names `knott migrate`) and an empty registry
+- [x] convert every fixture with Task 1's converter (one-off script in the session scratchpad, not committed; cardinality from each fixture's entities). Hand-fix fixtures whose entities rely on one-or-list leniency, and record each one in this plan with ➕
+- [x] update `tests/test_schemas.py` for the new paths and keys. Drop the `schema-field-conflict` cases. Add cases: `type:` in a concept file, `attributes:`/`relations:` keys, no frontmatter, `relation:` key, empty/duplicate `target` list, unknown target inside `items` and object `fields`, `.knott/relations/` present, legacy layout, duplicate `name`, template stored verbatim / `None` when blank
+- [x] run tests - schema tests must pass. Entity/relation tests may fail until Task 3 (mark them with a TODO naming Task 3)
+- ➕ hand-fixed `relation-outside-vault`: `transcript.derived_from` was used both as one reference and as a list. It stays a single `reference`; a new `sources` (`list` of `reference`) holds the list in `transcripts/invalid-forms.md`. Task 3: the unquoted `[[...]]` hint must still apply to a single `reference` (`unquoted-wikilink.md`)
+- ➕ hand-wrote `schema-unknown-key` concept files the converter refuses (`bad-fields`: the `shared` conflict is replaced by a `relation:` key; `broken`; `note` with `atributes:`)
+- ➕ interim (until Task 3/4): `validate_entity` checks top-level `reference` / `list` of `reference` with the pre-0010 relation rules (TODO Task 3); `ontology()` maps properties back to `attributes` / `relations` (TODO Task 4); `Knott.init` already creates `.knott/concepts/`
+- ⚠️ `test_docs_folder_is_a_valid_vault` is `xfail` (TODO Task 8) until `docs/` is migrated
 
 ### Task 3: Validate references at any depth
 

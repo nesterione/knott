@@ -53,6 +53,8 @@ def test_results_are_plain_frozen_data() -> None:
         issue.code = "x"
 
 
+# TODO(Task 8): docs/ still has `.knott/schemas/` until `knott migrate docs` converts it.
+@pytest.mark.xfail(reason="docs/ uses the legacy schema layout until Task 8", strict=True)
 def test_docs_folder_is_a_valid_vault() -> None:
     """docs/ is written as a Knott vault; keep it valid."""
     docs = Path(__file__).parent.parent / "docs"
@@ -69,29 +71,33 @@ def _write(path: Path, text: str) -> None:
 def _ontology_vault(root: Path) -> Path:
     root.mkdir()
     Knott.init(root)
-    schemas = root / ".knott" / "schemas"
+    concepts = root / ".knott" / "concepts"
     _write(
-        schemas / "person.yaml",
-        "type: person\n"
+        concepts / "person.md",
+        "---\n"
+        "name: person\n"
         "description: A human.\n"
-        "attributes:\n"
+        "properties:\n"
         "  name:\n"
         "    type: string\n"
         "    required: true\n"
         "    description: Full name.\n"
         "  born:\n"
         "    type: date\n"
-        "relations:\n"
         "  manager:\n"
+        "    type: reference\n"
         "    target: person\n"
         "  pet:\n"
+        "    type: reference\n"
         "    target: animal\n"
         "    description: Missing type.\n"
         "  employer:\n"
+        "    type: reference\n"
         "    target: company\n"
-        "    required: true\n",
+        "    required: true\n"
+        "---\n",
     )
-    _write(schemas / "company.yaml", "type: company\n")
+    _write(concepts / "company.md", "---\nname: company\n---\n")
     _write(root / "people" / "ann.md", "---\ntype: person\nname: Ann\n---\n")
     _write(root / "people" / "bob.md", "---\ntype: person\nname: Bob\n---\n")
     _write(root / "people" / "broken.md", "---\ntype: person\nname: [unclosed\n---\n")
@@ -115,7 +121,7 @@ def test_ontology_types_relations_and_counts(tmp_path: Path) -> None:
     assert company.relations == []
     assert person.count == 2  # broken.md (invalid frontmatter) is skipped
     assert person.description == "A human."
-    assert person.path == ".knott/schemas/person.yaml"
+    assert person.path == ".knott/concepts/person.md"
     scalar: dict[str, object] = {"items": None, "values": None, "fields": []}
     assert [a.model_dump() for a in person.attributes] == [
         {"name": "name", "type": "string", "required": True, "description": "Full name.", **scalar},
@@ -131,7 +137,7 @@ def test_ontology_types_relations_and_counts(tmp_path: Path) -> None:
 
 def test_ontology_type_without_entities_has_zero_count(tmp_path: Path) -> None:
     root = _ontology_vault(tmp_path / "vault")
-    _write(root / ".knott" / "schemas" / "region.yaml", "type: region\n")
+    _write(root / ".knott" / "concepts" / "region.md", "---\nname: region\n---\n")
     ontology = Knott.open(root).ontology()
     assert [(t.type, t.count) for t in ontology.types] == [
         ("company", 1),
@@ -149,7 +155,7 @@ def test_ontology_empty_vault(tmp_path: Path) -> None:
 
 def test_ontology_broken_schema_keeps_other_types(tmp_path: Path) -> None:
     root = _ontology_vault(tmp_path / "vault")
-    _write(root / ".knott" / "schemas" / "bad.yaml", "type: [not, a, name]\n")
+    _write(root / ".knott" / "concepts" / "bad.md", "---\nname: [not, a, name]\n---\n")
     ontology = Knott.open(root).ontology()
     assert ontology.schema_issues > 1
     assert [t.type for t in ontology.types] == ["company", "person"]

@@ -52,7 +52,7 @@ def test_unquoted_markdown_link_suggests_quoting() -> None:
 
 def test_undeclared_keys_are_not_checked(tmp_path: Path) -> None:
     Knott.init(tmp_path)
-    (tmp_path / ".knott/schemas/t.yaml").write_text("type: t\n")
+    (tmp_path / ".knott/concepts/t.md").write_text("---\nname: t\n---\n")
     (tmp_path / "a.md").write_text("---\ntype: t\nlink: ../nowhere.md\nn: 1\n---\n")
     assert Knott.open(tmp_path).validate().ok
 
@@ -109,8 +109,8 @@ def test_invalid_characters_are_reported_not_raised(tmp_path: Path) -> None:
 
 def test_non_string_keys_do_not_satisfy_fields(tmp_path: Path) -> None:
     Knott.init(tmp_path)
-    (tmp_path / ".knott/schemas/t.yaml").write_text(
-        "type: t\nattributes:\n  'True':\n    type: string\n    required: true\n"
+    (tmp_path / ".knott/concepts/t.md").write_text(
+        "---\nname: t\nproperties:\n  'True':\n    type: string\n    required: true\n---\n"
     )
     (tmp_path / "a.md").write_text("---\ntype: t\nyes: works\n---\n")
     result = Knott.open(tmp_path).validate()
@@ -129,8 +129,8 @@ def test_merge_key_alias_bomb_is_rejected(tmp_path: Path) -> None:
 
 def test_shared_alias_value_in_message_stays_small(tmp_path: Path) -> None:
     Knott.init(tmp_path)
-    (tmp_path / ".knott/schemas/t.yaml").write_text(
-        "type: t\nattributes:\n  flag:\n    type: boolean\n"
+    (tmp_path / ".knott/concepts/t.md").write_text(
+        "---\nname: t\nproperties:\n  flag:\n    type: boolean\n---\n"
     )
     body = "type: t\na0: &a0 [x]\n"
     body += "".join(f"a{i}: &a{i} [*a{i - 1}, *a{i - 1}]\n" for i in range(1, 12))
@@ -143,8 +143,8 @@ def test_shared_alias_value_in_message_stays_small(tmp_path: Path) -> None:
 
 def test_quoted_and_boolean_keys_are_distinct(tmp_path: Path) -> None:
     Knott.init(tmp_path)
-    (tmp_path / ".knott/schemas/t.yaml").write_text(
-        'type: t\nattributes:\n  "true":\n    type: boolean\n'
+    (tmp_path / ".knott/concepts/t.md").write_text(
+        '---\nname: t\nproperties:\n  "true":\n    type: boolean\n---\n'
     )
     (tmp_path / "a.md").write_text('---\ntype: t\n"true": yes\ntrue: true\n---\n')
     (tmp_path / "b.md").write_text('---\ntype: t\n"true": false\ntrue: yes\n---\n')

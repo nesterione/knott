@@ -23,10 +23,13 @@ from .conftest import fixture_path
 
 runner = CliRunner()
 
-DOD_SCRIPT_SCHEMA = "type: script\nattributes:\n  title:\n    type: string\n    required: true\n"
+DOD_SCRIPT_SCHEMA = (
+    "---\nname: script\nproperties:\n  title:\n    type: string\n    required: true\n---\n"
+)
 DOD_TRANSCRIPT_SCHEMA = (
-    "type: transcript\nrelations:\n  derived_from:\n    target: script\n"
-    "    description: >\n      The script from which this transcript was produced.\n"
+    "---\nname: transcript\nproperties:\n  derived_from:\n    type: reference\n"
+    "    target: script\n"
+    "    description: >\n      The script from which this transcript was produced.\n---\n"
 )
 SUCCESS = "✓ 2 schemas\n✓ 2 entities\n✓ 1 relation\n✓ vault is valid\n"
 
@@ -34,9 +37,9 @@ SUCCESS = "✓ 2 schemas\n✓ 2 entities\n✓ 1 relation\n✓ vault is valid\n"
 @pytest.fixture
 def dod_vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """The vault from the Definition of Done (spec §24)."""
-    (tmp_path / ".knott/schemas").mkdir(parents=True)
-    (tmp_path / ".knott/schemas/script.yaml").write_text(DOD_SCRIPT_SCHEMA)
-    (tmp_path / ".knott/schemas/transcript.yaml").write_text(DOD_TRANSCRIPT_SCHEMA)
+    (tmp_path / ".knott/concepts").mkdir(parents=True)
+    (tmp_path / ".knott/concepts/script.md").write_text(DOD_SCRIPT_SCHEMA)
+    (tmp_path / ".knott/concepts/transcript.md").write_text(DOD_TRANSCRIPT_SCHEMA)
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts/foo.md").write_text(
         "---\ntype: script\ntitle: Episode 42\n---\n# Episode 42\n"
@@ -67,7 +70,7 @@ def test_definition_of_done_plain_path(dod_vault: Path) -> None:
 
 
 def test_definition_of_done_type_mismatch(dod_vault: Path) -> None:
-    (dod_vault / ".knott/schemas/feedback.yaml").write_text("type: feedback\n")
+    (dod_vault / ".knott/concepts/feedback.md").write_text("---\nname: feedback\n---\n")
     script = dod_vault / "scripts/foo.md"
     script.write_text(script.read_text().replace("type: script", "type: feedback"))
     result = runner.invoke(app, ["validate"])
@@ -120,7 +123,7 @@ def test_scoped_validate_still_checks_all_schemas(monkeypatch: pytest.MonkeyPatc
     monkeypatch.chdir(fixture_path("unknown-relation-target-type"))
     result = runner.invoke(app, ["validate", "scripts/episode-42.md"])
     assert result.exit_code == 1
-    assert "schemas/review.yaml" in result.output
+    assert "concepts/review.md" in result.output
 
 
 def test_scoped_validate_not_an_entity(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -192,7 +195,7 @@ def test_types_verbose(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(fixture_path("valid-vault"))
     result = runner.invoke(app, ["types", "--verbose"])
     assert result.exit_code == 0
-    assert "transcript  (.knott/schemas/podcast/transcript.yaml)\n" in result.output
+    assert "transcript  (.knott/concepts/podcast/transcript.md)\n" in result.output
     assert "  Transcript of recorded spoken content.\n" in result.output
 
 
@@ -203,7 +206,7 @@ def test_types_verbose_shows_nested_attributes_and_relations(
     result = runner.invoke(app, ["types", "--verbose"])
     assert result.exit_code == 0
     assert result.output == (
-        "lexeme  (.knott/schemas/lexeme.yaml)\n"
+        "lexeme  (.knott/concepts/lexeme.md)\n"
         "  A word with its senses and forms.\n"
         "  attributes:\n"
         "    lemma*   string\n"
@@ -332,12 +335,12 @@ def test_view_without_browser_prints_path(tmp_path: Path, monkeypatch: pytest.Mo
 
 
 def test_view_empty_vault_is_usage_error(tmp_path: Path, no_browser: list[str]) -> None:
-    (tmp_path / ".knott/schemas").mkdir(parents=True)
+    (tmp_path / ".knott/concepts").mkdir(parents=True)
     result = runner.invoke(
         app, ["view", str(tmp_path), "--no-open", "-o", str(tmp_path / "o.html")]
     )
     assert result.exit_code == 2
-    assert "error: no types to show (add schemas to .knott/schemas/)" in result.stderr
+    assert "error: no types to show (add concept files to .knott/concepts/)" in result.stderr
     assert not (tmp_path / "o.html").exists()
 
 
@@ -353,9 +356,13 @@ def test_view_with_schema_issues_still_writes_page(tmp_path: Path, no_browser: l
 
 def test_view_reports_plural_schema_issues(tmp_path: Path, no_browser: list[str]) -> None:
     Knott.init(tmp_path)
-    schemas = tmp_path / ".knott" / "schemas"
-    (schemas / "a.yaml").write_text("type: a\nrelations:\n  x:\n    target: nope\n")
-    (schemas / "b.yaml").write_text("type: b\nrelations:\n  y:\n    target: gone\n")
+    concepts = tmp_path / ".knott" / "concepts"
+    (concepts / "a.md").write_text(
+        "---\nname: a\nproperties:\n  x: {type: reference, target: nope}\n---\n"
+    )
+    (concepts / "b.md").write_text(
+        "---\nname: b\nproperties:\n  y: {type: reference, target: gone}\n---\n"
+    )
     out = tmp_path / "out.html"
     result = runner.invoke(app, ["view", str(tmp_path), "--no-open", "-o", str(out)])
     assert result.exit_code == 0, result.output
@@ -379,7 +386,7 @@ def test_view_unwritable_output_is_usage_error(tmp_path: Path, no_browser: list[
 def test_init_creates_vault(tmp_path: Path) -> None:
     result = runner.invoke(app, ["init", str(tmp_path)])
     assert result.exit_code == 0
-    assert (tmp_path / ".knott/schemas").is_dir()
+    assert (tmp_path / ".knott/concepts").is_dir()
     assert (tmp_path / ".knott/config.yaml").read_text() == f"knott_version: {version()}\n"
     assert sorted(p.name for p in tmp_path.iterdir()) == [".knott"]
 
