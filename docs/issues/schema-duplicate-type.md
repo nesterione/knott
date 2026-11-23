@@ -6,18 +6,20 @@ about: "[Schema](../concepts/schema.md)"
 ---
 # `schema-duplicate-type`
 
-Two schema files define the same `type`. The message names both files.
+Two concept files have the same `name`. The message names both files.
 
 ## Example
 
 ```yaml
-# .knott/schemas/script.yaml and .knott/schemas/legacy/script.yaml
-type: script
+# .knott/concepts/script.md and .knott/concepts/legacy/script.md
+---
+name: script
+---
 ```
 
 ## Fix
 
-Delete or rename one. The type's identity is the `type` value, not the filename.
+Delete one, or change its `name`. The type's identity is the `name` value, not the filename.
 
 ## Notes
 

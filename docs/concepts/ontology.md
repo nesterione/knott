@@ -1,14 +1,14 @@
 ---
 type: concept
 title: Ontology
-summary: The set of a vault's schemas taken together - its types and the typed relations between them.
+summary: The set of a vault's concept files taken together - its types and the typed relations between them.
 related:
   - "[Schema](schema.md)"
   - "[Relation](relation.md)"
 ---
 # Ontology
 
-Knott borrows vocabulary from RDF (entity, attribute, relation/predicate, schema) but does not implement RDF. A vault's ontology is simply its schema files: small enough to understand by reading a few YAML files.
+Knott borrows vocabulary from RDF (entity, attribute, relation/predicate, schema) but does not implement RDF. A vault's ontology is simply its concept files in `.knott/concepts/`: small enough to understand by reading a few of them.
 
 ## This docs folder is an example
 
@@ -34,7 +34,7 @@ decision ── supersedes ──▶ decision
 | `guide`      | how-tos                              | `concepts → concept`, `commands → command`              |
 | `decision`   | design records                       | `affects → concept` (required), `supersedes → decision` |
 
-Run `knott types --verbose` inside `docs/` to see them, and `knott validate` to check the whole folder.
+Every type also has a body template, so a new page starts with the sections its siblings use. Run `knott types --verbose` inside `docs/` to see them, and `knott validate` to check the whole folder.
 
 Run `knott view` inside `docs/` to explore it interactively.
 
@@ -43,4 +43,5 @@ Run `knott view` inside `docs/` to explore it interactively.
 - Start with 2–4 types. Add one when you find yourself writing the same frontmatter keys repeatedly.
 - Point relations from the thing that *knows* about the other: a transcript knows its script, not the reverse.
 - Use `required: true` sparingly. It's for things that make the entity meaningless when missing.
-- Write a `description` on every type and relation. Agents read them.
+- Write a `description` on every type and property. Agents read them.
+- Give a type a body template once its entities share sections. Agents copy it.

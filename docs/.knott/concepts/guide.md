@@ -22,8 +22,12 @@ properties:
       type: reference
       target: command
 ---
-<!-- Start with the title as an H1, the same text as the `title` property. -->
+# <!-- The guide's name, the same text as the `title` property. -->
 
-<!-- Intro: who the guide is for and what they will be able to do. Then the main steps as a numbered list, each step with the command or file it uses. -->
+<!-- Intro: who the guide is for and what they will be able to do. -->
 
-<!-- Add a `##` section per topic: settings, a worked example, reading results, rules of thumb, a checklist. Link concepts and commands with relative Markdown links. -->
+<!-- Steps: a numbered list, each step with the command to run or the file to write. -->
+
+## <!-- One section per topic, e.g. "Required settings", "Reading results", "Rules of thumb". -->
+
+<!-- The details: a worked example, a checklist, or a table. Link concepts and commands with relative Markdown links. Repeat the heading for each topic. -->

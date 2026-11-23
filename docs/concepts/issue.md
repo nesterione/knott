@@ -13,7 +13,7 @@ related:
 | `code` | stable kebab-case identifier, see `issues/` |
 | `path` | vault-relative path of the file with the problem |
 | `line` | 1-based line, when known (omitted rather than guessed) |
-| `field` | frontmatter or schema key, when applicable |
+| `field` | full path of the frontmatter key (`speakers[1].person`) or concept-file key (`properties.about.target`), when applicable |
 | `message` | what was expected vs. what was found |
 
 Text output:

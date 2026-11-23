@@ -6,17 +6,17 @@ about: "[Entity](../concepts/entity.md)"
 ---
 # `entity-unknown-type`
 
-An entity's `type` doesn't name any discovered schema (including `type:` left empty or set to a non-string).
+An entity's `type` isn't the `name` of any concept file (including `type:` left empty or set to a non-string).
 
 ## Example
 
 ```yaml
-type: podcast   # no schema defines podcast
+type: podcast   # no concept file has name: podcast
 ```
 
 ## Fix
 
-Fix the spelling, or add `.knott/schemas/podcast.yaml`. The message lists the known types.
+Fix the spelling, or add `.knott/concepts/podcast.md` with `name: podcast`. The message lists the known types.
 
 ## Notes
 

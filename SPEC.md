@@ -84,7 +84,8 @@ src/knott/
   models.py        # public result types (Issue, ValidationResult, ...)
   errors.py
   schema/
-    loader.py
+    loader.py      # concept files
+    migrate.py     # .knott/schemas/ → .knott/concepts/
     models.py
     validator.py
   vault/
@@ -107,10 +108,10 @@ A vault is an ordinary directory that contains `.knott/`.
 my-vault/
 ├── .knott/
 │   ├── config.yaml
-│   └── schemas/
-│       ├── script.yaml
-│       ├── transcript.yaml
-│       └── feedback.yaml
+│   └── concepts/
+│       ├── script.md
+│       ├── transcript.md
+│       └── feedback.md
 ├── scripts/
 │   └── episode-42.md
 ├── transcripts/
@@ -150,21 +151,26 @@ A file is an **entity** if it has YAML frontmatter that is a mapping containing 
 
 ---
 
-## 4. Schema discovery
+## 4. Concept discovery
 
 No schema registry or manifest in v0.
 
-Schemas are discovered from:
+Each type is defined by one **concept file**, discovered from:
 
 ```
-.knott/schemas/**/*.yaml
+.knott/concepts/**/*.md
 ```
 
-(`.yml` is not recognized in v0.)
+Each concept file defines exactly one entity type. Its YAML frontmatter is the type's schema (§7). Its body is an optional template for entity bodies (§7). Directory structure inside `.knott/concepts/` is purely organizational: `.knott/concepts/podcast/transcript.md` may define `name: transcript`.
 
-Each schema file defines exactly one entity type. Directory structure inside `.knott/schemas/` is purely organizational. `.knott/schemas/podcast/transcript.yaml` may define `type: transcript`.
+The canonical identity of a type is the value of `name`, not the filename or path. Two concept files with the same `name` produce a validation error that names both files. Concept files use `name:` rather than `type:`, so no tool mistakes one for an entity, and `iter_markdown` never scans `.knott/` anyway.
 
-The canonical identity of a type is the value of `type`, not the filename or path. Two schema files defining the same `type` produce a validation error that names both files.
+Reserved:
+
+- `.knott/schemas/` is the pre-0.5 layout. If it exists, a run reports one `schema-legacy-layout` issue and stops: no concept files are loaded and no entities are checked, so the one issue isn't buried under `entity-unknown-type`. `knott migrate` (§14) converts it.
+- `.knott/relations/` is reserved for relation definitions (§9). If it exists, it is `schema-invalid-field`.
+
+See `docs/decisions/0010-concept-files-and-reference-properties.md`.
 
 ---
 
@@ -188,7 +194,7 @@ Transcript content...
 Conceptually:
 
 ```
-frontmatter → structured metadata (attributes + relations)
+frontmatter → structured metadata (properties: attributes and references)
 body        → arbitrary Markdown, opaque to Knott in v0
 ```
 
@@ -201,74 +207,79 @@ Frontmatter parsing rules:
 
 ## 6. Entity type
 
-Every entity has exactly one primary type, given by the reserved key `type`. Its value must be a string naming a discovered schema.
+Every entity has exactly one primary type, given by the reserved key `type`. Its value must be a string equal to the `name` of a discovered concept file.
 
 No multiple types, no inheritance. Connections to other concepts are expressed through relations.
 
 ---
 
-## 7. Schema format
+## 7. Concept file format
 
-A schema describes the entity type, a human-readable description, attributes, and relations:
+A concept file's frontmatter is the schema: the type's name, a human-readable description, and its properties. Its body is a template for entity bodies:
 
-```yaml
-type: transcript
+```markdown
+---
+name: transcript
 description: >
   Transcript of recorded spoken content.
-attributes:
+properties:
   title:
     type: string
     required: true
     description: Human-readable title.
   created_at:
     type: date
-  generated_by:
-    type: string
-relations:
   derived_from:
+    type: reference
     target: script
-    required: false
     description: >
       The source artifact from which this transcript was produced.
+---
+# <!-- The episode title. -->
+
+<!-- One paragraph: who speaks and what it covers. -->
 ```
 
 Allowed keys:
 
 | Level | Key | Required | Notes |
 |---|---|---|---|
-| top | `type` | yes | matches `^[a-z][a-z0-9_-]*$` |
+| top | `name` | yes | matches `^[a-z][a-z0-9_-]*$` |
 | top | `description` | no | string |
 | top | `kid` | no | `required`: every entity of this type must have a `kid` (§12) |
-| top | `attributes` | no | mapping of field name → attribute definition |
-| top | `relations` | no | mapping of field name → relation definition |
-| attribute | `type` | yes | a scalar type in §8, or `list`, `object` or `map` |
-| attribute | `required` | no | boolean, default `false` |
-| attribute | `description` | no | string |
-| attribute | `items` | with `type: list` | the definition of each item (`type`, `description`, nesting keys; no `required`) |
-| attribute | `fields` | with `type: object` | non-empty mapping of field name → attribute definition |
-| attribute | `values` | with `type: map` | the definition of each value (`type`, `description`, nesting keys; no `required`) |
-| relation | `target` | yes | an existing schema `type` (self-reference allowed) |
-| relation | `required` | no | boolean, default `false` |
-| relation | `description` | no | string |
+| top | `properties` | no | mapping of property name → definition, in display order |
+| property | `type` | yes | a scalar type in §8, or `list`, `object`, `map` or `reference` |
+| property | `required` | no | boolean, default `false` |
+| property | `description` | no | string |
+| property | `items` | with `type: list` | the definition of each item (`type`, `description`, nesting keys; no `required`) |
+| property | `fields` | with `type: object` | non-empty mapping of field name → definition |
+| property | `values` | with `type: map` | the definition of each value (`type`, `description`, nesting keys; no `required`) |
+| property | `target` | with `type: reference` | a type name, or a non-empty list of unique type names (self-reference allowed) |
 
 Schema rules:
 
-- Unknown keys in a schema file are errors. Knott owns these files, so a typo such as `atributes:` must not pass silently.
-- Top-level field names must not be `type` or `kid`. Fields nested inside an `object` may be.
-- `items`, `fields` and `values` are allowed only with their own `type`, and are required there.
-- A field name cannot be both an attribute and a relation in the same schema.
+- Unknown keys in a concept file's frontmatter are errors. Knott owns these files, so a typo such as `propertes:` must not pass silently. Three keys get a targeted message: `type` ("concept files use `name:`") and `attributes` / `relations` ("merged into `properties`; run `knott migrate`").
+- A file with no frontmatter is `schema-invalid-yaml`.
+- Top-level property names must not be `type` or `kid`. Fields nested inside an `object` may be.
+- `items`, `fields`, `values` and `target` are allowed only with their own `type`, and are required there.
+- `relation` on a reference definition is reserved (§9) and is an error.
+- A property whose shape is `reference`, at any depth, is a **relation** (§9–11). Every other property is an **attribute** (§8). They share one map, so a name can't be both.
 
-Schemas serve three purposes:
+### Body template
+
+Everything after the closing `---` is the type's template, stored verbatim (`None` when blank). Agents, and later a `knott new` command, copy it when they create an entity. Knott never checks an entity's body against it. There is no placeholder syntax: write the sections as real headings, with a `<!-- … -->` comment under each that says what goes there. A heading whose text varies, such as the H1, holds a comment as its text. Comments stay out of Obsidian's reading view.
+
+Concept files serve three purposes:
 
 1. A machine-readable validation contract.
 2. Human-readable semantic documentation.
-3. Context an AI agent reads before creating or modifying entities.
+3. Context an AI agent reads, and a body it copies, before creating or modifying entities.
 
 ---
 
 ## 8. Attributes
 
-Attributes are values that belong to the entity itself.
+Attributes are properties whose values belong to the entity itself: every property that isn't a reference.
 
 Scalar types and accepted YAML values (strict typing, no coercion beyond what's listed here):
 
@@ -293,10 +304,10 @@ Rules:
 
 ### Structured attributes
 
-An attribute can also be a `list` (every item matches `items`), an `object` (exactly the declared `fields`; objects are closed) or a `map` (free string keys; every value matches `values`). Shapes nest to any depth:
+A property can also be a `list` (every item matches `items`), an `object` (exactly the declared `fields`; objects are closed) or a `map` (free string keys; every value matches `values`). Shapes nest to any depth:
 
 ```yaml
-attributes:
+properties:
   senses:
     type: list
     required: true
@@ -319,7 +330,9 @@ attributes:
 
 See `docs/decisions/0008-structured-attributes.md`.
 
-Not in v0: enums, unions, relations inside structured values, item counts, named reusable shapes, custom scalars, inheritance, composition.
+A `reference` (§9) may appear anywhere a shape can: list `items`, map `values`, or an object field.
+
+Not in v0: enums, unions of scalar types, item counts, named reusable shapes, custom scalars, inheritance, composition.
 
 ---
 
@@ -331,9 +344,35 @@ A relation is a semantic, directed reference from one entity to another:
 transcript ── derived_from ──▶ script
 ```
 
-Relations are declared in the schema of the **source** type (§7). There is no global relation registry.
+Relations are properties of the **source** type (§7) whose shape is `reference`:
 
-Only keys declared under `relations` in the source schema are relations. An undeclared key whose value looks like a path or link is ordinary metadata and is never checked as a relation.
+```yaml
+properties:
+  derived_from: { type: reference, target: script }
+  recording_of: { type: reference, target: [episode, meeting] }
+  sources:
+    type: list
+    items: { type: reference, target: script }
+  speakers:
+    type: list
+    items:
+      type: object
+      fields:
+        person: { type: reference, target: person }
+```
+
+- A `reference` shape can appear at the top level, as list `items`, as map `values`, or as an object field, at any depth.
+- `target` is one type name or a list of them. An entity of any listed type passes.
+- There is no global relation registry. Only keys declared with a reference shape are relations. An undeclared key whose value looks like a path or link is ordinary metadata and is never checked.
+
+### Relation definitions (reserved)
+
+Decision 0010 fixes the format of future relation definitions (`.knott/relations/<name>.md` with `name`, `description`, `inverse`, `symmetric`, `acyclic`, `transitive`), referenced from a property by `relation: <name>`. None of it is built yet, so both names are reserved:
+
+- a `relation:` key on a reference definition → `schema-invalid-field` ("reserved for relation definitions, not supported yet")
+- a `.knott/relations/` folder → `schema-invalid-field`
+
+When they land, `target` stays on the property, and a relation definition never adds a key to a concept.
 
 ---
 
@@ -351,26 +390,34 @@ Relations use **relative filesystem paths** by default. A reference may also nam
 
 ### Value shape
 
-A relation value is either one reference or a list of references:
+Cardinality is strict. `type: reference` holds exactly one reference. Several is `type: list` with reference `items`:
 
 ```yaml
-# a single reference, plain path
+# reference: one, plain path
 derived_from: ../scripts/episode-42.md
 ```
 
 ```yaml
-# a single reference, Markdown link
+# reference: one, Markdown link
 derived_from: "[Episode 42 script](../scripts/episode-42.md)"
 ```
 
 ```yaml
-# a list of references
+# list of reference
 sources:
   - ../scripts/episode-42.md
   - "[Notes](../notes/episode-42-notes.md)"
 ```
 
-A `null`, empty, or `[]` value counts as absent, the same as for attributes. Obsidian templates often leave properties blank.
+| Value | `reference` | `list` of `reference` |
+|---|---|---|
+| `null` / `""` | absent | absent |
+| `[]` | `relation-invalid-value` | absent |
+| `{}` | `relation-invalid-value` | `relation-invalid-value` |
+| string | resolved | `relation-invalid-value` ("write it as a list of references, even for one") |
+| list | `relation-invalid-value` ("declare `type: list` with reference `items` for several") | each item resolved; a null or empty item is `relation-invalid-value` |
+
+A `required: true` reference that is absent is `relation-missing`, and so is a required list or map of references. `required: true` on a list means at least one item. Obsidian templates often leave properties blank, which is why `null` and `""` count as absent.
 
 Each reference is a string in one of two forms:
 
@@ -391,7 +438,7 @@ With other settings, Obsidian may rewrite links on rename into forms that `knott
 Each reference is resolved relative to the directory of the file containing it. Each step must pass, and each failure is reported separately:
 
 ```
-value is a string or a list of strings            → relation-invalid-value
+value has the declared shape (table above)        → relation-invalid-value
   (an unquoted [[x]] parses as a nested list and fails here; the error
    suggests quoting the value)
 reference parses as a plain path or Markdown link → relation-invalid-value
@@ -400,7 +447,7 @@ reference parses as a plain path or Markdown link → relation-invalid-value
 resolved path stays inside the vault root          → relation-target-outside-vault
 target exists, with exact case matching            → relation-target-not-found
 target is a Knott entity                           → relation-target-not-entity
-target's type equals relation.target               → relation-target-type-mismatch
+target's type is in the property's target list     → relation-target-type-mismatch
 ```
 
 A reference written `kid:<uuid>` skips the path steps. It must be a canonical lowercase UUID (`relation-invalid-value`; a `[label](kid:…)` link is rejected too), exactly one entity must have that `kid` (`relation-target-not-found`, or `relation-target-ambiguous` when several do), and then the type check runs as above.
@@ -409,7 +456,7 @@ Use exact case matching so results are the same on case-insensitive filesystems 
 
 An unquoted `[label](path)` is not valid YAML, so it surfaces as `entity-invalid-frontmatter`. That error should also suggest quoting the value when the failing line looks like a Markdown link.
 
-If the schema marks a relation `required: true`, the key must be present with at least one reference (`relation-missing`).
+Issues give the full path in `field` (`speakers[1].person`, `sources[0]`) and the line of the nested key or item. A type-mismatch message names every allowed type (``expects target type `episode` or `meeting` ``).
 
 ---
 
@@ -423,10 +470,10 @@ kid: 3f2b8c1e-9d4a-4c2e-b7f1-0a6d5e9c8b21
 ```
 
 - `kid` is a reserved top-level key, like `type`. Its value is a canonical lowercase UUID (any version; knott generates v4). Other spellings are `kid-invalid`, and the message gives the canonical form.
-- It is optional unless the schema says `kid: required` (`kid-missing`).
+- It is optional unless the concept file says `kid: required` (`kid-missing`).
 - It is unique across the vault, whatever the type. A duplicate is reported once (`kid-duplicate`), on the first claimant by path, naming every claimant. A scoped run reports a duplicate only if one of its claimants is in scope.
 - `knott validate --fix` inserts `kid: <uuid4>` into every in-scope entity without a `kid` key: one line, after `type:` (or before the closing `---`), with the rest of the file unchanged, re-parsed before it is written. It never changes an existing `kid`, including duplicates. This is knott's only edit to user files.
-- Relations may refer to an entity as `kid:<uuid>` (§11). Markdown links remain the default.
+- References may name an entity as `kid:<uuid>` (§11), at any depth. Markdown links remain the default.
 - Resolution stays behind `resolve_reference()` in `vault/links.py`. The `kid` index is built once per run, only when a run needs it.
 
 A `kid` does not detect two entities describing the same concept. See `docs/decisions/0009-kid-identity.md`.
@@ -435,25 +482,25 @@ A `kid` does not detect two entities describing the same concept. See `docs/deci
 
 ## 13. Validation
 
-Validation is the primary feature of v0. A run loads all schemas, then validates entities.
+Validation is the primary feature of v0. A run loads all concept files, then validates entities. If `.knott/schemas/` exists, the run reports only `schema-legacy-layout` (§4).
 
 ### Schema validation
 
-- Each schema file is valid YAML and a mapping.
-- `type` is present and well-formed. No unknown keys (§7).
-- Each attribute has a known `type`; `list`, `object` and `map` have their nested definition, recursively valid.
-- Each relation `target` names a discovered type.
+- Each concept file has frontmatter, which is valid YAML and a mapping.
+- `name` is present and well-formed. No unknown keys (§7).
+- Each property has a known `type`; `list`, `object`, `map` and `reference` have their nested key, recursively valid.
+- Each name in a reference's `target` names a discovered type (`schema-unknown-target`, one issue per unknown name, `field` = the full key path such as `properties.sources.items.target`). Unknown names are dropped from the target list. If none is left, values are still checked for shape and resolved, but the target-type check is skipped.
 - `kid`, when present, is `required`.
-- No duplicate `type` across files.
-- No field name collisions, and no field named `type` or `kid`.
+- No duplicate `name` across files (`schema-duplicate-type`).
+- No top-level property named `type` or `kid`; no `relation:` key; no `.knott/relations/` folder.
 
 ### Entity validation
 
-- `type` names a discovered schema (`entity-unknown-type`).
+- `type` is the `name` of a discovered concept file (`entity-unknown-type`).
 - `kid`: present when the schema requires it (`kid-missing`), a canonical UUID (`kid-invalid`), and unique (`kid-duplicate`).
-- Declared attributes: required ones are present (`attribute-missing`) and values match their type (`attribute-type-mismatch`), at every nesting level. Declared objects have no undeclared keys (`attribute-unknown-field`).
-- Declared relations: checked as in §11.
-- Undeclared keys are allowed and not checked. Strict schemas may come later.
+- Attributes: required ones are present (`attribute-missing`) and values match their type (`attribute-type-mismatch`), at every nesting level. Declared objects have no undeclared keys (`attribute-unknown-field`).
+- References, at every nesting level: checked as in §11. A list or map whose items are references uses the `relation-*` codes.
+- Undeclared top-level keys are allowed and not checked. Strict schemas may come later.
 
 For example, this stays valid even though `some_personal_metadata` is not in the schema:
 
@@ -466,8 +513,8 @@ some_personal_metadata: foo
 
 ### Scope of a run
 
-- `knott validate` (no args) checks every schema and every entity.
-- `knott validate PATH...` always checks every schema, because entity checks depend on them. Entity checks cover only the given files, or the entities under the given directories. Relation targets outside those paths are still read to check their type.
+- `knott validate` (no args) checks every concept file and every entity.
+- `knott validate PATH...` always checks every concept file, because entity checks depend on them. Entity checks cover only the given files, or the entities under the given directories. Relation targets outside those paths are still read to check their type.
 - An explicitly given file that is not an entity is an error (`not-an-entity`).
 
 ---
@@ -479,7 +526,8 @@ Keep the CLI deliberately small:
 ```
 knott init [PATH]
 knott validate [PATH...] [--fix]
-knott types
+knott types [--verbose]
+knott migrate [PATH]
 knott version
 knott skill install [PATH]
 knott view [PATH]
@@ -487,7 +535,7 @@ knott view [PATH]
 
 ### `knott init [PATH]`
 
-Creates `.knott/schemas/` and `.knott/config.yaml` in `PATH` (default: cwd). No content directories.
+Creates `.knott/concepts/` and `.knott/config.yaml` in `PATH` (default: cwd). No content directories and no concept files.
 
 If `.knott/` already exists, it changes nothing, prints that the vault is already initialized, and exits with code `0`.
 
@@ -507,13 +555,37 @@ transcript
 
 If schema errors exist, `types` still prints the types it could load, writes the errors to stderr, and exits with code `1`.
 
+`--verbose` adds, per type: the concept file path, the description, `kid: required` when set, `template: yes|no`, `references:` with the path of every reference at any depth (`[]` for list items, `.*` for map values, `.field` for object fields, or `none`), and the properties with nested shapes indented. A reference shows `→ target | target`; a target no concept defines is marked `(unknown)`.
+
+### `knott migrate [PATH]`
+
+Converts a pre-0.5 vault. Reads every `.knott/schemas/**/*.yaml` with the safe loader (the parser limits of decision 0007 apply) and writes `.knott/concepts/<same relative path>.md`:
+
+- `type` → `name`; `description` and `kid` are kept.
+- `attributes`, then `relations`, merge into `properties`, in file order.
+- A relation becomes `{type: reference, target, description}`, or `{type: list, required, description, items: {type: reference, target}}` when any entity of that type stores a list in that field.
+- Output is block-style YAML in source key order; multi-line descriptions are folded (`>`). The body is empty.
+
+It refuses (exit `2`, nothing written) when there is no `.knott/schemas/`; a legacy file is unreadable, not UTF-8, not valid YAML, has unknown keys, or declares a name as both attribute and relation; a target `.md` already exists; or `.knott/schemas/` holds a non-hidden file that isn't `.yaml` (the folder is deleted afterwards). On success it writes every file, deletes `.knott/schemas/`, then validates and prints:
+
+```
++ .knott/concepts/compilation.md
++ .knott/concepts/script.md
+  list of reference: compilation.sources
+- .knott/schemas/
+
+<the validate output>
+```
+
+The exit code is the validation exit code. `migrate` writes only inside `.knott/`, knott's own configuration, so it never edits entities.
+
 ### `knott version`
 
 Prints the installed Knott version.
 
 ### `knott view [PATH] [-o FILE] [--no-open]`
 
-Writes the vault's ontology (types, attributes, relations, entity counts) as one self-contained static HTML page and opens it in the browser. No server and no network. Relations to undefined types point to a dashed "ghost" type. Schema errors still produce a page, with a note to run `knott validate`; a vault with no types exits with code `2`. See `docs/commands/view.md`.
+Writes the vault's ontology (types, properties, templates, references, entity counts) as one self-contained static HTML page and opens it in the browser. No server and no network. Each reference is an edge per known target, labelled with its path; it is drawn as required only when every step on its path is required. Targets no concept defines get no edge and are marked `(unknown)` in the type's panel. Schema errors still produce a page, with a note to run `knott validate`; a vault with no types exits with code `2`. See `docs/commands/view.md`.
 
 ---
 
@@ -534,17 +606,17 @@ Not in v0: `knott create`, `knott edit`, `knott link`.
 Ship an agent instruction document in the repo at `src/knott/_skills/knott/SKILL.md`, in Agent Skills format (frontmatter with `name` and `description`). It explains:
 
 - what a Knott vault is, and that Markdown is the source of truth
-- where schemas live and how to read them
+- where concept files live, how to read them, and how to use the body template
 - how to discover types (`knott types`)
-- how to create an entity and write relations (relative paths, Markdown-link form, quoted)
+- how to create an entity and write references (relative paths, Markdown-link form, quoted; strict cardinality; nested references)
 - that `knott validate <file>` must be run after every change
 
 Typical agent workflow:
 
-1. Run `knott types` and look in `.knott/schemas/`.
-2. Pick the relevant type and read its schema.
-3. Create or update the Markdown entity.
-4. Write relations as relative paths.
+1. Run `knott types --verbose` and look in `.knott/concepts/`.
+2. Pick the relevant type and read its concept file.
+3. Create or update the Markdown entity, starting a new body from the concept's template.
+4. Write references as relative paths, one value for a `reference` and a list for a `list` of references.
 5. Run `knott validate <file>`.
 6. Fix every reported issue before finishing.
 
@@ -566,9 +638,9 @@ Markdown files → rebuildable derived index → search / traversal / retrieval
 
 ## 18. Semantic model
 
-Knott borrows vocabulary from RDF (entity, attribute, relation/predicate, schema) but does not implement RDF. Not in v0: RDF serialization, RDFS, OWL, SPARQL, reasoning, inference, inverse/symmetric/transitive properties, cardinality constraints beyond `required`.
+Knott borrows vocabulary from RDF (entity, attribute, relation/predicate, schema) but does not implement RDF. Not in v0: RDF serialization, RDFS, OWL, SPARQL, reasoning, inference, inverse/symmetric/transitive properties (reserved for relation definitions, §9), cardinality constraints beyond `required` and `reference` vs `list`.
 
-The model must stay small enough to understand by reading a few YAML files.
+The model must stay small enough to understand by reading a few concept files.
 
 ---
 
@@ -624,7 +696,7 @@ Success output:
 
 ```
 schema-invalid-yaml        schema-invalid-field       schema-duplicate-type
-schema-unknown-target      schema-field-conflict
+schema-unknown-target      schema-legacy-layout
 entity-invalid-frontmatter entity-unknown-type        not-an-entity
 kid-missing                kid-invalid                kid-duplicate
 attribute-missing          attribute-type-mismatch    attribute-unknown-field
@@ -657,7 +729,9 @@ result.issues                      # list[Issue], sorted
 result.stats                       # schemas / entities / relations counts
 vault.validate(fix=True)           # add missing kids first; result.fixed lists them
 types = vault.types()              # list[str], sorted
-ontology = vault.ontology()        # Ontology: types with attributes, relations, counts
+ontology = vault.ontology()        # Ontology: types with properties, templates, counts
+ontology.types[0].references()     # [("speakers[].person", OntologyAttribute), …]
+vault.migrate()                    # MigrateResult(written, removed, list_fields); see §14
 ```
 
 `validate()` returns validation problems as data and never raises for them. It raises only for `2`-class conditions (`KnottError` subclasses in `errors.py`).
@@ -681,6 +755,10 @@ tests/fixtures/
 ├── relation-markdown-link/         # Markdown-link, <…>, and %20 forms
 ├── relation-list/
 ├── unknown-relation-target-type/   # schema references a type that doesn't exist
+├── nested-references/              # references inside lists, maps and objects
+├── union-target/                   # target: [a, b], partly or wholly unknown
+├── reference-cardinality/          # reference vs list of reference
+├── legacy-layout/                  # .knott/schemas/ for knott migrate
 ├── duplicate-schema-type/
 └── schema-unknown-key/
 ```
@@ -693,7 +771,7 @@ At minimum, test: schema discovery and parsing, entity detection, attribute typi
 
 Do not add, unless needed purely to meet the requirements above:
 
-database as source of truth · search indexes · semantic or vector search · embeddings · automatic inverse relations · global relation registry · RDF / OWL · inference or reasoning · schema inheritance, composition, or versioning · migration framework · UI (an interactive or served app; the static page `knott view` writes is not one) · HTTP server · daemon · filesystem watcher · automatic knowledge extraction · automatic memory selection · agent deciding autonomously what to persist · plugin architecture · wikilink resolution.
+database as source of truth · search indexes · semantic or vector search · embeddings · automatic inverse relations · global relation registry · RDF / OWL · inference or reasoning · schema inheritance, composition, or versioning · migration framework (`knott migrate` is a one-off converter for decision 0010) · UI (an interactive or served app; the static page `knott view` writes is not one) · HTTP server · daemon · filesystem watcher · automatic knowledge extraction · automatic memory selection · agent deciding autonomously what to persist · plugin architecture · wikilink resolution.
 
 Avoid speculative abstractions. Prefer the smallest implementation that satisfies the contract.
 
@@ -701,25 +779,32 @@ Avoid speculative abstractions. Prefer the smallest implementation that satisfie
 
 ## 24. Definition of Done
 
-Given `.knott/schemas/script.yaml`:
+Given `.knott/concepts/script.md`:
 
-```yaml
-type: script
-attributes:
+```markdown
+---
+name: script
+properties:
   title:
     type: string
     required: true
+---
 ```
 
-and `.knott/schemas/transcript.yaml`:
+and `.knott/concepts/transcript.md`:
 
-```yaml
-type: transcript
-relations:
+```markdown
+---
+name: transcript
+properties:
+  title:
+    type: string
   derived_from:
+    type: reference
     target: script
     description: >
       The script from which this transcript was produced.
+---
 ```
 
 and `scripts/foo.md`:
@@ -777,7 +862,7 @@ When a choice is ambiguous, keep this invariant:
 The whole useful v0 path is:
 
 ```
-discover schemas → parse Markdown + frontmatter → validate attributes → resolve and validate relations
+discover concept files → parse Markdown + frontmatter → validate attributes → resolve and validate references
 ```
 
 Do not build beyond it unless this spec requires it.
@@ -789,5 +874,5 @@ Do not build beyond it unless this spec requires it.
 These are cheap and fit the agent-first goal, but they add scope:
 
 - `knott validate --format json`: emits `{ok, stats, issues[]}` using the issue fields from §20. Agents should not have to parse text output.
-- `knott types --verbose`: prints each type's `description` and schema path, so an agent can go straight to the right YAML.
+- `knott types --verbose`: prints each type's `description`, concept file path, references and properties, so an agent can go straight to the right file.
 - `knott skill`: prints the bundled `SKILL.md`, so agents installed through `uvx` can find it without the repo.

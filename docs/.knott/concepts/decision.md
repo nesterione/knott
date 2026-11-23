@@ -24,19 +24,19 @@ properties:
     type: reference
     target: decision
 ---
-<!-- Start with "# NNNN: <the decision as a sentence>", the same text as the `title` property; NNNN is the next free number in decisions/. -->
+# <!-- "NNNN: <the decision as a sentence>", the same text as the `title` property; NNNN is the next free number in decisions/. -->
 
 **Context.**
 
-<!-- What problem or gap forced a choice, and what the spec or earlier decisions said. Link GitHub issues (#N) and earlier decisions. -->
+<!-- What problem or gap forced a choice, and what the spec or earlier decisions said. Link GitHub issues (#N) and earlier decisions. Earlier decisions start the text on the label's line. -->
 
 **Decision.**
 
-<!-- What was decided. One paragraph, or a list when there are several rules. -->
+<!-- What was decided. One paragraph, or a numbered list when there are several rules. -->
 
 **Not included.**
 
-<!-- Optional: what this decision deliberately leaves out, and what it waits for. Delete if nothing. -->
+<!-- What this decision deliberately leaves out, and what it waits for. Delete the label if nothing. -->
 
 **Why.**
 
@@ -44,4 +44,4 @@ properties:
 
 **Consequences.**
 
-<!-- What changes for users, agents, and the code; known gaps. When a later decision changes this one, add an "**Amended YYYY-MM-DD** by [NNNN](...)" paragraph at the end instead of rewriting it. -->
+<!-- What changes for users, agents and the code; known gaps. When a later decision changes this one, add an "**Amended YYYY-MM-DD** by [NNNN](...)" paragraph at the end instead of rewriting it. -->

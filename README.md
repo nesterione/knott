@@ -19,24 +19,34 @@ Requires Python 3.12+.
 mkdir my-vault && knott init my-vault
 ```
 
-Define a type in `my-vault/.knott/schemas/script.yaml`:
+Each type is a Markdown concept file in `.knott/concepts/`. Its frontmatter is the schema. `my-vault/.knott/concepts/script.md`:
 
-```yaml
-type: script
+```markdown
+---
+name: script
 description: A script for a recorded episode.
-attributes:
+properties:
   title:
     type: string
     required: true
+---
 ```
 
-and one that relates to it, `.knott/schemas/transcript.yaml`:
+and one that refers to it, `.knott/concepts/transcript.md`. Its body is a template that agents copy when they write a transcript:
 
-```yaml
-type: transcript
-relations:
+```markdown
+---
+name: transcript
+properties:
+  title:
+    type: string
   derived_from:
+    type: reference
     target: script
+---
+# Transcript
+
+<!-- Who speaks, and what the recording covers. -->
 ```
 
 Write entities as ordinary Markdown with frontmatter, anywhere in the vault:
@@ -64,47 +74,52 @@ $ knott validate
 
 | Command | Purpose |
 |---|---|
-| `knott init [PATH]` | Create `.knott/schemas/` and `.knott/config.yaml` |
+| `knott init [PATH]` | Create `.knott/concepts/` and `.knott/config.yaml` |
 | `knott validate [PATH...]` | Check all schemas, plus all entities or those under `PATH` (`--format json` for agents, `--fix` to add missing `kid`s) |
-| `knott types [--verbose]` | List discovered types (`--verbose`: attributes, nested shapes and relations) |
+| `knott types [--verbose]` | List discovered types (`--verbose`: properties, nested shapes, references and whether a template exists) |
+| `knott migrate [PATH]` | Convert a pre-0.5 `.knott/schemas/` folder into concept files, then validate |
 | `knott view [PATH]` | Draw the ontology as an HTML page and open it (`-o FILE`, `--no-open`) |
 | `knott version` | Print the installed version |
 | `knott skill install [PATH]` | Install the bundled Agent Skill to `.claude/skills` and/or `.agents/skills` (`--claude`, `--agents`; asks interactively without flags) |
 
 Exit codes: `0` valid, `1` validation issues, `2` usage or configuration error.
 
-## Schemas
+## Concept files
 
-Schemas live in `.knott/schemas/**/*.yaml`, one type per file. Attribute types: `string`, `integer`, `number`, `boolean`, `date`, `datetime`, plus `list`, `object` and `map` built from them and nested to any depth. Typing is strict: an unquoted `no` is a boolean, not a string. Relations name a `target` type and are stored only on the source entity.
+Concept files live in `.knott/concepts/**/*.md`, one type per file, identified by `name:`. All fields go in one `properties` map. Value types: `string`, `integer`, `number`, `boolean`, `date`, `datetime`, plus `list`, `object` and `map` built from them and nested to any depth. Typing is strict: an unquoted `no` is a boolean, not a string.
 
-Structured attributes are checked at every level, and problems name their exact location, e.g. `senses[1].ru`:
+A property with `type: reference` points at another entity. It can sit anywhere a shape can, and `target` may name several types. Problems name their exact location, e.g. `speakers[1].person`:
 
 ```yaml
-attributes:
-  senses:
+properties:
+  recording_of: { type: reference, target: [episode, meeting] }
+  speakers:
     type: list
-    required: true
     items:
       type: object
       fields:
-        id: {type: string, required: true}
-        ru: {type: string, required: true}
+        person: { type: reference, target: person, required: true }
+        role:   { type: string }
 ```
 
-## Relations
+The body of a concept file is an optional template for entity bodies: real headings, with a `<!-- -->` comment under each saying what goes there. Knott stores it and never checks entities against it.
 
-A relation value is a relative path or a quoted Markdown link, or a list of them, resolved relative to the containing file:
+## References
+
+A reference is a relative path or a quoted Markdown link, resolved relative to the containing file. References are stored only on the source entity. `type: reference` holds exactly one; for several, declare a `list` of references:
 
 ```yaml
-derived_from: ../scripts/episode-42.md
 derived_from: "[Episode 42 script](../scripts/episode-42.md)"
+sources:
+  - ../scripts/episode-42.md
+  - "[Notes](../notes/episode-42.md)"
 ```
 
 Wikilinks, URLs, `#fragments`, and absolute paths are rejected. Matching is case-sensitive on every OS.
 
 ### Stable identity
 
-`knott validate --fix` gives every entity a `kid`, a knott-managed UUID that survives moves and renames. A relation can then refer to it as `kid:<uuid>`. A schema can require one with `kid: required`. Markdown links stay the recommended form; use `kid:` where a reference must survive renames.
+`knott validate --fix` gives every entity a `kid`, a knott-managed UUID that survives moves and renames. A reference can then name it as `kid:<uuid>`. A concept file can require one with `kid: required`. Markdown links stay the recommended form; use `kid:` where a reference must survive renames.
 
 ```yaml
 kid: 3f2b8c1e-9d4a-4c2e-b7f1-0a6d5e9c8b21
@@ -119,6 +134,31 @@ Markdown links in properties are clickable in Obsidian 1.11+ and are updated on 
 - Files & links → *New link format*: **Relative path to file**
 - *Use [[Wikilinks]]*: **off**
 
+## Upgrading from 0.4
+
+Knott 0.5 reads types from `.knott/concepts/` only. A vault that still has `.knott/schemas/` reports one issue, `schema-legacy-layout`, and nothing else is checked until you convert it:
+
+```sh
+$ knott migrate
++ .knott/concepts/compilation.md
++ .knott/concepts/media/episode.md
++ .knott/concepts/script.md
+  list of reference: compilation.sources
+- .knott/schemas/
+
+✓ 3 schemas
+✓ 4 entities
+✓ 4 relations
+✓ vault is valid
+```
+
+- Each YAML schema becomes a concept file at the same relative path. `type` becomes `name`, and `attributes` and `relations` merge into `properties`.
+- A relation becomes a `reference`, or a `list` of references when any entity already stores a list there (the `list of reference:` lines).
+- Entities are not changed. From now on, a single reference accepts exactly one value and a list reference needs a list.
+- It writes nothing if any schema can't be converted or a concept file already exists (exit `2`). Review the diff in Git afterwards.
+
+The Python API changed too: `OntologyType.attributes` and `.relations` are now one `properties` list, and `OntologyRelation` is gone. See [decision 0010](docs/decisions/0010-concept-files-and-reference-properties.md) and [`knott migrate`](docs/commands/migrate.md).
+
 ## Python API
 
 ```python
@@ -129,13 +169,15 @@ result = vault.validate()            # or vault.validate(["transcripts/foo.md"])
 result.ok, result.issues, result.stats
 vault.types()                        # ["script", "transcript"]
 vault.ontology()                     # Ontology(vault, types, schema_issues)
+for t in vault.ontology().types:
+    t.properties, t.template, t.references()   # references(): [("speakers[].person", …), …]
 ```
 
 Validation problems come back as data; only usage errors raise (`KnottError` subclasses).
 
 ## For agents
 
-Knott ships an Agent Skill describing how to read schemas, write entities and relations, and validate ([`SKILL.md`](src/knott/_skills/knott/SKILL.md)). Install it into a project:
+Knott ships an Agent Skill describing how to read concept files, write entities and references, and validate ([`SKILL.md`](src/knott/_skills/knott/SKILL.md)). Install it into a project:
 
 ```sh
 knott skill install            # pick targets interactively

@@ -18,23 +18,31 @@ commands:
 mkdir my-vault && cd my-vault && uvx knott init
 ```
 
-**2. Define two types.** `.knott/schemas/script.yaml`:
+**2. Define two types.** Each type is a Markdown file in `.knott/concepts/`. `.knott/concepts/script.md`:
 
-```yaml
-type: script
-attributes:
+```markdown
+---
+name: script
+properties:
   title:
     type: string
     required: true
+---
 ```
 
-`.knott/schemas/transcript.yaml`:
+`.knott/concepts/transcript.md`, with a reference to a script and a template for the body:
 
-```yaml
-type: transcript
-relations:
+```markdown
+---
+name: transcript
+properties:
   derived_from:
+    type: reference
     target: script
+---
+# Transcript
+
+<!-- Who speaks, and what the recording covers. -->
 ```
 
 **3. Write entities**, anywhere you like. `scripts/foo.md`:
@@ -68,5 +76,7 @@ $ uvx knott validate
 ```
 
 **5. Break something on purpose.** Change `scripts/foo.md` to `title: no`, run `knott validate`, and read the error: it explains that unquoted `no` is a boolean and suggests quoting it. Every issue code has a page in [`issues/`](../issues/).
+
+Upgrading a vault made before 0.5, with a `.knott/schemas/` folder? Run [`knott migrate`](../commands/migrate.md).
 
 Next: [Writing schemas](writing-schemas.md), [Using Obsidian](obsidian.md).

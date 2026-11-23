@@ -20,12 +20,14 @@ properties:
       type: reference
       target: concept
 ---
-<!-- Start with the title as an H1, the same text as the `title` property. -->
+# <!-- The concept's name, the same text as the `title` property. -->
 
-<!-- Definition: one or two sentences that name the concept in **bold** and say what it is. Keep `summary` in the frontmatter as the one-line version. -->
+<!-- Definition: one or two sentences that name the concept in **bold** and say what it is. The `summary` property holds the one-line version. -->
 
 <!-- Example: a short fenced block (YAML, a diagram, or a command) showing the concept in a real vault. -->
 
 <!-- Rules: a bullet list, each bullet starting with a bold keyword, e.g. "- **Unique** across the whole vault." -->
 
-<!-- Add a `##` section for each part that needs more than a bullet: discovery, value shapes, edge cases, why it works this way. Link decisions and other concepts with relative Markdown links. -->
+## <!-- One section per part that needs more than a bullet, e.g. "Discovery", "Value shape", "Not supported". -->
+
+<!-- The details, with links to decisions and other concepts as relative Markdown links. Repeat the heading for each part; delete it if the bullets say everything. -->

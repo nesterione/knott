@@ -246,11 +246,12 @@ properties:                     # optional map: name → definition
 - Create: `docs/commands/migrate.md`, `docs/issues/schema-legacy-layout.md`
 - Modify: `README.md`
 
-- [ ] rewrite schema docs around concept files, `properties`, `reference`, templates; the relation concept describes reference properties plus the reserved relation definitions (0010 §7)
-- [ ] issue codes: add `schema-legacy-layout`, remove `schema-field-conflict`, update the `relation-*` texts for nested paths and cardinality
-- [ ] add the `migrate` command page and README section ("Upgrading from 0.4")
-- [ ] `uv run knott validate docs` passes
-- [ ] run full tests - must pass before next task
+- [x] rewrite schema docs around concept files, `properties`, `reference`, templates; the relation concept describes reference properties plus the reserved relation definitions (0010 §7)
+- [x] issue codes: add `schema-legacy-layout`, remove `schema-field-conflict`, update the `relation-*` texts for nested paths and cardinality
+- [x] add the `migrate` command page and README section ("Upgrading from 0.4")
+- [x] ➕ rewrite the docs-vault templates (`docs/.knott/concepts/*.md`) with real section headings (`## Example`, `## Fix`, `## Output`, `**Context.**`, …) and a `<!-- -->` comment under each; Task 8 left the H1 and the concept/guide sections as comments only
+- [x] `uv run knott validate docs` passes
+- [x] run full tests - must pass before next task
 
 ### Task 10: Verify acceptance criteria
 - [ ] every point of decision 0010 §1–8 is implemented or explicitly reserved

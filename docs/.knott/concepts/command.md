@@ -20,14 +20,14 @@ properties:
       type: reference
       target: concept
 ---
-<!-- Start with the command as an H1, e.g. "# knott validate". -->
+# <!-- The command, e.g. "knott validate". -->
 
-<!-- What it does: arguments, defaults, and which files it reads or writes. A table works well when invocations differ. -->
+<!-- What it does: arguments, defaults, and which files it reads or writes. A table works well when invocations or flags differ. -->
 
 ## Output
 
-<!-- Optional: an example of the output in a fenced block, for success and failure. Delete if the command prints nothing worth showing. -->
+<!-- An example of the output in a fenced block, for success and for failure. Delete this section if the command prints nothing worth showing. -->
 
 ## Exit codes
 
-<!-- Optional: what each exit code means, e.g. `0` valid, `1` validation errors, `2` usage error. Delete if the command always exits 0. -->
+<!-- A table of what each exit code means, e.g. `0` valid, `1` validation issues, `2` usage error. Delete this section if the command always exits 0. -->

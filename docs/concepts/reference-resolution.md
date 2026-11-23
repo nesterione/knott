@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Reference resolution
-summary: The ordered checks that turn a relation value into a verified link to an entity of the right type.
+summary: The ordered checks that turn a reference value into a verified link to an entity of the right type.
 spec_section: "§11"
 related:
   - "[Relation](relation.md)"
@@ -9,16 +9,16 @@ related:
 ---
 # Reference resolution
 
-Each reference is resolved **relative to the directory of the file that contains it**. Every check must pass; each failure is reported separately, with its own code:
+Each reference is resolved **relative to the directory of the file that contains it**, at whatever depth it sits (`speakers[1].person`). Every check must pass; each failure is reported separately, with its own code:
 
 | # | Check | Failure code |
 |---|---|---|
-| 1 | value is a string or a list of strings | `relation-invalid-value` |
+| 1 | value has the declared shape: one string for `reference`, a list of strings for a `list` of references ([cardinality](relation.md)) | `relation-invalid-value` |
 | 2 | parses as a plain path or Markdown link; no URL scheme, `#fragment`, absolute path; ends in `.md` | `relation-invalid-value` |
 | 3 | stays inside the vault root, including through symlinks | `relation-target-outside-vault` |
 | 4 | target exists, with **exact case** | `relation-target-not-found` |
 | 5 | target is a Knott entity | `relation-target-not-entity` |
-| 6 | target's `type` equals the relation's `target` | `relation-target-type-mismatch` |
+| 6 | target's `type` is the property's `target`, or one of them when `target` is a list | `relation-target-type-mismatch` |
 
 ## `kid:` references
 

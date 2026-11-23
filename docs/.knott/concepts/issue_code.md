@@ -16,13 +16,13 @@ properties:
     required: true
     description: The concept whose rule this code enforces.
 ---
-<!-- Start with the code in backticks as an H1, e.g. "# `kid-missing`". -->
+# <!-- The code in backticks, e.g. `kid-missing`. -->
 
 <!-- Cause: one or two sentences saying what knott found wrong. -->
 
 ## Example
 
-<!-- A minimal fenced block (frontmatter, or a schema file) that triggers the code. Name the schema in a leading comment line when it matters. -->
+<!-- A minimal fenced block (frontmatter, or a concept file) that triggers the code. Name the concept in a leading comment line when it matters, e.g. "# concept: senses is a list of objects". -->
 
 ## Fix
 
@@ -30,4 +30,4 @@ properties:
 
 ## Notes
 
-<!-- Optional: which line or field the issue points at, related codes, edge cases. Delete if nothing. -->
+<!-- Optional: which line or field the issue points at, related codes, edge cases. Delete this section if there is nothing to add. -->
