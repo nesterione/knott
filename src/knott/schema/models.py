@@ -41,6 +41,9 @@ class ReferenceShape:
     """Target types that some concept defines, in schema order."""
     unknown: tuple[str, ...] = ()
     """Target types no concept defines. Kept for display; never enforced."""
+    relation: str | None = None
+    """The relation this reference names (spec 0006); None when it names none or an
+    undefined one."""
 
 
 Shape = ScalarType | ListShape | ObjectShape | MapShape | ReferenceShape
@@ -95,6 +98,24 @@ class Schema:
     """Top-level properties in schema order; references are properties too."""
     template: str | None = None
     """The concept file's body, verbatim; None when it is blank."""
+
+
+@dataclass(frozen=True)
+class RelationDef:
+    """A relation file in ``.knott/relations/`` (spec 0006)."""
+
+    name: str
+    description: str | None
+    inverse: str | None
+    """The relation's name read from the target side."""
+    symmetric: bool
+    acyclic: bool
+    guidance: str | None
+    """The relation file's body, verbatim; None when it is blank."""
+    path: str
+    """Vault-relative path of the relation file."""
+    lines: dict[str, int | None] = field(default_factory=dict, compare=False)
+    """1-based line of each top-level key of the relation file."""
 
 
 SchemaPath = tuple[str, ...]

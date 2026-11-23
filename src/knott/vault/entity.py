@@ -57,6 +57,17 @@ class MarkdownFile:
         return None
 
 
+def markdown_body(text: str) -> str | None:
+    """The body after the closing frontmatter line, verbatim; None when blank.
+
+    ``text`` must have a well-formed frontmatter block (``parse_markdown`` found no error).
+    """
+    lines = _LINE_BREAK.split(text.removeprefix("\ufeff"))
+    end = lines.index(FRONTMATTER_DELIMITER, 1)
+    body = "\n".join(lines[end + 1 :])
+    return body if body.strip() else None
+
+
 def read_markdown(abs_path: Path, rel_path: str) -> MarkdownFile:
     try:
         data = abs_path.read_bytes()
