@@ -13,6 +13,7 @@ properties:
   about:
     type: reference
     target: concept
+    relation: about
     required: true
     description: The concept whose rule this code enforces.
 ---

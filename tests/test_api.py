@@ -58,7 +58,17 @@ def test_docs_folder_is_a_valid_vault() -> None:
     docs = Path(__file__).parent.parent / "docs"
     result = Knott.open(docs).validate()
     assert result.ok, result.issues
-    assert Knott.open(docs).types() == ["command", "concept", "decision", "guide", "issue_code"]
+    assert Knott.open(docs).types() == [
+        "command",
+        "concept",
+        "decision",
+        "guide",
+        "intent",
+        "issue_code",
+        "spec",
+    ]
+    relations = Knott.open(docs).ontology().relations
+    assert [r.name for r in relations] == ["about", "amends", "related", "supersedes"]
 
 
 def _write(path: Path, text: str) -> None:
@@ -127,6 +137,7 @@ def test_ontology_types_properties_and_counts(tmp_path: Path) -> None:
         "fields": [],
         "targets": [],
         "unknown_targets": [],
+        "relation": None,
     }
     assert [a.model_dump() for a in person.properties[:2]] == [
         {"name": "name", "type": "string", "required": True, "description": "Full name.", **scalar},

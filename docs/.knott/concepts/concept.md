@@ -19,6 +19,7 @@ properties:
     items:
       type: reference
       target: concept
+      relation: related
 ---
 # <!-- The concept's name, the same text as the `title` property. -->
 

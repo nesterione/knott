@@ -9,8 +9,9 @@ from importlib.metadata import version as _dist_version
 from pathlib import Path
 
 from knott import _yaml
-from knott.errors import ConfigError, PathNotFoundError, PathOutsideVaultError
+from knott.errors import ConfigError, KnottError, PathNotFoundError, PathOutsideVaultError
 from knott.models import (
+    EntityRef,
     FixedEntity,
     InitResult,
     Issue,
@@ -18,11 +19,13 @@ from knott.models import (
     Ontology,
     OntologyAttribute,
     OntologyType,
+    Refs,
+    RelationDefinition,
     SchemaInfo,
     Stats,
     ValidationResult,
 )
-from knott.schema.loader import load_schemas
+from knott.schema.loader import load_ontology, load_schemas
 from knott.schema.migrate import migrate_vault
 from knott.schema.models import (
     AttributeDef,
@@ -33,19 +36,20 @@ from knott.schema.models import (
     shape_kind,
 )
 from knott.schema.validator import validate_entity
+from knott.vault.cycles import checked_relations, cycle_issues
 from knott.vault.discovery import CONCEPTS_DIR, KNOTT_DIR, find_vault_root, iter_markdown
-from knott.vault.entity import MarkdownFile, read_markdown
+from knott.vault.entity import read_markdown
 from knott.vault.fix import insert_kid
+from knott.vault.index import VaultSession
 from knott.vault.kid import (
     KID_KEY,
     Claim,
-    KidIndex,
-    build_index,
     format_claims,
     is_canonical,
     new_kid,
 )
-from knott.vault.links import ResolvedReference, resolve_reference
+from knott.vault.links import KID_PREFIX, LinkError
+from knott.vault.refs import entity_kid, reverse_lookup, type_name
 
 CONFIG_FILE = Path(KNOTT_DIR) / "config.yaml"
 
@@ -126,14 +130,14 @@ class Knott:
         return _sorted(issues)
 
     def ontology(self) -> Ontology:
-        """The vault's types, their properties and templates, and entity counts.
+        """The vault's types, their properties and templates, entity counts, and relations.
 
         Types are sorted by name; properties keep their schema order, references
         included (``type == "reference"``, at any depth). Target types no concept
         defines are listed in ``unknown_targets``. Files with invalid frontmatter
-        are not counted.
+        are not counted. Relations are sorted by name.
         """
-        schemas, issues = load_schemas(self.root)
+        schemas, relation_defs, issues = load_ontology(self.root)
         counts: dict[str, int] = {}
         for rel_path in iter_markdown(self.root):
             parsed = read_markdown(self.root / rel_path, rel_path)
@@ -152,7 +156,21 @@ class Knott:
             )
             for _, s in sorted(schemas.items())
         ]
-        return Ontology(vault=self.root.name, types=types, schema_issues=len(issues))
+        relations = [
+            RelationDefinition(
+                name=r.name,
+                description=r.description,
+                inverse=r.inverse,
+                symmetric=r.symmetric,
+                acyclic=r.acyclic,
+                guidance=r.guidance,
+                path=r.path,
+            )
+            for _, r in sorted(relation_defs.items())
+        ]
+        return Ontology(
+            vault=self.root.name, types=types, schema_issues=len(issues), relations=relations
+        )
 
     def validate(
         self, paths: Sequence[str | Path] | None = None, *, fix: bool = False
@@ -169,6 +187,45 @@ class Knott:
         result = self._validate(paths)
         return result.model_copy(update={"fixed": fixed}) if fixed else result
 
+    def refs(self, path_or_kid: str | Path) -> Refs:
+        """Every reference in the vault that resolves to one entity, grouped (spec 0006).
+
+        ``path_or_kid`` is an entity file (relative paths are resolved against the
+        vault root) or ``kid:<uuid>``. Does not validate: it works with the concepts
+        and relations that load. Raises ``PathNotFoundError`` when the path doesn't
+        exist, ``PathOutsideVaultError`` when it is outside the vault, and
+        ``KnottError`` when it isn't an entity or a `kid` matches no entity or several.
+        """
+        schemas, relations, _ = load_ontology(self.root)
+        session = VaultSession(self.root, schemas)
+        if isinstance(path_or_kid, str) and path_or_kid.strip().startswith(KID_PREFIX):
+            try:
+                target = session.resolve("", path_or_kid).target
+            except LinkError as error:
+                raise KnottError(error.message) from None
+        else:
+            target = self._entity_path(path_or_kid, session)
+        entity = session.lookup(target)
+        return Refs(
+            entity=EntityRef(
+                path=target, type=type_name(entity.type), kid=entity_kid(session, target)
+            ),
+            groups=reverse_lookup(session, relations, target),
+        )
+
+    def _entity_path(self, given: str | Path, session: VaultSession) -> str:
+        """The vault-relative path of the entity file ``given``."""
+        rel_posix = self._vault_relative(given)
+        parsed = session.lookup(rel_posix) if rel_posix in session.all_markdown else None
+        if parsed is not None and parsed.error is not None:
+            raise KnottError(f"cannot read the frontmatter of {rel_posix}: {parsed.error}")
+        if parsed is None or not parsed.is_entity:
+            raise KnottError(
+                f"not a Knott entity: {rel_posix}; expected a Markdown file in the vault "
+                "(outside `.knott/` and hidden folders) whose YAML frontmatter has a `type` key"
+            )
+        return rel_posix
+
     def _assign_kids(self, paths: Sequence[str | Path] | None) -> list[FixedEntity]:
         all_markdown = iter_markdown(self.root)
         in_scope = all_markdown if paths is None else self._scope(paths, all_markdown)[0]
@@ -180,31 +237,12 @@ class Knott:
         return fixed
 
     def _validate(self, paths: Sequence[str | Path] | None) -> ValidationResult:
-        schemas, issues = load_schemas(self.root)
+        schemas, relation_defs, issues = load_ontology(self.root)
         if any(i.code == "schema-legacy-layout" for i in issues):
             # Every entity would also be `entity-unknown-type`; report only the cause.
             return ValidationResult(issues=issues, stats=Stats(schemas=0, entities=0, relations=0))
-        files: dict[str, MarkdownFile] = {}
-
-        def lookup(rel_path: str) -> MarkdownFile:
-            parsed = files.get(rel_path)
-            if parsed is None:
-                parsed = read_markdown(self.root / rel_path, rel_path)
-                files[rel_path] = parsed
-            return parsed
-
-        all_markdown = iter_markdown(self.root)
-        kid_index: KidIndex | None = None
-
-        def kids() -> KidIndex:
-            """Built on first use, so vaults and runs that never touch a `kid` pay nothing."""
-            nonlocal kid_index
-            if kid_index is None:
-                kid_index = build_index(all_markdown, lookup)
-            return kid_index
-
-        def resolve(source: str, reference: str) -> ResolvedReference:
-            return resolve_reference(self.root, source, reference, kids)
+        session = VaultSession(self.root, schemas)
+        all_markdown = session.all_markdown
 
         if paths is None:
             in_scope = all_markdown
@@ -216,7 +254,7 @@ class Knott:
         relations = 0
         in_scope_kids: set[str] = set()
         for rel_path in in_scope:
-            parsed = lookup(rel_path)
+            parsed = session.lookup(rel_path)
             if parsed.error is not None:
                 issues.append(
                     Issue(
@@ -230,7 +268,7 @@ class Knott:
             if not parsed.is_entity:
                 continue
             entities += 1
-            report = validate_entity(parsed, schemas, resolve, lookup)
+            report = validate_entity(parsed, schemas, session.resolve, session.lookup)
             issues.extend(report.issues)
             relations += report.relations
             assert parsed.frontmatter is not None
@@ -240,9 +278,14 @@ class Knott:
 
         # A duplicate is reported only when one of its claimants is in scope.
         for kid in sorted(in_scope_kids):
-            claims = kids()[kid]
+            claims = session.kids()[kid]
             if len(claims) > 1:
                 issues.append(_duplicate_kid(kid, claims))
+
+        # The reference graph is built only when some property names an acyclic relation.
+        scope = None if paths is None else set(in_scope)
+        for name in checked_relations(schemas, relation_defs):
+            issues.extend(cycle_issues(session.references(), name, scope))
 
         stats = Stats(schemas=len(schemas), entities=entities, relations=relations)
         return ValidationResult(issues=_sorted(issues), stats=stats)
@@ -255,21 +298,8 @@ class Knott:
         selected: set[str] = set()
         issues: list[Issue] = []
         for given in paths:
-            candidate = Path(given)
-            if not candidate.is_absolute():
-                candidate = self.root / candidate
-            if not candidate.exists():
-                raise PathNotFoundError(f"path does not exist: {given}")
-            # Resolve symlinks in the parent only, so a symlinked file keeps its own path.
-            absolute = Path(os.path.abspath(candidate))
-            absolute = absolute.parent.resolve() / absolute.name
-            try:
-                rel = absolute.relative_to(self.root)
-            except ValueError:
-                raise PathOutsideVaultError(
-                    f"path is outside the vault {self.root}: {given}"
-                ) from None
-            rel_posix = rel.as_posix()
+            rel_posix = self._vault_relative(given)
+            absolute = self.root / rel_posix
             if absolute.is_dir():
                 prefix = "" if rel_posix == "." else rel_posix + "/"
                 selected.update(p for p in all_markdown if p.startswith(prefix))
@@ -289,6 +319,26 @@ class Knott:
                     )
                 )
         return sorted(selected), issues
+
+    def _vault_relative(self, given: str | Path) -> str:
+        """``given`` as a vault-relative POSIX path (``.`` for the root).
+
+        Relative paths are resolved against the vault root. Raises
+        ``PathNotFoundError`` or ``PathOutsideVaultError``.
+        """
+        candidate = Path(given)
+        if not candidate.is_absolute():
+            candidate = self.root / candidate
+        if not candidate.exists():
+            raise PathNotFoundError(f"path does not exist: {given}")
+        # Resolve symlinks in the parent only, so a symlinked file keeps its own path.
+        absolute = Path(os.path.abspath(candidate))
+        absolute = absolute.parent.resolve() / absolute.name
+        try:
+            rel = absolute.relative_to(self.root)
+        except ValueError:
+            raise PathOutsideVaultError(f"path is outside the vault {self.root}: {given}") from None
+        return rel.as_posix()
 
     def _check_config(self) -> None:
         config = self.root / CONFIG_FILE
@@ -323,6 +373,7 @@ def _ontology_attribute(a: AttributeDef) -> OntologyAttribute:
         ),
         targets=list(shape.targets) if isinstance(shape, ReferenceShape) else [],
         unknown_targets=list(shape.unknown) if isinstance(shape, ReferenceShape) else [],
+        relation=shape.relation if isinstance(shape, ReferenceShape) else None,
     )
 
 

@@ -17,16 +17,17 @@ from knott.schema.models import (
     MapShape,
     ObjectShape,
     ReferenceShape,
+    RelationDef,
     ScalarType,
     Schema,
     SchemaPath,
     Shape,
 )
-from knott.vault.discovery import CONCEPTS_DIR, LEGACY_SCHEMAS_DIR, RELATIONS_DIR
-from knott.vault.entity import FRONTMATTER_DELIMITER, MarkdownFile, parse_markdown
+from knott.schema.relations import check_definitions, load_relations
+from knott.vault.discovery import CONCEPTS_DIR, LEGACY_SCHEMAS_DIR
+from knott.vault.entity import MarkdownFile, markdown_body, parse_markdown
 
 TYPE_NAME = re.compile(r"^[a-z][a-z0-9_-]*$")
-_LINE_BREAK = re.compile(r"\r?\n")
 
 _TOP_KEYS = ("name", "description", "kid", "properties")
 # Top-level keys with a targeted hint instead of the generic "unknown key".
@@ -41,7 +42,6 @@ _RESERVED_FIELDS = {
     "kid": "it is reserved for the knott-managed entity identity",
 }
 _DEFINITION_KEYS = ("type", "required", "description")
-_RESERVED_RELATION = "reserved for relation definitions, not supported yet"
 _PROPERTY_TYPES = ", ".join([*(t.value for t in ScalarType), *COMPOUND_KINDS, REFERENCE_KIND])
 # The key that nests the inner definition, by kind.
 _NESTING_KEYS = {"list": "items", "object": "fields", "map": "values", REFERENCE_KIND: "target"}
@@ -76,23 +76,22 @@ def legacy_layout_issue() -> Issue:
 def load_schemas(root: Path) -> tuple[dict[str, Schema], list[Issue]]:
     """Load every concept. Returns the usable schemas by type, and all schema issues.
 
-    A vault that still has ``.knott/schemas/`` gets one ``schema-legacy-layout``
-    issue and an empty registry.
+    Relation files are loaded and checked too; their issues are included.
+    """
+    schemas, _, issues = load_ontology(root)
+    return schemas, issues
+
+
+def load_ontology(root: Path) -> tuple[dict[str, Schema], dict[str, RelationDef], list[Issue]]:
+    """Load every concept and relation file (spec 0006).
+
+    Returns the usable schemas by type, the usable relations by name, and all
+    schema issues. A vault that still has ``.knott/schemas/`` gets one
+    ``schema-legacy-layout`` issue and empty registries.
     """
     if (root / LEGACY_SCHEMAS_DIR).exists():
-        return {}, [legacy_layout_issue()]
+        return {}, {}, [legacy_layout_issue()]
     issues: list[Issue] = []
-    if (root / RELATIONS_DIR).exists():
-        issues.append(
-            Issue(
-                code="schema-invalid-field",
-                path=RELATIONS_DIR,
-                message=(
-                    f"`{RELATIONS_DIR}/` is reserved for relation definitions "
-                    "(decision 0010), not supported yet"
-                ),
-            )
-        )
     registry: dict[str, Schema] = {}
     parsers: dict[str, _SchemaParser] = {}
     for rel_path in discover_schema_files(root):
@@ -119,22 +118,34 @@ def load_schemas(root: Path) -> tuple[dict[str, Schema], list[Issue]]:
         registry[schema.type] = schema
         parsers[schema.type] = parser
 
+    relations = load_relations(root, issues)
     for schema in registry.values():
         parser = parsers[schema.type]
         schema.properties = {
-            name: _resolve_targets(definition, (name,), registry, parser)
+            name: _resolve_targets(definition, (name,), registry, relations, parser)
             for name, definition in schema.properties.items()
         }
-    return registry, issues
+    check_definitions(
+        registry,
+        relations,
+        lambda schema, path: parsers[schema.type].relation_line(path),
+        issues,
+    )
+    return registry, relations, issues
 
 
 def _resolve_targets(
     definition: AttributeDef,
     path: SchemaPath,
     registry: dict[str, Schema],
+    relations: dict[str, RelationDef],
     parser: _SchemaParser,
 ) -> AttributeDef:
-    """Move target types no concept defines into ``ReferenceShape.unknown``, reporting each."""
+    """Move target types no concept defines into ``ReferenceShape.unknown``, reporting each.
+
+    A relation no relation file defines is reported and dropped: the reference
+    still works as a plain reference.
+    """
     shape = definition.shape
     new_shape: Shape = shape
     if isinstance(shape, ReferenceShape):
@@ -142,15 +153,25 @@ def _resolve_targets(
         unknown = tuple(t for t in shape.targets if t not in registry)
         for target in unknown:
             parser.unknown_target(path, target, registry)
-        new_shape = ReferenceShape(known, unknown)
+        relation = shape.relation
+        if relation is not None and relation not in relations:
+            parser.unknown_relation(path, relation, relations)
+            relation = None
+        new_shape = ReferenceShape(known, unknown, relation)
     elif isinstance(shape, ListShape):
-        new_shape = ListShape(_resolve_targets(shape.items, (*path, "items"), registry, parser))
+        new_shape = ListShape(
+            _resolve_targets(shape.items, (*path, "items"), registry, relations, parser)
+        )
     elif isinstance(shape, MapShape):
-        new_shape = MapShape(_resolve_targets(shape.values, (*path, "values"), registry, parser))
+        new_shape = MapShape(
+            _resolve_targets(shape.values, (*path, "values"), registry, relations, parser)
+        )
     elif isinstance(shape, ObjectShape):
         new_shape = ObjectShape(
             {
-                name: _resolve_targets(field_def, (*path, "fields", name), registry, parser)
+                name: _resolve_targets(
+                    field_def, (*path, "fields", name), registry, relations, parser
+                )
                 for name, field_def in shape.fields.items()
             }
         )
@@ -188,6 +209,28 @@ class _SchemaParser:
                 message=(
                     f"`{field}` names type `{target}`, which no concept defines "
                     f"(known types: {known})"
+                ),
+            )
+        )
+
+    def relation_line(self, path: SchemaPath) -> int | None:
+        return self.line(("properties", *path, "relation"))
+
+    def unknown_relation(
+        self, path: SchemaPath, relation: str, relations: dict[str, RelationDef]
+    ) -> None:
+        known = ", ".join(f"`{r}`" for r in sorted(relations)) or "none"
+        field = ".".join(("properties", *path, "relation"))
+        self.issues.append(
+            Issue(
+                code="relation-unknown",
+                path=self.path,
+                line=self.relation_line(path),
+                field=field,
+                message=(
+                    f"`{field}` names relation `{relation}`, which no relation file in "
+                    f"`.knott/relations/` defines (known relations: {known}); "
+                    "the reference still works as a plain reference"
                 ),
             )
         )
@@ -239,7 +282,7 @@ class _SchemaParser:
             description=description,
             kid_required=kid_required,
             properties=properties,
-            template=_template(text),
+            template=markdown_body(text),
         )
 
     def _check_top_keys(self, data: dict[str, Any]) -> None:
@@ -396,6 +439,8 @@ class _SchemaParser:
         allowed = [k for k in _DEFINITION_KEYS if not (nested and k == "required")]
         if kind_name in _NESTING_KEYS:
             allowed.append(_NESTING_KEYS[kind_name])
+        if kind_name == REFERENCE_KIND:
+            allowed.append("relation")
         for key in definition:
             if key == "required" and nested:
                 container = "list" if base[-1] == "items" else "map"
@@ -406,11 +451,7 @@ class _SchemaParser:
                     f"be empty; put `required` on the {container} itself",
                 )
             elif key == "relation":
-                self.error(
-                    "schema-invalid-field",
-                    (*base, "relation"),
-                    f"`relation` is {_RESERVED_RELATION} (decision 0010); remove it",
-                )
+                self._check_relation_placement(base, kind_name)
             elif key in _NESTING_KEYS.values():
                 owner = next(k for k, v in _NESTING_KEYS.items() if v == key)
                 if kind_name is not None and kind_name != owner:
@@ -428,6 +469,22 @@ class _SchemaParser:
                     f"unknown key `{key}` in `{where}`; allowed keys: {', '.join(allowed)}",
                 )
 
+    def _check_relation_placement(self, base: _yaml.KeyPath, kind_name: str | None) -> None:
+        """`relation:` belongs on a reference shape only (spec 0006)."""
+        if kind_name in ("list", "map"):
+            inner = _NESTING_KEYS[kind_name]
+            self.error(
+                "schema-invalid-field",
+                (*base, "relation"),
+                f"`relation` is not allowed on a {kind_name}: put `relation:` on `{inner}`",
+            )
+        elif kind_name is not None and kind_name != REFERENCE_KIND:
+            self.error(
+                "schema-invalid-field",
+                (*base, "relation"),
+                f"`relation` is only allowed when `type` is reference, but `type` is {kind_name}",
+            )
+
     def _parse_shape(
         self, kind_name: str, definition: dict[Any, Any], base: _yaml.KeyPath, label: str
     ) -> Shape | None:
@@ -443,7 +500,11 @@ class _SchemaParser:
             )
             return None
         if kind_name == REFERENCE_KIND:
-            return self._parse_reference(inner, (*base, key))
+            reference = self._parse_reference(inner, (*base, key))
+            relation = self._relation_name(definition, base)
+            if reference is None or relation is None:
+                return reference
+            return ReferenceShape(reference.targets, relation=relation)
         if kind_name == "object":
             return self._parse_object(inner, (*base, key))
         if not isinstance(inner, dict):
@@ -458,6 +519,17 @@ class _SchemaParser:
         if node is None:
             return None
         return ListShape(node) if kind_name == "list" else MapShape(node)
+
+    def _relation_name(self, definition: dict[Any, Any], base: _yaml.KeyPath) -> str | None:
+        value = definition.get("relation")
+        if value is None or isinstance(value, str):
+            return value
+        self.error(
+            "schema-invalid-field",
+            (*base, "relation"),
+            f"`relation` must be a relation name, got {kind(value)} {show(value)}",
+        )
+        return None
 
     def _parse_reference(self, value: Any, base: _yaml.KeyPath) -> ReferenceShape | None:
         """Parse `target`: one type name, or a non-empty list of unique type names."""
@@ -517,14 +589,6 @@ class _SchemaParser:
         if len(fields) != len(value):
             return None
         return ObjectShape(fields)
-
-
-def _template(text: str) -> str | None:
-    """The body after the closing frontmatter line, verbatim; None when blank."""
-    lines = _LINE_BREAK.split(text.removeprefix("﻿"))
-    end = lines.index(FRONTMATTER_DELIMITER, 1)
-    body = "\n".join(lines[end + 1 :])
-    return body if body.strip() else None
 
 
 def _kind_name(raw_type: Any) -> str | None:

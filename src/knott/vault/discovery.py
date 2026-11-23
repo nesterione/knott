@@ -11,7 +11,7 @@ KNOTT_DIR = ".knott"
 CONCEPTS_DIR = f"{KNOTT_DIR}/concepts"
 """Concept files: one Markdown file per type (decision 0010)."""
 RELATIONS_DIR = f"{KNOTT_DIR}/relations"
-"""Reserved for relation definitions (decision 0010), not supported yet."""
+"""Relation files: one Markdown file per relation (spec 0006)."""
 LEGACY_SCHEMAS_DIR = f"{KNOTT_DIR}/schemas"
 """The pre-0.5 schema folder; `knott migrate` converts it."""
 

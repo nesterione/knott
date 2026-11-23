@@ -6,12 +6,19 @@ writes_files: true
 concepts:
   - "[Ontology](../concepts/ontology.md)"
   - "[Schema](../concepts/schema.md)"
+  - "[Relation](../concepts/relation.md)"
 ---
 # knott view
 
 Draws the vault's ontology as one static HTML page and opens it in the browser. `PATH` is any path inside the vault, default the current directory.
 
-Each type is a box with its name and entity count. Each reference is an arrow labelled with its path (`derived_from`, `speakers[].person`), one per target type: solid if required, dashed if optional. A nested reference counts as required only when every step on its path is required. A target that no concept defines gets no arrow. Hover a type to highlight its neighbours. Click it to open a panel with its description, properties (unknown targets marked `(unknown)`), body template, references out, and the types that point to it.
+Each type is a box with its name and entity count. Each reference is an arrow labelled with its path (`derived_from`, `speakers[].person`), or with its [relation](../concepts/relation.md) when it names one (`about`), one per target type: solid if required, dashed if optional. A nested reference counts as required only when every step on its path is required. A target that no concept defines gets no arrow. Hover a type to highlight its neighbours. Click it to open a panel with:
+
+- its description, properties (with the relation a reference names, and unknown targets marked `(unknown)`) and body template
+- **References out**: each reference's path, with its relation in parentheses
+- **Referenced by**: every reference property, in any type, that can point at this one, grouped and labelled as [`knott refs`](refs.md) groups them (`discussed_in`, `related`, `← guide.concepts[]`). Each row is `<type>.<path>`.
+
+When the vault has relation files, a **Relations (N)** button in the header lists them with their keys, description and guidance.
 
 Three layouts sit behind a toggle: **Layered** (default), **Force** and **Radial**. The page remembers the last one, and the URL hash (`#layered`, `#force`, `#radial`) selects one directly.
 

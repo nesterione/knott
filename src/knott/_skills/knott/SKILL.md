@@ -13,11 +13,12 @@ A Knott vault is an ordinary directory of Markdown files with a `.knott/` direct
 - **Concept file**: `.knott/concepts/**/*.md`, one file per type. Its frontmatter is the type's schema: `name:` (the type's name; the file name and folder do not matter), `description`, and `properties`. Its body, if any, is a template for entity bodies.
 - **Property**: a frontmatter value declared under `properties:`: a scalar (`string`, `integer`, `number`, `boolean`, `date`, `datetime`), a `reference`, or a `list`, `object` or `map` of them, nested.
 - **Reference**: a property with `type: reference` and a `target` type; its value points to another entity file by relative path (or by `kid`). It lives only on the source file; never add an inverse on the target.
+- **Relation file**: `.knott/relations/**/*.md`, one file per relation, naming what a link means. Frontmatter: `name`, `description`, and optionally `inverse` (its name read from the target side), `symmetric: true` (goes both ways) or `acyclic: true` (must not loop). Its body says when to use it. A reference property opts in with `relation: <name>`.
 - **Kid**: a knott-managed identity, `kid: <lowercase uuid>`. Never invent or edit one; `knott validate --fix` adds it.
 
 ## Workflow
 
-1. Run `knott types --verbose` to see each type's concept file, whether it has a template, its references and its properties (with nested shapes). If it reports `schema-legacy-layout`, migrate first (see Commands).
+1. Run `knott types --verbose` to see each type's concept file, whether it has a template, its references and its properties (with nested shapes), and the vault's relations with their usage guidance. If it reports `schema-legacy-layout`, migrate first (see Commands).
 2. Pick the relevant type and read its concept file: `description`, `properties`, which fields are `required: true`, and the body template.
 3. Create or update the Markdown entity. Put it wherever it makes sense to a human; Knott does not dictate folders. For a new entity, start the body from the concept's template (`template: yes`): keep its headings, fill each section, and delete a section's `<!-- … -->` guidance once it is filled. Knott never checks the body.
 4. Write references as relative paths (see below).
@@ -107,6 +108,33 @@ Rules:
 - Paths are case-sensitive, even on macOS.
 - `kid:<uuid>` also works (`- kid:3f2b8c1e-…`), and survives the target being moved. Use it when you were given a `kid`; otherwise prefer the Markdown link. Never wrap it in a link.
 
+## Relations
+
+`knott types --verbose` shows the relation a property names after its type (`affects  list of reference → concept  (about)`) and lists every relation at the end, with its guidance:
+
+```
+relations:
+  supersedes  inverse: superseded_by  acyclic
+    This entity replaces the target entirely. The target is kept unchanged as history.
+    Use `supersedes` when the old record is no longer the current answer: …
+```
+
+- **Pick the property by its relation's guidance.** When two fit (`supersedes` vs `amends`), the guidance says which one.
+- **Never write the inverse.** `superseded_by` is not a property; it is how `knott refs` labels incoming `supersedes` links. Store a `symmetric` link on one side only.
+- **Find who links to an entity** with `knott refs <file>` before renaming, deleting or replacing it:
+
+  ```
+  $ knott refs specs/0005-concept-files.md
+  specs/0005-concept-files.md  spec
+
+  amended_by
+    specs/0006-relation-definitions.md  spec  amends[0]
+  ```
+
+  Symmetric groups end each line with `←` (the other side stores it), `→` (this file does) or `⇄` (both).
+- `relation-cycle`: an `acyclic` relation loops (`decisions/a.md → decisions/b.md → decisions/a.md`). Remove the reference that is wrong (for `supersedes` and `amends`, the newer entity is the source).
+- Writing a concept file: put `relation:` on a `reference` shape (for a list, on its `items`), and name only relations defined in `.knott/relations/` (`relation-unknown` otherwise).
+
 ## Kids
 
 - **When copying a file to start a new entity, delete its `kid:` line**, then run `knott validate --fix <new file>`. Otherwise both files claim the same `kid` (`kid-duplicate`).
@@ -124,6 +152,7 @@ knott types [--verbose]          # list types (exit 1 if a concept file has erro
 knott validate [PATH...]         # check concept files + all entities, or only PATHs
 knott validate --format json     # {ok, stats, issues[]} for machine reading
 knott validate --fix [PATH...]   # add a kid to entities that have none, then validate
+knott refs PATH [--format json]  # who references an entity (PATH or kid:<uuid>), by relation
 knott init [PATH]                # create .knott/ (never overwrites)
 knott view [PATH] [--no-open] [-o FILE]  # write an HTML diagram of types and references
 knott migrate [PATH]             # convert a pre-0.5 .knott/schemas/ into .knott/concepts/

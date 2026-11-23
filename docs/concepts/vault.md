@@ -15,7 +15,8 @@ A vault is any directory with a `.knott/` subdirectory:
 my-vault/
 ├── .knott/
 │   ├── config.yaml        # knott_version, written once by `knott init`
-│   └── concepts/          # one Markdown concept file per entity type
+│   ├── concepts/          # one Markdown concept file per entity type
+│   └── relations/         # optional: one Markdown file per relation definition
 └── … your Markdown, organized however you like
 ```
 

@@ -10,6 +10,7 @@ from knott.errors import (
     VaultNotFoundError,
 )
 from knott.models import (
+    EntityRef,
     FixedEntity,
     InitResult,
     Issue,
@@ -17,6 +18,10 @@ from knott.models import (
     Ontology,
     OntologyAttribute,
     OntologyType,
+    Ref,
+    RefGroup,
+    Refs,
+    RelationDefinition,
     SchemaInfo,
     Stats,
     ValidationResult,
@@ -24,6 +29,7 @@ from knott.models import (
 
 __all__ = [
     "ConfigError",
+    "EntityRef",
     "FixedEntity",
     "InitResult",
     "Issue",
@@ -36,6 +42,10 @@ __all__ = [
     "OntologyType",
     "PathNotFoundError",
     "PathOutsideVaultError",
+    "Ref",
+    "RefGroup",
+    "Refs",
+    "RelationDefinition",
     "SchemaInfo",
     "Stats",
     "ValidationResult",

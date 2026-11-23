@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -91,6 +92,8 @@ class OntologyAttribute(_Frozen):
     """For a `reference`: target types that some concept defines, in schema order."""
     unknown_targets: list[str] = []
     """For a `reference`: target types no concept defines (shown, never enforced)."""
+    relation: str | None = None
+    """For a `reference`: the relation it names, when a relation file defines it."""
 
     @property
     def notation(self) -> str:
@@ -153,10 +156,81 @@ def _walk_references(
         yield from _walk_references(field, f"{path}.{field.name}", required and field.required)
 
 
+class RelationDefinition(_Frozen):
+    """A relation file in ``.knott/relations/`` (spec 0006)."""
+
+    name: str
+    description: str | None
+    inverse: str | None
+    """The relation's name read from the target side."""
+    symmetric: bool
+    acyclic: bool
+    guidance: str | None
+    """The relation file's body, verbatim; None when blank."""
+    path: str
+    """Vault-relative path of the relation file."""
+
+
 class Ontology(_Frozen):
-    """The vault's types and the references between them."""
+    """The vault's types, relations and the references between them."""
 
     vault: str
     """Directory name of the vault root."""
     types: list[OntologyType]
     schema_issues: int
+    relations: list[RelationDefinition] = []
+    """Every relation that loaded, sorted by name."""
+
+
+RefKind = Literal["inverse", "symmetric", "relation", "property"]
+RefDirection = Literal["in", "out", "both"]
+
+
+class EntityRef(_Frozen):
+    """The entity whose references `Knott.refs()` lists."""
+
+    path: str
+    """Vault-relative POSIX path."""
+    type: str
+    """The frontmatter `type`, as written."""
+    kid: str | None
+    """The entity's `kid`, when it has a valid one."""
+
+
+class Ref(_Frozen):
+    """One linked entity in a reverse-lookup group."""
+
+    path: str
+    """Vault-relative path of the linked entity."""
+    type: str
+    """The linked entity's frontmatter `type`."""
+    kid: str | None
+    """The linked entity's `kid`, when it has a valid one."""
+    field: str
+    """Where the link is stored, e.g. ``affects[0]``: in the linked entity, or, for
+    direction ``out``, in the looked-up entity."""
+    line: int | None
+    """1-based line of that reference, in the file that stores it."""
+    direction: RefDirection
+    """``in`` (the linked entity stores it), ``out`` (only the looked-up entity stores
+    it) or ``both``. Always ``in`` outside symmetric groups."""
+
+
+class RefGroup(_Frozen):
+    """References that share a label: an inverse name, a relation, or a property."""
+
+    label: str
+    """``superseded_by``, ``related``, ``← about`` or ``← guide.concepts[]``."""
+    kind: RefKind
+    relation: str | None
+    """The relation the referring properties name; None for ``property`` groups."""
+    references: list[Ref]
+
+
+class Refs(_Frozen):
+    """Every reference in the vault that resolves to one entity (spec 0006)."""
+
+    entity: EntityRef
+    groups: list[RefGroup]
+    """``inverse``, ``symmetric`` and ``relation`` groups by label, then ``property``
+    groups by label."""

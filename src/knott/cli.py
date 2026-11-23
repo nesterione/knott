@@ -23,6 +23,8 @@ from knott.models import (
     MigrateResult,
     OntologyAttribute,
     OntologyType,
+    Refs,
+    RelationDefinition,
     ValidationResult,
 )
 from knott.skills import InstallResult, InstallStatus, SkillTarget, install_skill
@@ -100,12 +102,22 @@ def _notation(a: OntologyAttribute) -> str:
     return f"{a.type} → {' | '.join(targets)}" if targets else a.type
 
 
+def _type_column(a: OntologyAttribute) -> str:
+    """The notation, then the relation the innermost reference names: ``(about)``."""
+    node = a
+    while (inner := node.items or node.values) is not None:
+        node = inner
+    return _notation(a) + (f"  ({node.relation})" if node.relation else "")
+
+
 def _attribute_lines(attributes: list[OntologyAttribute], indent: str) -> list[str]:
     width = max(len(_label(a.name or "", a.required)) for a in attributes)
-    type_width = max(len(_notation(a)) for a in attributes)
+    type_width = max(len(_type_column(a)) for a in attributes)
     lines: list[str] = []
     for a in attributes:
-        line = f"{indent}{_label(a.name or '', a.required):<{width}}  {_notation(a):<{type_width}}"
+        line = (
+            f"{indent}{_label(a.name or '', a.required):<{width}}  {_type_column(a):<{type_width}}"
+        )
         if a.description:
             line += f"  {_one_line(a.description)}"
         lines.append(line.rstrip())
@@ -118,6 +130,24 @@ def _attribute_lines(attributes: list[OntologyAttribute], indent: str) -> list[s
         if node.fields:
             lines += _attribute_lines(node.fields, indent + "  ")
     return lines
+
+
+def format_relations(relations: list[RelationDefinition]) -> str:
+    """The ``relations:`` section: per relation its name and keys on one line, then
+    its description and guidance indented; relations separated by blank lines."""
+    blocks: list[str] = []
+    for r in relations:
+        keys = [
+            *([f"inverse: {r.inverse}"] if r.inverse is not None else []),
+            *(["symmetric"] if r.symmetric else []),
+            *(["acyclic"] if r.acyclic else []),
+        ]
+        lines = ["  ".join([f"  {r.name}", *keys])]
+        for text in (r.description, r.guidance):
+            if text and text.strip():
+                lines += [f"    {line}".rstrip() for line in text.strip().splitlines()]
+        blocks.append("\n".join(lines))
+    return "relations:\n" + "\n\n".join(blocks)
 
 
 def _label(name: str, required: bool) -> str:
@@ -235,7 +265,10 @@ def types(
         typer.Option(
             "--verbose",
             "-v",
-            help="Show each type's concept file, description, template, references and properties.",
+            help=(
+                "Show each type's concept file, description, template, references and "
+                "properties, then the relations."
+            ),
         ),
     ] = False,
 ) -> None:
@@ -245,9 +278,12 @@ def types(
     except KnottError as error:
         raise _fail(error) from None
     if verbose:
-        found = vault.ontology().types
-        if found:
-            typer.echo("\n\n".join(format_type(t) for t in found))
+        ontology = vault.ontology()
+        sections = [format_type(t) for t in ontology.types]
+        if ontology.relations:
+            sections.append(format_relations(ontology.relations))
+        if sections:
+            typer.echo("\n\n".join(sections))
     else:
         for info in vault.schemas():
             typer.echo(info.type)
@@ -255,6 +291,59 @@ def types(
     if issues:
         typer.echo("\n\n".join(format_issue(issue) for issue in issues), err=True)
         raise typer.Exit(EXIT_INVALID)
+
+
+_DIRECTION_MARKS = {"in": "←", "out": "→", "both": "⇄"}
+
+
+def format_refs(refs: Refs) -> str:
+    """The entity's header line, then one block per group with aligned columns.
+
+    Within a group, each column is padded to its widest value plus two spaces.
+    """
+    blocks = [f"{refs.entity.path}  {refs.entity.type}"]
+    if not refs.groups:
+        blocks.append("no references")
+    for group in refs.groups:
+        rows = [
+            [r.path, r.type, r.field]
+            + ([_DIRECTION_MARKS[r.direction]] if group.kind == "symmetric" else [])
+            for r in group.references
+        ]
+        widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]) - 1)]
+        lines = [group.label]
+        for row in rows:
+            cells = [f"{cell:<{width}}" for cell, width in zip(row, widths, strict=False)]
+            lines.append("  " + "  ".join([*cells, row[-1]]))
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
+@app.command()
+def refs(
+    path: Annotated[str, typer.Argument(help="An entity file, or kid:<uuid>.", metavar="PATH")],
+    output: Annotated[
+        OutputFormat, typer.Option("--format", help="Output format.")
+    ] = OutputFormat.TEXT,
+) -> None:
+    """List who references an entity, grouped by relation."""
+    is_kid = path.strip().startswith("kid:")
+    try:
+        vault = Knott.open("." if is_kid else path)
+    except KnottError as error:
+        raise _fail(error) from None
+    legacy = [i for i in vault.schema_issues() if i.code == "schema-legacy-layout"]
+    if legacy:
+        typer.echo("\n\n".join(format_issue(issue) for issue in legacy), err=True)
+        raise typer.Exit(EXIT_INVALID)
+    try:
+        result = vault.refs(path if is_kid else Path(path).absolute())
+    except KnottError as error:
+        raise _fail(error) from None
+    if output is OutputFormat.JSON:
+        typer.echo(json.dumps(result.model_dump(), indent=2, ensure_ascii=False))
+    else:
+        typer.echo(format_refs(result))
 
 
 @app.command()

@@ -164,13 +164,15 @@ def test_schema_unknown_keys_and_invalid_fields() -> None:
         (".knott/concepts/bad-fields.md", 7, "properties.size.type", "schema-invalid-field"),
         (".knott/concepts/bad-fields.md", 8, "properties.size.required", "schema-invalid-field"),
         (".knott/concepts/bad-fields.md", 11, "properties.extra.default", "schema-invalid-field"),
-        (".knott/concepts/bad-fields.md", 15, "properties.link.relation", "schema-invalid-field"),
+        (".knott/concepts/bad-fields.md", 15, "properties.link.relation", "relation-unknown"),
         (".knott/concepts/broken.md", 2, None, "schema-invalid-yaml"),
         (".knott/concepts/note.md", 3, "atributes", "schema-invalid-field"),
     ]
     messages = {i.field: i.message for i in result.issues}
     assert "reserved for the entity type" in messages["properties.type"]
-    assert "reserved for relation definitions" in messages["properties.link.relation"]
+    assert (
+        "names relation `derived`, which no relation file" in messages["properties.link.relation"]
+    )
 
 
 def test_concept_with_field_errors_still_defines_its_type() -> None:
@@ -356,7 +358,7 @@ def _schema_issues(tmp_path: Path, properties: str) -> list[tuple[str | None, in
             "  a: {type: reference, target: t, relation: about}\n",
             "properties.a.relation",
             4,
-            "reserved for relation definitions, not supported yet",
+            "names relation `about`, which no relation file in `.knott/relations/` defines",
         ),
         (
             "  a: {type: reference, target: []}\n",
@@ -465,16 +467,6 @@ def test_entity_body_is_never_checked_against_the_template(tmp_path: Path) -> No
     result = Knott.open(tmp_path).validate()
     assert result.ok, result.issues
     assert result.stats.entities == 2
-
-
-def test_relations_folder_is_reserved(tmp_path: Path) -> None:
-    Knott.init(tmp_path)
-    _concept(tmp_path, "a.md", "---\nname: a\n---\n")
-    (tmp_path / ".knott/relations").mkdir()
-    registry, issues = load_schemas(tmp_path)
-    assert list(registry) == ["a"]
-    assert [(i.path, i.code) for i in issues] == [(".knott/relations", "schema-invalid-field")]
-    assert "reserved for relation definitions (decision 0010)" in issues[0].message
 
 
 def test_legacy_layout_is_one_issue_and_no_types(tmp_path: Path) -> None:

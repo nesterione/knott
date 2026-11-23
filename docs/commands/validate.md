@@ -10,14 +10,14 @@ concepts:
 ---
 # knott validate
 
-The primary command. It loads every [concept file](../concepts/schema.md) in `.knott/concepts/`, then validates entities. A vault that still has `.knott/schemas/` reports only [`schema-legacy-layout`](../issues/schema-legacy-layout.md); run [`knott migrate`](migrate.md).
+The primary command. It loads every [concept file](../concepts/schema.md) in `.knott/concepts/` and every [relation definition](../concepts/relation.md#relation-definitions) in `.knott/relations/`, then validates entities. A vault that still has `.knott/schemas/` reports only [`schema-legacy-layout`](../issues/schema-legacy-layout.md); run [`knott migrate`](migrate.md).
 
 | Invocation | Schemas checked | Entities checked |
 |---|---|---|
 | `knott validate` | all | all |
 | `knott validate a.md notes/` | all (entity checks depend on them) | only `a.md` and entities under `notes/` |
 
-Relation targets outside the given paths are still read to check their type. A given file that isn't an entity is reported as `not-an-entity`.
+Relation targets outside the given paths are still read to check their type. A loop of an `acyclic` relation ([`relation-cycle`](../issues/relation-cycle.md)) is reported when any entity on it is in scope. A given file that isn't an entity is reported as `not-an-entity`.
 
 ## Output
 
