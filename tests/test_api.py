@@ -67,6 +67,8 @@ def test_docs_folder_is_a_valid_vault() -> None:
         "issue_code",
         "spec",
     ]
+    relations = Knott.open(docs).ontology().relations
+    assert [r.name for r in relations] == ["about", "amends", "related", "supersedes"]
 
 
 def _write(path: Path, text: str) -> None:

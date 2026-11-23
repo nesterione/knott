@@ -20,15 +20,18 @@ properties:
     items:
       type: reference
       target: concept
+      relation: about
   supersedes:
     type: reference
     target: decision
+    relation: supersedes
   amends:
     type: list
     description: Earlier decisions this one changes in part. The earlier decision is not edited (decision 0011).
     items:
       type: reference
       target: decision
+      relation: amends
 ---
 # <!-- "NNNN: <the decision as a sentence>", the same text as the `title` property; NNNN is the next free number in decisions/. -->
 

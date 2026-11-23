@@ -45,12 +45,14 @@ properties:
     items:
       type: reference
       target: spec
+      relation: amends
   supersedes:
     type: list
     description: Earlier specs this one replaces entirely. The earlier spec is not edited.
     items:
       type: reference
       target: spec
+      relation: supersedes
 ---
 # <!-- "NNNN: <what the change does>", the same text as `title`; NNNN is the next free number in specs/. -->
 
