@@ -16,6 +16,9 @@ from urllib.parse import unquote
 
 from knott.vault.kid import KidIndex, format_claims, is_canonical, kid_problem
 
+ListDir = Callable[[Path], frozenset[str] | None]
+"""Lists a directory's entry names, or ``None`` when it can't be listed."""
+
 _MARKDOWN_LINK = re.compile(r"^\[(?P<label>[^\]]*)\]\((?P<dest>.*)\)$", re.DOTALL)
 _URL_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 
@@ -56,10 +59,13 @@ def resolve_reference(
     source: str,
     reference: str,
     kids: Callable[[], KidIndex] = dict,
+    list_dir: ListDir | None = None,
 ) -> ResolvedReference:
     """Resolve one reference string found in the file ``source`` (vault-relative).
 
     ``kids`` returns the vault's `kid` index; it is called only for a `kid:` reference.
+    ``list_dir`` lists a directory for the exact-case check (default: ``list_dir_entries``,
+    uncached); a session passes a cached one so a run lists each directory once.
     Raises ``LinkError`` with an issue code when any check fails.
     """
     text = reference.strip()
@@ -78,7 +84,7 @@ def resolve_reference(
             OUTSIDE_VAULT,
             f"`{destination}` resolves through a symlink to a path outside the vault root",
         )
-    if not _exists_exact_case(vault_root, target):
+    if not _exists_exact_case(vault_root, target, list_dir or list_dir_entries):
         raise LinkError(NOT_FOUND, f"`{destination}` does not exist (resolved to `{target}`)")
     return ResolvedReference(destination=destination, target=target)
 
@@ -152,14 +158,23 @@ def parse_reference(reference: str) -> str:
     return destination
 
 
-def _exists_exact_case(root: Path, rel_path: str) -> bool:
-    """True if ``rel_path`` names a regular file whose every component matches case exactly."""
+def list_dir_entries(directory: Path) -> frozenset[str] | None:
+    """The entry names of ``directory``, or ``None`` when it can't be listed."""
+    try:
+        return frozenset(os.listdir(directory))
+    except OSError:
+        return None
+
+
+def _exists_exact_case(root: Path, rel_path: str, list_dir: ListDir) -> bool:
+    """True if ``rel_path`` names a regular file whose every component matches case exactly.
+
+    Each component is looked up in its parent's listing, never through the file
+    system's own (possibly case-insensitive) name lookup."""
     current = root
     for part in rel_path.split("/"):
-        try:
-            if part not in os.listdir(current):
-                return False
-        except OSError:
+        entries = list_dir(current)
+        if entries is None or part not in entries:
             return False
         current = current / part
     return current.is_file()

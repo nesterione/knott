@@ -555,7 +555,7 @@ kid: 3f2b8c1e-9d4a-4c2e-b7f1-0a6d5e9c8b21
 - It is unique across the vault, whatever the type. A duplicate is reported once (`kid-duplicate`), on the first claimant by path, naming every claimant. A scoped run reports a duplicate only if one of its claimants is in scope.
 - `knott validate --fix` inserts `kid: <uuid4>` into every in-scope entity without a `kid` key: one line, after `type:` (or before the closing `---`), with the rest of the file unchanged, re-parsed before it is written. It never changes an existing `kid`, including duplicates. This is knott's only edit to user files.
 - References may name an entity as `kid:<uuid>` (§11), at any depth. Markdown links remain the default.
-- Resolution stays behind `resolve_reference()` in `vault/links.py`. The `kid` index is built once per run, only when a run needs it.
+- Resolution stays behind `resolve_reference()` in `vault/links.py`. The `kid` index is built once per run, only when a run needs it. Within a run, each reference is resolved once and each directory is listed once for the exact-case check; nothing is kept between runs.
 
 A `kid` does not detect two entities describing the same concept. See `docs/decisions/0009-kid-identity.md`.
 

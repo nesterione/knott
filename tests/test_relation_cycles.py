@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -164,3 +165,32 @@ def test_graph_is_built_once_when_an_acyclic_relation_is_named(
     # `amends` and `supersedes` are both checked, on one index built once.
     assert sorted(calls) == sorted(set(calls))
     assert len(calls) == 18
+
+
+def test_scoped_run_lists_each_directory_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Resolution checks exact case through directory listings. A scoped run with an
+    # acyclic relation indexes every reference in the vault; listings are cached per
+    # run, so the number of listings follows the directories, not the references.
+    root = _vault(tmp_path, "acyclic: true\n", {})
+    folders = ["a", "b", "c"]
+    for f, folder in enumerate(folders):
+        for i in range(20):
+            # Acyclic: n0 → n1 → … within a folder, a → b → c across folders.
+            targets = [f"n{i + 1}.md"] if i < 19 else []
+            targets += [f"../{folders[f + 1]}/n{i}.md"] if f < 2 else []
+            items = "".join(f"  - {t}\n" for t in targets)
+            _write(root, f"{folder}/n{i}.md", f"---\ntype: node\nnext:\n{items}---\n")
+    listed: list[str] = []
+    real = os.listdir
+
+    def counting(path: str | Path) -> list[str]:
+        listed.append(str(path))
+        return real(path)
+
+    monkeypatch.setattr(os, "listdir", counting)
+    result = Knott.open(root).validate(["a/n0.md"])
+    assert [i.code for i in result.issues] == []
+    resolved = [p for p in listed if Path(p).is_relative_to(root) and ".knott" not in p]
+    assert sorted(resolved) == sorted({str(root), *(str(root / f) for f in folders)})

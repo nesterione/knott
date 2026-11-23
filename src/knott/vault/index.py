@@ -3,7 +3,9 @@
 ``VaultSession`` caches parsed files and the `kid` index for one run. Its
 ``references()`` index is built on first use, once, and shared by everything that
 needs the vault's reference graph: cycle checks of acyclic relations and reverse
-lookup (spec 0006). Resolution is ``resolve_reference``, the same as validation.
+lookup (spec 0006). Resolution is ``resolve_reference``, the same as validation;
+the session memoizes each resolution and each directory listing, so validation and
+the index resolve a reference once and a run lists each directory once.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ from knott.schema.validator import format_field_path
 from knott.vault.discovery import iter_markdown
 from knott.vault.entity import MarkdownFile, read_markdown
 from knott.vault.kid import KidIndex, build_index
-from knott.vault.links import LinkError, ResolvedReference, resolve_reference
+from knott.vault.links import LinkError, ResolvedReference, list_dir_entries, resolve_reference
 
 
 @dataclass(frozen=True)
@@ -93,7 +95,7 @@ class VaultSession:
     """Parsed files, the `kid` index and the reference index for one run.
 
     Everything is computed on first use and kept, so a run that never touches a
-    `kid` or the reference graph pays nothing for them.
+    `kid` or the reference graph pays nothing for them. Nothing outlives the session.
     """
 
     def __init__(self, root: Path, schemas: dict[str, Schema]) -> None:
@@ -103,6 +105,8 @@ class VaultSession:
         self._all_markdown: list[str] | None = None
         self._kids: KidIndex | None = None
         self._references: ReferenceIndex | None = None
+        self._listings: dict[Path, frozenset[str] | None] = {}
+        self._resolved: dict[tuple[str, str], ResolvedReference | LinkError] = {}
 
     @property
     def all_markdown(self) -> list[str]:
@@ -124,8 +128,26 @@ class VaultSession:
         return self._kids
 
     def resolve(self, source: str, reference: str) -> ResolvedReference:
-        """Resolve a reference held by ``source``; raises ``LinkError``."""
-        return resolve_reference(self.root, source, reference, self.kids)
+        """Resolve a reference held by ``source``; raises ``LinkError``.
+
+        Memoized per ``(source, reference)``, failures included."""
+        key = (source, reference)
+        outcome = self._resolved.get(key)
+        if outcome is None:
+            try:
+                outcome = resolve_reference(self.root, source, reference, self.kids, self.list_dir)
+            except LinkError as error:
+                outcome = error
+            self._resolved[key] = outcome
+        if isinstance(outcome, LinkError):
+            raise LinkError(outcome.code, outcome.message)
+        return outcome
+
+    def list_dir(self, directory: Path) -> frozenset[str] | None:
+        """``directory``'s entry names (``None`` if unlistable), listed once per session."""
+        if directory not in self._listings:
+            self._listings[directory] = list_dir_entries(directory)
+        return self._listings[directory]
 
     def references(self) -> ReferenceIndex:
         """The vault's reference index, built on the first call."""
