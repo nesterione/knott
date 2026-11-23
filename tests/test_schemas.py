@@ -451,6 +451,22 @@ def test_template_is_stored_verbatim(tmp_path: Path) -> None:
     assert registry["c"].template is None
 
 
+def test_entity_body_is_never_checked_against_the_template(tmp_path: Path) -> None:
+    # Decision 0010 §3: the template is guidance only. An empty concept body,
+    # even with no newline after the closing `---`, is no template.
+    Knott.init(tmp_path)
+    _concept(tmp_path, "a.md", "---\nname: a\n---\n# A\n\n## Summary\n<!-- Required. -->\n")
+    _concept(tmp_path, "b.md", "---\nname: b\n---")
+    (tmp_path / "x.md").write_text("---\ntype: a\n---\nNo headings at all.\n")
+    (tmp_path / "y.md").write_text("---\ntype: b\n---\n# Anything\n")
+    registry, issues = load_schemas(tmp_path)
+    assert issues == []
+    assert registry["b"].template is None
+    result = Knott.open(tmp_path).validate()
+    assert result.ok, result.issues
+    assert result.stats.entities == 2
+
+
 def test_relations_folder_is_reserved(tmp_path: Path) -> None:
     Knott.init(tmp_path)
     _concept(tmp_path, "a.md", "---\nname: a\n---\n")

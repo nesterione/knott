@@ -245,7 +245,9 @@ def types(
     except KnottError as error:
         raise _fail(error) from None
     if verbose:
-        typer.echo("\n\n".join(format_type(t) for t in vault.ontology().types))
+        found = vault.ontology().types
+        if found:
+            typer.echo("\n\n".join(format_type(t) for t in found))
     else:
         for info in vault.schemas():
             typer.echo(info.type)
@@ -272,9 +274,15 @@ def view(
 ) -> None:
     """Draw the vault's ontology as an HTML page and open it in the browser."""
     try:
-        ontology = Knott.open(path).ontology()
+        vault = Knott.open(path)
+        ontology = vault.ontology()
     except KnottError as error:
         raise _fail(error) from None
+    legacy = [i for i in vault.schema_issues() if i.code == "schema-legacy-layout"]
+    if legacy:
+        # A pre-0.5 vault has no types to draw; say why instead of "no types".
+        typer.echo("\n\n".join(format_issue(issue) for issue in legacy), err=True)
+        raise typer.Exit(EXIT_INVALID)
     if not ontology.types:
         raise _fail(KnottError("no types to show (add concept files to .knott/concepts/)"))
     target = output or _private_temp_dir() / f"knott-ontology-{ontology.vault}.html"

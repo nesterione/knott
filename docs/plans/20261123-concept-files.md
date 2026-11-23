@@ -254,11 +254,11 @@ properties:                     # optional map: name → definition
 - [x] run full tests - must pass before next task
 
 ### Task 10: Verify acceptance criteria
-- [ ] every point of decision 0010 §1–8 is implemented or explicitly reserved
-- [ ] edge cases: unknown targets in unions, nested `kid:` references, legacy layout with entities, empty concept body
-- [ ] run full suite: `uv run pytest && uv run ruff check src tests && uv run mypy`
-- [ ] `grep -rn "\.knott/schemas\|relations:\|attributes:" src docs SPEC.md README.md` finds only migration/legacy mentions
-- [ ] `knott view` on `docs/` renders edges correctly (open once by hand)
+- [x] every point of decision 0010 §1–8 is implemented or explicitly reserved (➕ fixed: `knott view` on a `.knott/schemas/` vault now prints `schema-legacy-layout` and exits 1 instead of "no types to show"; `types --verbose` no longer prints a blank line when there are no types)
+- [x] edge cases: unknown targets in unions, nested `kid:` references, legacy layout with entities, empty concept body
+- [x] run full suite: `uv run pytest && uv run ruff check src tests && uv run mypy`
+- [x] `grep -rn "\.knott/schemas\|relations:\|attributes:" src docs SPEC.md README.md` finds only migration/legacy mentions
+- [x] `knott view` on `docs/` renders edges correctly (open once by hand) — verified the embedded payload (7 edges = the 7 reference properties in docs/.knott/concepts, templates for all 5 types, 0 schema issues); opening a browser by hand is not automatable in this run
 
 ### Task 11: [Final] Update documentation
 - [ ] update README.md if anything changed during implementation

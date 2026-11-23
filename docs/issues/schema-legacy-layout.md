@@ -22,4 +22,4 @@ Run [`knott migrate`](../commands/migrate.md). It writes one concept file per YA
 
 ## Notes
 
-While the folder exists, this is the only issue a run reports: no concept files are loaded and no entities are checked, so every entity doesn't also report `entity-unknown-type`. `knott types` prints no types, and `knott view` exits `2` with no types to show. The issue has no line or field.
+While the folder exists, this is the only issue a run reports: no concept files are loaded and no entities are checked, so every entity doesn't also report `entity-unknown-type`. `knott types` prints no types, and `knott view` writes no page; both print this issue and exit `1`. The issue has no line or field.

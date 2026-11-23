@@ -395,6 +395,26 @@ def test_view_empty_vault_is_usage_error(tmp_path: Path, no_browser: list[str]) 
     assert not (tmp_path / "o.html").exists()
 
 
+def test_view_and_types_report_legacy_layout(
+    tmp_path: Path, no_browser: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Decision 0010 §8: every run on a `.knott/schemas/` vault reports the legacy layout.
+    vault = fixture_path("legacy-layout")
+    out = tmp_path / "o.html"
+    result = runner.invoke(app, ["view", str(vault), "--no-open", "-o", str(out)])
+    assert result.exit_code == 1
+    assert result.stderr.startswith("✗ .knott/schemas\n")
+    assert "run `knott migrate`" in result.stderr
+    assert not out.exists()
+    monkeypatch.chdir(vault)
+    for args in (["types"], ["types", "--verbose"]):
+        result = runner.invoke(app, args)
+        assert result.exit_code == 1
+        assert result.stdout == ""
+        assert result.stderr.startswith("✗ .knott/schemas\n")
+        assert "run `knott migrate`" in result.stderr
+
+
 def test_view_with_schema_issues_still_writes_page(tmp_path: Path, no_browser: list[str]) -> None:
     out = tmp_path / "out.html"
     vault = fixture_path("duplicate-schema-type")
