@@ -158,12 +158,13 @@ properties:                     # optional map: name → definition
 - Modify: `tests/test_relations.py`, `tests/test_attributes.py`, `tests/test_entities.py`
 - Create: `tests/fixtures/nested-references/`, `tests/fixtures/union-target/`, `tests/fixtures/reference-cardinality/`
 
-- [ ] handle `ReferenceShape` inside `_check_value`: string → `resolve_reference` + target-type check against `targets`; the empty/kind rules from the table; codes `relation-*` with full `field` path and nested line
-- [ ] use `relation-missing` for an absent required reference, or for a list or map of references. Remove the separate top-level relation loop and `is_absent_relation`
-- [ ] count resolved references at every depth in stats. With `schema-legacy-layout`, return early with only that issue
-- [ ] write tests: nested references in object fields, list items and map values (valid + not found + wrong type, exact `field` and `line`); union targets (each allowed type passes; a mismatch lists all); `kid:` references nested
-- [ ] write tests for cardinality and emptiness: list given for `reference`, string given for a list, `[]`/`{}`/null for both, null item in a list, required list empty → `relation-missing`; legacy layout reports one issue and no `entity-unknown-type`
-- [ ] remove the Task 2 TODOs; run tests - must pass before next task
+- [x] handle `ReferenceShape` inside `_check_value`: string → `resolve_reference` + target-type check against `targets`; the empty/kind rules from the table; codes `relation-*` with full `field` path and nested line
+- [x] use `relation-missing` for an absent required reference, or for a list or map of references. Remove the separate top-level relation loop and `is_absent_relation`
+- [x] count resolved references at every depth in stats. With `schema-legacy-layout`, return early with only that issue
+- [x] write tests: nested references in object fields, list items and map values (valid + not found + wrong type, exact `field` and `line`); union targets (each allowed type passes; a mismatch lists all); `kid:` references nested
+- [x] write tests for cardinality and emptiness: list given for `reference`, string given for a list, `[]`/`{}`/null for both, null item in a list, required list empty → `relation-missing`; legacy layout reports one issue and no `entity-unknown-type`
+- [x] remove the Task 2 TODOs; run tests - must pass before next task
+- ➕ `field` on reference issues is now the full path, so `test_kid` expects `includes[0]`…; the symlink test in `test_relations.py` declares `list` of `reference` (strict cardinality)
 
 ### Task 4: Public ontology model and API
 

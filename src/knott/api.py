@@ -188,6 +188,9 @@ class Knott:
 
     def _validate(self, paths: Sequence[str | Path] | None) -> ValidationResult:
         schemas, issues = load_schemas(self.root)
+        if any(i.code == "schema-legacy-layout" for i in issues):
+            # Every entity would also be `entity-unknown-type`; report only the cause.
+            return ValidationResult(issues=issues, stats=Stats(schemas=0, entities=0, relations=0))
         files: dict[str, MarkdownFile] = {}
 
         def lookup(rel_path: str) -> MarkdownFile:

@@ -147,18 +147,22 @@ def test_index_is_built_only_when_needed(tmp_path: Path, monkeypatch: pytest.Mon
 
 def test_kid_references_in_fixture() -> None:
     result = validate_fixture("kid-identity")
-    relation_issues = [(i.path, i.line, i.code) for i in result.issues if i.field == "includes"]
+    relation_issues = [
+        (i.path, i.line, i.field, i.code)
+        for i in result.issues
+        if (i.field or "").startswith("includes")
+    ]
     assert relation_issues == [
-        ("topics/broken.md", 5, "relation-target-ambiguous"),
-        ("topics/broken.md", 6, "relation-target-not-found"),
-        ("topics/broken.md", 7, "relation-target-type-mismatch"),
-        ("topics/broken.md", 8, "relation-invalid-value"),
-        ("topics/broken.md", 9, "relation-invalid-value"),
+        ("topics/broken.md", 5, "includes[0]", "relation-target-ambiguous"),
+        ("topics/broken.md", 6, "includes[1]", "relation-target-not-found"),
+        ("topics/broken.md", 7, "includes[2]", "relation-target-type-mismatch"),
+        ("topics/broken.md", 8, "includes[3]", "relation-invalid-value"),
+        ("topics/broken.md", 9, "includes[4]", "relation-invalid-value"),
     ]
     messages = {i.line: i.message for i in result.issues if i.path == "topics/broken.md"}
     assert "fix the `kid-duplicate` first" in messages[5]
     assert messages[6] == (
-        "relation `includes`: no entity has `kid` 55555555-5555-4555-8555-555555555555"
+        "relation `includes[1]`: no entity has `kid` 55555555-5555-4555-8555-555555555555"
     )
     # The type mismatch names the kid as written and where it was found.
     assert "(`topics/broken.md`) has type `topic`" in messages[7]

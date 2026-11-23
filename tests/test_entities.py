@@ -189,3 +189,13 @@ def test_nested_values_keep_their_lines_and_source_text() -> None:
     # Top-level maps are unchanged.
     assert parsed.key_lines["forms"] == 7
     assert parsed.item_lines[("senses", 1)] == 5
+
+
+def test_legacy_layout_reports_one_issue_and_skips_entities(tmp_path: Path) -> None:
+    (tmp_path / ".knott/schemas").mkdir(parents=True)
+    (tmp_path / ".knott/schemas/note.yaml").write_text("type: note\n")
+    (tmp_path / "a.md").write_text("---\ntype: note\n---\n")
+    (tmp_path / "b.md").write_text("---\ntype: other\n---\n")
+    result = Knott.open(tmp_path).validate()
+    assert triples(result) == [(".knott/schemas", None, "schema-legacy-layout")]
+    assert result.stats.model_dump() == {"schemas": 0, "entities": 0, "relations": 0}
