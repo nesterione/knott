@@ -18,7 +18,13 @@ from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent, merge_key_bin
 
 from knott.api import Knott, version
 from knott.errors import KnottError
-from knott.models import Issue, OntologyAttribute, OntologyType, ValidationResult
+from knott.models import (
+    Issue,
+    MigrateResult,
+    OntologyAttribute,
+    OntologyType,
+    ValidationResult,
+)
 from knott.skills import InstallResult, InstallStatus, SkillTarget, install_skill
 from knott.view import render_ontology
 
@@ -153,6 +159,33 @@ def init(
         typer.echo(f"Initialized Knott vault in {result.root}")
     else:
         typer.echo(f"Knott vault already initialized in {result.root}")
+
+
+def format_migrate(result: MigrateResult) -> str:
+    lines = [f"+ {path}" for path in result.written]
+    lines += [f"  list of reference: {field}" for field in result.list_fields]
+    lines.append(f"- {result.removed}/")
+    return "\n".join(lines)
+
+
+@app.command()
+def migrate(
+    path: Annotated[
+        Path, typer.Argument(help="A path inside the vault (default: current directory).")
+    ] = Path("."),
+) -> None:
+    """Convert a pre-0.5 vault's .knott/schemas/ into .knott/concepts/, then validate."""
+    try:
+        vault = Knott.open(path)
+        migrated = vault.migrate()
+        result = vault.validate()
+    except KnottError as error:
+        raise _fail(error) from None
+    typer.echo(format_migrate(migrated))
+    typer.echo()
+    typer.echo(format_result(result))
+    if not result.ok:
+        raise typer.Exit(EXIT_INVALID)
 
 
 @app.command()

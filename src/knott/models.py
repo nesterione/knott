@@ -61,6 +61,17 @@ class InitResult(_Frozen):
     created: bool
 
 
+class MigrateResult(_Frozen):
+    """What `Knott.migrate()` changed."""
+
+    written: list[str]
+    """Vault-relative paths of the concept files written, sorted."""
+    removed: str
+    """The legacy folder that was deleted (``.knott/schemas``)."""
+    list_fields: list[str]
+    """Relations converted to ``list`` of ``reference``, as ``<type>.<field>``."""
+
+
 class OntologyAttribute(_Frozen):
     """An attribute declared by a type's schema, or a nested part of one."""
 

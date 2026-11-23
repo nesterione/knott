@@ -629,3 +629,37 @@ def test_ask_escape_cancels(make: Callable[..., questionary.Question]) -> None:
         pipe.send_text("\x1b")
         pipe.flush()
         assert cli._ask(make(input=pipe, output=DummyOutput())) is None
+
+
+def test_migrate_prints_written_files_list_fields_and_validation(
+    copy_fixture: Callable[[str], Path],
+) -> None:
+    root = copy_fixture("legacy-layout")
+    result = runner.invoke(app, ["migrate", str(root)])
+    assert result.exit_code == 0, result.output
+    assert result.stdout == (
+        "+ .knott/concepts/compilation.md\n"
+        "+ .knott/concepts/media/episode.md\n"
+        "+ .knott/concepts/script.md\n"
+        "  list of reference: compilation.sources\n"
+        "- .knott/schemas/\n"
+        "\n"
+        "✓ 3 schemas\n✓ 4 entities\n✓ 4 relations\n✓ vault is valid\n"
+    )
+
+
+def test_migrate_exit_code_follows_validation(copy_fixture: Callable[[str], Path]) -> None:
+    root = copy_fixture("legacy-layout")
+    (root / "scripts/episode-43.md").write_text("---\ntype: script\n---\n")
+    result = runner.invoke(app, ["migrate", str(root)])
+    assert result.exit_code == 1
+    assert "+ .knott/concepts/script.md" in result.stdout
+    assert "✗ scripts/episode-43.md" in result.stdout
+
+
+def test_migrate_refusal_is_usage_error(tmp_path: Path) -> None:
+    Knott.init(tmp_path)
+    result = runner.invoke(app, ["migrate", str(tmp_path)])
+    assert result.exit_code == 2
+    assert "error: nothing to migrate" in result.stderr
+    assert sorted(p.name for p in (tmp_path / ".knott").iterdir()) == ["concepts", "config.yaml"]

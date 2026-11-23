@@ -207,12 +207,12 @@ properties:                     # optional map: name → definition
 - Modify: `tests/test_migrate.py`, `tests/test_cli.py`, `tests/test_api.py`
 - Create: `tests/fixtures/legacy-layout/`
 
-- [ ] implement `migrate_vault(root)`: read legacy files (safe loader), scan entities for list-valued relations, convert, refuse on any parse error / unknown key / existing target file before writing anything, then write all files and remove `.knott/schemas/`
-- [ ] `Knott.migrate()` works without loading schemas. The CLI prints written files and list-converted fields, then the validation result. Exit codes per Technical Details
-- [ ] `Knott.init` creates `.knott/concepts/`
-- [ ] write tests: migrating `legacy-layout` (copied to `tmp_path`) produces the expected files and a valid vault; a relation used as a list becomes `list` of `reference`; nested-schema subfolders keep their relative path
-- [ ] write tests for refusals: no legacy dir, broken YAML, unknown key, existing concept file. Nothing is written or deleted in each case; `init` creates `concepts/`
-- [ ] run tests - must pass before next task
+- [x] implement `migrate_vault(root)`: read legacy files (safe loader), scan entities for list-valued relations, convert, refuse on any parse error / unknown key / existing target file before writing anything, then write all files and remove `.knott/schemas/`
+- [x] `Knott.migrate()` works without loading schemas. The CLI prints written files and list-converted fields, then the validation result. Exit codes per Technical Details
+- [x] `Knott.init` creates `.knott/concepts/` (done in Task 2; covered by `test_init_creates_vault`)
+- [x] write tests: migrating `legacy-layout` (copied to `tmp_path`) produces the expected files and a valid vault; a relation used as a list becomes `list` of `reference`; nested-schema subfolders keep their relative path
+- [x] write tests for refusals: no legacy dir, broken YAML, unknown key, existing concept file. Nothing is written or deleted in each case; `init` creates `concepts/`
+- [x] run tests - must pass before next task
 
 ### Task 7: Agent skill
 

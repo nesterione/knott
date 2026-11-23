@@ -1,19 +1,26 @@
-"""Convert legacy ``.knott/schemas/*.yaml`` schemas into concept-file text (decision 0010).
+"""Convert legacy ``.knott/schemas/*.yaml`` schemas into concept files (decision 0010).
 
-Pure functions only: reading files, writing files and removing the legacy folder
-belong to ``knott migrate``.
+``convert_legacy`` and ``legacy_list_fields`` are pure; ``migrate_vault`` reads the
+legacy folder, writes the concept files and removes the folder.
 """
 
 from __future__ import annotations
 
 import copy
+import shutil
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
 
+from knott import _yaml
 from knott._values import kind, show
 from knott.errors import MigrateError
+from knott.models import MigrateResult
+from knott.vault.discovery import CONCEPTS_DIR, LEGACY_SCHEMAS_DIR, iter_markdown
+from knott.vault.entity import read_markdown
 
 LEGACY_TOP_KEYS = ("type", "description", "kid", "attributes", "relations")
 LEGACY_RELATION_KEYS = ("target", "required", "description")
@@ -81,6 +88,107 @@ def legacy_list_fields(
         if frontmatter.get("type") != schema_type:
             continue
         found.update(n for n in names if isinstance(frontmatter.get(n), list))
+    return found
+
+
+@dataclass(frozen=True)
+class _Planned:
+    source: str
+    target: Path
+    target_rel: str
+    text: str
+    list_fields: list[str]
+
+
+def migrate_vault(root: Path) -> MigrateResult:
+    """Convert ``.knott/schemas/**/*.yaml`` under ``root`` into ``.knott/concepts/**/*.md``.
+
+    Everything is read and converted first; any problem raises ``MigrateError``
+    before a single file is written or removed. On success the concept files are
+    written and ``.knott/schemas/`` is deleted.
+    """
+    legacy = root / LEGACY_SCHEMAS_DIR
+    if not legacy.is_dir():
+        raise MigrateError(f"nothing to migrate: {root} has no `{LEGACY_SCHEMAS_DIR}/` folder")
+    sources: list[Path] = []
+    for path in sorted(legacy.rglob("*")):
+        if path.is_dir():
+            continue
+        rel = path.relative_to(root).as_posix()
+        if path.suffix == ".yaml":
+            sources.append(path)
+        elif not path.name.startswith("."):
+            raise MigrateError(
+                f"{rel}: not a `.yaml` schema; move it out of `{LEGACY_SCHEMAS_DIR}/` "
+                "first, since migrate deletes that folder"
+            )
+
+    loaded = [(path, _read_legacy(root, path)) for path in sources]
+    entities = _entity_frontmatters(root)
+
+    planned: list[_Planned] = []
+    for path, data in loaded:
+        rel = path.relative_to(root).as_posix()
+        relations = data.get("relations") if isinstance(data, dict) else None
+        names = list(relations) if isinstance(relations, dict) else []
+        schema_type = data.get("type") if isinstance(data, dict) else None
+        found = (
+            legacy_list_fields(schema_type, names, entities)
+            if isinstance(schema_type, str)
+            else set()
+        )
+        try:
+            text = convert_legacy(data, found)
+        except MigrateError as exc:
+            raise MigrateError(f"{rel}: {exc}") from None
+        target_rel = (
+            PurePosixPath(CONCEPTS_DIR) / path.relative_to(legacy).with_suffix(".md").as_posix()
+        ).as_posix()
+        target = root / target_rel
+        if target.exists() or target.is_symlink():
+            raise MigrateError(
+                f"{target_rel} already exists; move it away or delete it, then run "
+                "`knott migrate` again"
+            )
+        ordered = [n for n in names if n in found]
+        planned.append(
+            _Planned(rel, target, target_rel, text, [f"{schema_type}.{n}" for n in ordered])
+        )
+
+    for item in planned:
+        item.target.parent.mkdir(parents=True, exist_ok=True)
+        item.target.write_text(item.text, encoding="utf-8")
+    (root / CONCEPTS_DIR).mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(legacy)
+    return MigrateResult(
+        written=[item.target_rel for item in planned],
+        removed=LEGACY_SCHEMAS_DIR,
+        list_fields=[field for item in planned for field in item.list_fields],
+    )
+
+
+def _read_legacy(root: Path, path: Path) -> Any:
+    rel = path.relative_to(root).as_posix()
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raise MigrateError(f"{rel}: file is not valid UTF-8") from None
+    except OSError as exc:
+        raise MigrateError(f"{rel}: cannot read file: {exc.strerror or exc}") from None
+    try:
+        return _yaml.load(text).data
+    except _yaml.YamlParseError as exc:
+        where = f"{rel}:{exc.line + 1}" if exc.line is not None else rel
+        raise MigrateError(f"{where}: {exc.message}") from None
+
+
+def _entity_frontmatters(root: Path) -> list[dict[str, Any]]:
+    """Frontmatter of every readable entity; files with invalid frontmatter are skipped."""
+    found: list[dict[str, Any]] = []
+    for rel_path in iter_markdown(root):
+        parsed = read_markdown(root / rel_path, rel_path)
+        if parsed.error is None and parsed.is_entity and parsed.frontmatter is not None:
+            found.append(parsed.frontmatter)
     return found
 
 

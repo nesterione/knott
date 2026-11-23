@@ -1,0 +1,14 @@
+type: episode
+description: >
+  A published episode,
+  recorded from one script.
+kid: required
+attributes:
+  title:
+    type: string
+    required: true
+relations:
+  script:
+    target: script
+    required: true
+    description: The script this episode was recorded from.

@@ -14,6 +14,7 @@ from knott.models import (
     FixedEntity,
     InitResult,
     Issue,
+    MigrateResult,
     Ontology,
     OntologyAttribute,
     OntologyType,
@@ -22,6 +23,7 @@ from knott.models import (
     ValidationResult,
 )
 from knott.schema.loader import load_schemas
+from knott.schema.migrate import migrate_vault
 from knott.schema.models import (
     AttributeDef,
     ListShape,
@@ -90,6 +92,17 @@ class Knott:
         (root / CONCEPTS_DIR).mkdir(parents=True)
         (root / CONFIG_FILE).write_text(f"knott_version: {version()}\n", encoding="utf-8")
         return InitResult(root=str(root.resolve()), created=True)
+
+    def migrate(self) -> MigrateResult:
+        """Convert ``.knott/schemas/**/*.yaml`` into ``.knott/concepts/**/*.md``.
+
+        Works without loading schemas, so it runs on a vault that reports
+        ``schema-legacy-layout``. A relation that any entity stores as a YAML list
+        becomes ``list`` of ``reference``. Raises ``MigrateError`` (nothing written
+        or removed) when there is no legacy folder, a legacy file can't be read or
+        converted, or a target concept file already exists.
+        """
+        return migrate_vault(self.root)
 
     def types(self) -> list[str]:
         """Discovered type names, sorted. Schemas with errors may be missing."""

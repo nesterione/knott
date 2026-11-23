@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+from knott import Knott, MigrateResult
 from knott.errors import KnottError, MigrateError
-from knott.schema.migrate import convert_legacy, legacy_list_fields
+from knott.schema.migrate import convert_legacy, legacy_list_fields, migrate_vault
 from knott.vault.entity import parse_markdown
 
 
@@ -191,3 +194,163 @@ def test_legacy_list_fields_only_counts_lists_on_entities_of_that_type() -> None
 
 def test_legacy_list_fields_empty_when_no_entities() -> None:
     assert legacy_list_fields("decision", ["affects"], []) == set()
+
+
+# --- migrate_vault / Knott.migrate ---------------------------------------------
+
+
+def snapshot(root: Path) -> dict[str, bytes | None]:
+    """Every path under ``root`` with its content (``None`` for directories)."""
+    return {
+        p.relative_to(root).as_posix(): None if p.is_dir() else p.read_bytes()
+        for p in sorted(root.rglob("*"))
+    }
+
+
+def concept(root: Path, rel: str) -> dict[str, Any]:
+    text = (root / rel).read_text(encoding="utf-8")
+    assert text.endswith("---\n")  # frontmatter only, empty body
+    return frontmatter(text)
+
+
+def test_migrate_legacy_layout_writes_concepts_and_gives_a_valid_vault(
+    copy_fixture: Callable[[str], Path],
+) -> None:
+    root = copy_fixture("legacy-layout")
+    vault = Knott.open(root)
+    assert [i.code for i in vault.validate().issues] == ["schema-legacy-layout"]
+
+    result = vault.migrate()
+
+    assert result == MigrateResult(
+        written=[
+            ".knott/concepts/compilation.md",
+            ".knott/concepts/media/episode.md",
+            ".knott/concepts/script.md",
+        ],
+        removed=".knott/schemas",
+        list_fields=["compilation.sources"],
+    )
+    assert not (root / ".knott/schemas").exists()
+    assert concept(root, ".knott/concepts/compilation.md") == {
+        "name": "compilation",
+        "properties": {
+            "title": {"type": "string"},
+            "sources": {
+                "type": "list",
+                "required": True,
+                "description": "Scripts collected here.",
+                "items": {"type": "reference", "target": "script"},
+            },
+            "featured": {"type": "reference", "target": "episode"},
+        },
+    }
+    assert concept(root, ".knott/concepts/media/episode.md") == {
+        "name": "episode",
+        "description": "A published episode, recorded from one script.\n",
+        "kid": "required",
+        "properties": {
+            "title": {"type": "string", "required": True},
+            "script": {
+                "type": "reference",
+                "target": "script",
+                "required": True,
+                "description": "The script this episode was recorded from.",
+            },
+        },
+    }
+    validation = vault.validate()
+    assert validation.ok, validation.issues
+    assert (validation.stats.schemas, validation.stats.entities) == (3, 4)
+    assert validation.stats.relations == 4
+    assert vault.types() == ["compilation", "episode", "script"]
+
+
+def test_migrate_ignores_entities_of_other_types_and_invalid_frontmatter(tmp_path: Path) -> None:
+    (tmp_path / ".knott/schemas").mkdir(parents=True)
+    (tmp_path / ".knott/schemas/note.yaml").write_text(
+        "type: note\nrelations:\n  about:\n    target: note\n", encoding="utf-8"
+    )
+    (tmp_path / "other.md").write_text("---\ntype: other\nabout: [a.md]\n---\n")
+    (tmp_path / "broken.md").write_text("---\ntype: note\nabout: [\n---\n")
+    result = migrate_vault(tmp_path)
+    assert result.list_fields == []
+    assert concept(tmp_path, ".knott/concepts/note.md")["properties"] == {
+        "about": {"type": "reference", "target": "note"}
+    }
+
+
+def test_migrate_empty_legacy_folder_creates_concepts_folder(tmp_path: Path) -> None:
+    (tmp_path / ".knott/schemas").mkdir(parents=True)
+    (tmp_path / ".knott/schemas/.DS_Store").write_bytes(b"\0")
+    result = migrate_vault(tmp_path)
+    assert result.written == []
+    assert (tmp_path / ".knott/concepts").is_dir()
+    assert not (tmp_path / ".knott/schemas").exists()
+
+
+def _legacy_vault(root: Path) -> Path:
+    (root / ".knott/schemas/sub").mkdir(parents=True)
+    (root / ".knott/schemas/a.yaml").write_text("type: a\n", encoding="utf-8")
+    (root / ".knott/schemas/sub/b.yaml").write_text("type: b\n", encoding="utf-8")
+    return root
+
+
+@pytest.mark.parametrize(
+    ("setup", "message"),
+    [
+        pytest.param(
+            lambda r: (r / ".knott/schemas/sub/b.yaml").write_text("type: [b\n"),
+            ".knott/schemas/sub/b.yaml:2: invalid YAML",
+            id="broken-yaml",
+        ),
+        pytest.param(
+            lambda r: (r / ".knott/schemas/sub/b.yaml").write_text("type: b\nfields: {}\n"),
+            ".knott/schemas/sub/b.yaml: unknown key `fields`",
+            id="unknown-key",
+        ),
+        pytest.param(
+            lambda r: (r / ".knott/schemas/a.yaml").write_text(
+                "type: a\nrelations:\n  x:\n    target: a\n    kind: one\n"
+            ),
+            ".knott/schemas/a.yaml: unknown key `kind` in `relations.x`",
+            id="unknown-relation-key",
+        ),
+        pytest.param(
+            lambda r: (r / ".knott/schemas/a.yaml").write_bytes(b"type: \xff\n"),
+            ".knott/schemas/a.yaml: file is not valid UTF-8",
+            id="not-utf8",
+        ),
+        pytest.param(
+            lambda r: (r / ".knott/schemas/notes.txt").write_text("keep me\n"),
+            ".knott/schemas/notes.txt: not a `.yaml` schema",
+            id="other-file",
+        ),
+        pytest.param(
+            lambda r: (
+                (r / ".knott/concepts/sub").mkdir(parents=True),
+                (r / ".knott/concepts/sub/b.md").write_text("---\nname: b\n---\n"),
+            ),
+            ".knott/concepts/sub/b.md already exists",
+            id="existing-concept",
+        ),
+    ],
+)
+def test_migrate_refuses_and_changes_nothing(
+    tmp_path: Path, setup: Callable[[Path], object], message: str
+) -> None:
+    root = _legacy_vault(tmp_path)
+    setup(root)
+    before = snapshot(root)
+    with pytest.raises(MigrateError) as raised:
+        migrate_vault(root)
+    assert message in str(raised.value)
+    assert snapshot(root) == before
+
+
+def test_migrate_without_legacy_folder_refuses(tmp_path: Path) -> None:
+    Knott.init(tmp_path)
+    before = snapshot(tmp_path)
+    with pytest.raises(MigrateError, match="nothing to migrate"):
+        Knott.open(tmp_path).migrate()
+    assert snapshot(tmp_path) == before
