@@ -261,9 +261,9 @@ properties:                     # optional map: name → definition
 - [x] `knott view` on `docs/` renders edges correctly (open once by hand) — verified the embedded payload (7 edges = the 7 reference properties in docs/.knott/concepts, templates for all 5 types, 0 schema issues); opening a browser by hand is not automatable in this run
 
 ### Task 11: [Final] Update documentation
-- [ ] update README.md if anything changed during implementation
-- [ ] add a CLAUDE.md note if new patterns came up (e.g. `iter_references` as the single edge walker)
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update README.md if anything changed during implementation (already current: Task 9 rewrote it for concept files, references, `types --verbose`, `migrate` and 'Upgrading from 0.4'; Task 10's `knott view` legacy-layout fix matches its "nothing else is checked" wording)
+- [x] add a CLAUDE.md note if new patterns came up (e.g. `iter_references` as the single edge walker) — skipped: there is no single walker (the validator walks values against shapes itself; `iter_references` is schema-level, `iter_reference_paths` serves `OntologyType.references` and `view`), and both are documented in their docstrings
+- [x] move this plan to `docs/plans/completed/` (moved by harness after reviews)
 
 ## Post-Completion
 *Items requiring manual intervention or external systems - no checkboxes, informational only*
