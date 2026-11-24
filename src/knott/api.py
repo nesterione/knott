@@ -11,6 +11,7 @@ from pathlib import Path
 from knott import _yaml
 from knott.errors import ConfigError, KnottError, PathNotFoundError, PathOutsideVaultError
 from knott.models import (
+    ConnectorDefinition,
     EntityRef,
     FixedEntity,
     InitResult,
@@ -25,10 +26,11 @@ from knott.models import (
     Stats,
     ValidationResult,
 )
-from knott.schema.loader import load_ontology, load_schemas
+from knott.schema.loader import load_definitions, load_ontology, load_schemas
 from knott.schema.migrate import migrate_vault
 from knott.schema.models import (
     AttributeDef,
+    FileShape,
     ListShape,
     MapShape,
     ObjectShape,
@@ -135,9 +137,10 @@ class Knott:
         Types are sorted by name; properties keep their schema order, references
         included (``type == "reference"``, at any depth). Target types no concept
         defines are listed in ``unknown_targets``. Files with invalid frontmatter
-        are not counted. Relations are sorted by name.
+        are not counted. Relations and connectors are sorted by name.
         """
-        schemas, relation_defs, issues = load_ontology(self.root)
+        loaded = load_definitions(self.root)
+        schemas, relation_defs, issues = loaded.schemas, loaded.relations, loaded.issues
         counts: dict[str, int] = {}
         for rel_path in iter_markdown(self.root):
             parsed = read_markdown(self.root / rel_path, rel_path)
@@ -168,8 +171,18 @@ class Knott:
             )
             for _, r in sorted(relation_defs.items())
         ]
+        connectors = [
+            ConnectorDefinition(
+                name=c.name, description=c.description, guidance=c.guidance, path=c.path
+            )
+            for _, c in sorted(loaded.connectors.items())
+        ]
         return Ontology(
-            vault=self.root.name, types=types, schema_issues=len(issues), relations=relations
+            vault=self.root.name,
+            types=types,
+            schema_issues=len(issues),
+            relations=relations,
+            connectors=connectors,
         )
 
     def validate(
@@ -237,11 +250,12 @@ class Knott:
         return fixed
 
     def _validate(self, paths: Sequence[str | Path] | None) -> ValidationResult:
-        schemas, relation_defs, issues = load_ontology(self.root)
+        loaded = load_definitions(self.root)
+        schemas, relation_defs, issues = loaded.schemas, loaded.relations, loaded.issues
         if any(i.code == "schema-legacy-layout" for i in issues):
             # Every entity would also be `entity-unknown-type`; report only the cause.
             return ValidationResult(issues=issues, stats=Stats(schemas=0, entities=0, relations=0))
-        session = VaultSession(self.root, schemas)
+        session = VaultSession(self.root, schemas, loaded.connectors)
         all_markdown = session.all_markdown
 
         if paths is None:
@@ -268,7 +282,9 @@ class Knott:
             if not parsed.is_entity:
                 continue
             entities += 1
-            report = validate_entity(parsed, schemas, session.resolve, session.lookup)
+            report = validate_entity(
+                parsed, schemas, session.resolve, session.lookup, session.resolve_file
+            )
             issues.extend(report.issues)
             relations += report.relations
             assert parsed.frontmatter is not None
@@ -374,6 +390,7 @@ def _ontology_attribute(a: AttributeDef) -> OntologyAttribute:
         targets=list(shape.targets) if isinstance(shape, ReferenceShape) else [],
         unknown_targets=list(shape.unknown) if isinstance(shape, ReferenceShape) else [],
         relation=shape.relation if isinstance(shape, ReferenceShape) else None,
+        accept=list(shape.accept) if isinstance(shape, FileShape) else [],
     )
 
 

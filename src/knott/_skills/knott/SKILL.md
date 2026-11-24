@@ -11,14 +11,16 @@ A Knott vault is an ordinary directory of Markdown files with a `.knott/` direct
 
 - **Entity**: a Markdown file whose YAML frontmatter is a mapping with a `type` key. Files without frontmatter, or without `type`, are ordinary notes and are ignored.
 - **Concept file**: `.knott/concepts/**/*.md`, one file per type. Its frontmatter is the type's schema: `name:` (the type's name; the file name and folder do not matter), `description`, and `properties`. Its body, if any, is a template for entity bodies.
-- **Property**: a frontmatter value declared under `properties:`: a scalar (`string`, `integer`, `number`, `boolean`, `date`, `datetime`), a `reference`, or a `list`, `object` or `map` of them, nested.
+- **Property**: a frontmatter value declared under `properties:`: a scalar (`string`, `integer`, `number`, `boolean`, `date`, `datetime`), a `reference`, a `file`, or a `list`, `object` or `map` of them, nested.
 - **Reference**: a property with `type: reference` and a `target` type; its value points to another entity file by relative path (or by `kid`). It lives only on the source file; never add an inverse on the target.
 - **Relation file**: `.knott/relations/**/*.md`, one file per relation, naming what a link means. Frontmatter: `name`, `description`, and optionally `inverse` (its name read from the target side), `symmetric: true` (goes both ways) or `acyclic: true` (must not loop). Its body says when to use it. A reference property opts in with `relation: <name>`.
+- **File**: a property with `type: file`; its value names a file that is not an entity (audio, PDF, image, JSON), by a relative path in the vault or by a URI for a file kept elsewhere (`s3://bucket/key`, `gdrive:<id>`).
+- **Connector file**: `.knott/connectors/**/*.md`, one file per URI scheme the vault allows. Frontmatter: `name` (the scheme) and `description`. Its body says how to open or move such files.
 - **Kid**: a knott-managed identity, `kid: <lowercase uuid>`. Never invent or edit one; `knott validate --fix` adds it.
 
 ## Workflow
 
-1. Run `knott types --verbose` to see each type's concept file, whether it has a template, its references and its properties (with nested shapes), and the vault's relations with their usage guidance. If it reports `schema-legacy-layout`, migrate first (see Commands).
+1. Run `knott types --verbose` to see each type's concept file, whether it has a template, its references and its properties (with nested shapes), and the vault's relations and connectors with their usage guidance. If it reports `schema-legacy-layout`, migrate first (see Commands).
 2. Pick the relevant type and read its concept file: `description`, `properties`, which fields are `required: true`, and the body template.
 3. Create or update the Markdown entity. Put it wherever it makes sense to a human; Knott does not dictate folders. For a new entity, start the body from the concept's template (`template: yes`): keep its headings, fill each section, and delete a section's `<!-- … -->` guidance once it is filled. Knott never checks the body.
 4. Write references as relative paths (see below).
@@ -134,6 +136,25 @@ relations:
   Symmetric groups end each line with `←` (the other side stores it), `→` (this file does) or `⇄` (both).
 - `relation-cycle`: an `acyclic` relation loops (`decisions/a.md → decisions/b.md → decisions/a.md`). Remove the reference that is wrong (for `supersedes` and `amends`, the newer entity is the source).
 - Writing a concept file: put `relation:` on a `reference` shape (for a list, on its `items`), on one line straight after `type` (`items: { type: reference, relation: about, target: concept }`), and name only relations defined in `.knott/relations/` (`relation-unknown` otherwise). A reference without `relation:` is a plain, inline link.
+
+## Files
+
+`knott types --verbose` shows a file property as `audio*  file .mp3 | .wav` (the extensions it accepts) and lists the vault's connectors at the end.
+
+```yaml
+audio: ../audio/episode-42.mp3
+images:
+  - "[the whiteboard](../img/board.jpg)"
+  - s3://talks/episode-42.png
+  - gdrive:1AbCdEf
+```
+
+- **A file in the vault** is a relative path, plain or a quoted Markdown link, case-sensitive. It must exist before you validate (`file-not-found`) and have an accepted extension (`file-extension-mismatch`).
+- **A file kept elsewhere** is a URI whose scheme is a listed connector. Read the connector's guidance for what follows the scheme. Never invent a scheme: an unlisted one is `file-unknown-connector`, and a web address (`https://…`) is one too unless `https` is a connector.
+- Write a URI on its own, never in a Markdown link. Quote it when it contains `#` or `: `.
+- `file` holds exactly one value; `list of file` holds a list, even for one. Each item is checked on its own.
+- A file whose name has a colon is written `./a:b.json`.
+- Knott does not move files. Put the file in place (or upload it with the tool the connector's guidance names), then write the value.
 
 ## Kids
 

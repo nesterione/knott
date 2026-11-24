@@ -92,6 +92,7 @@ src/knott/
     discovery.py
     entity.py
     links.py       # relation value parsing + path resolution
+    files.py       # file value parsing + resolution (paths and connector URIs)
 ```
 
 Exact module names are not important; the separation is.
@@ -169,7 +170,7 @@ Reserved:
 
 - `.knott/schemas/` is the pre-0.5 layout. If it exists, a run reports one `schema-legacy-layout` issue and stops: no concept files are loaded and no entities are checked, so the one issue isn't buried under `entity-unknown-type`. `knott migrate` (§14) converts it.
 
-Relation definitions are discovered the same way from `.knott/relations/**/*.md`, one relation per file, identified by `name` (§9).
+Relation definitions are discovered the same way from `.knott/relations/**/*.md`, one relation per file, identified by `name` (§9). So are connectors, from `.knott/connectors/**/*.md` (§8).
 
 See `docs/decisions/0010-concept-files-and-reference-properties.md`.
 
@@ -249,7 +250,7 @@ Allowed keys:
 | top | `description` | no | string |
 | top | `kid` | no | `required`: every entity of this type must have a `kid` (§12) |
 | top | `properties` | no | mapping of property name → definition, in display order |
-| property | `type` | yes | a scalar type in §8, or `list`, `object`, `map` or `reference` |
+| property | `type` | yes | a scalar type in §8, or `list`, `object`, `map`, `reference` or `file` |
 | property | `required` | no | boolean, default `false` |
 | property | `description` | no | string |
 | property | `items` | with `type: list` | the definition of each item (`type`, `description`, nesting keys; no `required`) |
@@ -257,6 +258,7 @@ Allowed keys:
 | property | `values` | with `type: map` | the definition of each value (`type`, `description`, nesting keys; no `required`) |
 | property | `target` | with `type: reference` | a type name, or a non-empty list of unique type names (self-reference allowed) |
 | property | `relation` | no; `type: reference` only | the `name` of a relation definition (§9) |
+| property | `accept` | no; `type: file` only | a non-empty list of unique lowercase extensions, no dot (§8) |
 
 Schema rules:
 
@@ -332,9 +334,42 @@ properties:
 
 See `docs/decisions/0008-structured-attributes.md`.
 
-A `reference` (§9) may appear anywhere a shape can: list `items`, map `values`, or an object field.
+A `reference` (§9) or a `file` (below) may appear anywhere a shape can: list `items`, map `values`, or an object field.
 
 Not in v0: enums, unions of scalar types, item counts, named reusable shapes, custom scalars, inheritance, composition.
+
+### File properties
+
+A property of shape `file` names a file without treating it as an entity: an mp3, a JSON file, a PDF, an image. The value is a **path**, for a file in the vault, or a **URI**, for a file kept elsewhere. Knott never reads a file's content and never fetches anything. A `file` is an attribute, not a relation: no edge in `knott view`, not listed by `knott refs`, not counted under "relations".
+
+```yaml
+properties:
+  audio: { type: file, required: true, accept: [mp3, wav] }
+  images:
+    type: list
+    items: { type: file, accept: [png, jpg] }
+```
+
+```yaml
+audio: ../audio/episode-42.mp3
+images:
+  - "[the whiteboard](../img/episode-42-b.jpg)"
+  - s3://talks/episode-42.png
+  - gdrive:1AbCdEf
+```
+
+- `accept` is optional: a non-empty list of unique extensions, each `^[a-z0-9]+$` (no dot). It is checked for paths only. `accept` on another shape, and `target` or `relation` on a `file`, are `schema-invalid-field`.
+- **Connectors.** A connector file, `.knott/connectors/**/*.md`, declares a URI scheme the vault allows. Closed keys: `name` (required; a lowercase URI scheme, `^[a-z][a-z0-9+.-]*$`, not `kid`) and `description`. The body is guidance, stored verbatim. A missing, invalid or reserved `name` is `schema-invalid-field` and defines no connector; an invalid `description` or an unknown key is `schema-invalid-field` and the connector still loads; two files with one `name` are `schema-duplicate-connector`, reported at the second in path order.
+- **Value shape.** A shape that is `file`, or a list or map whose items are files at any depth, follows the rules for a shape that holds references (§11), with `file-missing` for `relation-missing` and `file-invalid-value` for `relation-invalid-value`. `type: file` holds exactly one string; several is a `list` with `file` `items`.
+- **Resolving a value.** The steps run in order, and the first that fails reports the one issue for that value. `SCHEME` is `^[A-Za-z][A-Za-z0-9+.-]*:`.
+  1. Trim the string.
+  2. `[[…` is `file-invalid-value`. A Markdown link `[label](destination)`: remove a `<…>` wrapper; whitespace without a wrapper is `file-invalid-value`; a destination that matches `SCHEME` is `file-invalid-value`; otherwise percent-decode once, and the result is a path. Another value that starts with `[` is `file-invalid-value`. A plain value that matches `SCHEME` is a URI. Any other plain value is a path, taken literally.
+  3. URI: the lowercased scheme is not `kid` (`file-invalid-value`); something follows the first `:` (`file-invalid-value`); a connector has that name (`file-unknown-connector`). The rest is opaque: not decoded, never compared, `#` and whitespace allowed.
+  4. Path: not empty, no `#`, not absolute (`file-invalid-value`); inside the vault root, lexically and by real path (`file-outside-vault`); a regular file exists there with exact case (`file-not-found`, a folder included); its extension is in `accept` (`file-extension-mismatch`).
+- A path is relative to the entity's directory. Any regular file in the vault passes, including a Markdown file, an entity, and a file in a hidden folder. The extension is the text after the last `.` of the name, lowercased; a name with no `.`, or only a leading one, has none.
+- A file name with a colon is written with a leading `./` (`./a:b.json`), since `a:b.json` is a URI.
+
+See `docs/specs/0008-file-properties.md` and `docs/decisions/0012-files-are-property-values.md`.
 
 ---
 
@@ -574,6 +609,8 @@ Validation is the primary feature of v0. A run loads all concept files, then val
 - `kid`, when present, is `required`.
 - No duplicate `name` across files (`schema-duplicate-type`).
 - No top-level property named `type` or `kid`.
+- A `file`'s `accept` is a non-empty list of unique lowercase extensions (§8).
+- Connector files are well-formed, with unique names (`schema-duplicate-connector`; §8).
 - Relation files are well-formed, with unique names (`schema-duplicate-relation`); every `relation:` names one (`relation-unknown`); the checks on definitions pass (`relation-inverse-conflict`, `relation-symmetric-mismatch`; §9).
 
 ### Entity validation
@@ -582,6 +619,7 @@ Validation is the primary feature of v0. A run loads all concept files, then val
 - `kid`: present when the schema requires it (`kid-missing`), a canonical UUID (`kid-invalid`), and unique (`kid-duplicate`).
 - Attributes: required ones are present (`attribute-missing`) and values match their type (`attribute-type-mismatch`), at every nesting level. Declared objects have no undeclared keys (`attribute-unknown-field`).
 - References, at every nesting level: checked as in §11. A list or map whose items are references uses the `relation-*` codes.
+- Files, at every nesting level: checked as in §8. A list or map whose items are files uses the `file-*` codes.
 - No relation with `acyclic: true` forms a loop (`relation-cycle`, §9).
 - Undeclared top-level keys are allowed and not checked. Strict schemas may come later.
 
@@ -597,7 +635,7 @@ some_personal_metadata: foo
 ### Scope of a run
 
 - `knott validate` (no args) checks every concept file and every entity.
-- `knott validate PATH...` always checks every concept file, because entity checks depend on them. Entity checks cover only the given files, or the entities under the given directories. Relation targets outside those paths are still read to check their type.
+- `knott validate PATH...` always checks every concept file, because entity checks depend on them. Entity checks cover only the given files, or the entities under the given directories. Relation targets outside those paths are still read to check their type. File values are resolved only for the entities in scope.
 - An explicitly given file that is not an entity is an error (`not-an-entity`).
 
 ---
@@ -639,7 +677,7 @@ transcript
 
 If schema errors exist, `types` still prints the types it could load, writes the errors to stderr, and exits with code `1`.
 
-`--verbose` adds, per type: the concept file path, the description, `kid: required` when set, `template: yes|no`, `references:` with the path of every reference at any depth (`[]` for list items, `.*` for map values, `.field` for object fields, or `none`), and the properties with nested shapes indented. A reference shows `→ target | target`; a target no concept defines is marked `(unknown)`. A reference that names a relation shows it after the type, as part of the type column: `affects  list of reference → concept  (about)`; a name no relation file defines is not shown.
+`--verbose` adds, per type: the concept file path, the description, `kid: required` when set, `template: yes|no`, `references:` with the path of every reference at any depth (`[]` for list items, `.*` for map values, `.field` for object fields, or `none`), and the properties with nested shapes indented. A reference shows `→ target | target`; a target no concept defines is marked `(unknown)`. A reference that names a relation shows it after the type, as part of the type column: `affects  list of reference → concept  (about)`; a name no relation file defines is not shown. A `file` shows the extensions it accepts: `audio*  file .mp3 | .wav`, `images  list of file .png | .jpg`.
 
 After the types, a `relations:` section lists every relation, sorted by name: on one line, indented by two spaces, the name, then `inverse: <x>`, `symmetric`, `acyclic` as they apply, separated by two spaces; then the description and the guidance, each line indented by four spaces (blank lines kept empty). Relations are separated by a blank line. A vault without relations has no `relations:` section. From `tests/fixtures/relation-refs`:
 
@@ -660,6 +698,8 @@ relations:
 
     For a partial change, use `amends`.
 ```
+
+After the relations, a `connectors:` section lists every connector, sorted by name, in the same format: the name indented by two spaces, then the description and the guidance indented by four. A vault without connectors has no `connectors:` section.
 
 ### `knott migrate [PATH]`
 
@@ -689,7 +729,7 @@ Prints the installed Knott version.
 
 ### `knott view [PATH] [-o FILE] [--no-open]`
 
-Writes the vault's ontology (types, properties, templates, references, entity counts) as one self-contained static HTML page and opens it in the browser. No server and no network. Each reference is an edge per known target, labelled with its path; it is drawn as required only when every step on its path is required. Targets no concept defines get no edge and are marked `(unknown)` in the type's panel. A reference that names a relation is labelled with the relation's name instead of its path; the type's panel shows the path with the relation in parentheses under "References out", and, under "Referenced by", every reference property (any depth, any type, T included) whose known targets include the type, grouped and labelled as in reverse lookup (§10), each row `<source type>.<property path>`. A "Relations (N defined · M inline)" button in the header, hidden when both counts are 0 (a zero part is left out), opens a panel with two sections. "Defined" lists every relation with its keys, description, guidance (HTML-escaped, folded under "When to use it") and the properties that name it, each `<type>.<property path> → <targets>`. "Inline" lists every reference property that names no relation file, one row per property as `<type>.<property path>`, grouped by its targets, largest group first. The embedded data has `relations`, a `relation` key on each edge, `referenced_by`: a list of `{type, groups}`, each group `{label, kind, relation, references: [{type, path, required}]}`, and `reference_properties`: a list of `{type, path, relation, targets, unknown_targets, required}`, one per reference property, `relation` being `None` for an inline one. Schema errors still produce a page, with a note to run `knott validate`; a vault that still has `.knott/schemas/` prints the `schema-legacy-layout` issue to stderr, writes no page and exits `1`; a vault with no types exits with code `2`. See `docs/commands/view.md`.
+Writes the vault's ontology (types, properties, templates, references, entity counts) as one self-contained static HTML page and opens it in the browser. No server and no network. Each reference is an edge per known target, labelled with its path; it is drawn as required only when every step on its path is required. Targets no concept defines get no edge and are marked `(unknown)` in the type's panel. A reference that names a relation is labelled with the relation's name instead of its path; the type's panel shows the path with the relation in parentheses under "References out", and, under "Referenced by", every reference property (any depth, any type, T included) whose known targets include the type, grouped and labelled as in reverse lookup (§10), each row `<source type>.<property path>`. A "Relations (N defined · M inline)" button in the header, hidden when both counts are 0 (a zero part is left out), opens a panel with two sections. "Defined" lists every relation with its keys, description, guidance (HTML-escaped, folded under "When to use it") and the properties that name it, each `<type>.<property path> → <targets>`. "Inline" lists every reference property that names no relation file, one row per property as `<type>.<property path>`, grouped by its targets, largest group first. The embedded data has `relations`, a `relation` key on each edge, `referenced_by`: a list of `{type, groups}`, each group `{label, kind, relation, references: [{type, path, required}]}`, and `reference_properties`: a list of `{type, path, relation, targets, unknown_targets, required}`, one per reference property, `relation` being `None` for an inline one. A `file` property shows the extensions it accepts in the property table and draws no edge; the embedded data also has `connectors` and, on each attribute, `accept`. Schema errors still produce a page, with a note to run `knott validate`; a vault that still has `.knott/schemas/` prints the `schema-legacy-layout` issue to stderr, writes no page and exits `1`; a vault with no types exits with code `2`. See `docs/commands/view.md`.
 
 ### `knott refs PATH [--format text|json]`
 
@@ -826,13 +866,14 @@ Success output:
 ✓ vault is valid
 ```
 
-"Relations" counts each resolved reference, so a list of three counts as 3.
+"Relations" counts each resolved reference, so a list of three counts as 3. File values are checked but not counted.
 
 ### Issue codes
 
 ```
 schema-invalid-yaml        schema-invalid-field       schema-duplicate-type
 schema-unknown-target      schema-legacy-layout       schema-duplicate-relation
+schema-duplicate-connector
 relation-unknown           relation-inverse-conflict  relation-symmetric-mismatch
 entity-invalid-frontmatter entity-unknown-type        not-an-entity
 kid-missing                kid-invalid                kid-duplicate
@@ -840,6 +881,8 @@ attribute-missing          attribute-type-mismatch    attribute-unknown-field
 relation-missing           relation-invalid-value     relation-target-outside-vault
 relation-target-not-found  relation-target-not-entity relation-target-type-mismatch
 relation-target-ambiguous  relation-cycle
+file-missing               file-invalid-value         file-unknown-connector
+file-outside-vault         file-not-found             file-extension-mismatch
 ```
 
 ### Exit codes
@@ -870,11 +913,12 @@ ontology = vault.ontology()        # Ontology: types with properties, templates,
 ontology.types[0].references()     # [("speakers[].person", OntologyAttribute), …]
 ontology.relations                 # [RelationDefinition(name, description, inverse, symmetric,
                                    #   acyclic, guidance, path), …], sorted by name
+ontology.connectors                # [ConnectorDefinition(name, description, guidance, path), …]
 refs = vault.refs("concepts/kid.md")   # or "kid:<uuid>"; Refs(entity, groups), see §10
 vault.migrate()                    # MigrateResult(written, removed, list_fields); see §14
 ```
 
-`OntologyAttribute.relation` is the relation a reference names (`None` when none, or one no relation file defines). `Refs` has `entity: EntityRef(path, type, kid)` and `groups: list[RefGroup(label, kind, relation, references: list[Ref(path, type, kid, field, line, direction)])]`; `type` is the frontmatter `type` as written. A relative path passed to `refs()` is resolved against the vault root, as in `validate()`.
+`OntologyAttribute.relation` is the relation a reference names (`None` when none, or one no relation file defines). `OntologyAttribute.type` may be `file`; `accept` lists its extensions (`[]` when not declared). `Refs` has `entity: EntityRef(path, type, kid)` and `groups: list[RefGroup(label, kind, relation, references: list[Ref(path, type, kid, field, line, direction)])]`; `type` is the frontmatter `type` as written. A relative path passed to `refs()` is resolved against the vault root, as in `validate()`.
 
 `validate()` returns validation problems as data and never raises for them. It raises only for `2`-class conditions (`KnottError` subclasses in `errors.py`).
 

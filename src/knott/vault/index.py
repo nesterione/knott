@@ -10,7 +10,7 @@ the index resolve a reference once and a run lists each directory once.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,6 +27,7 @@ from knott.schema.models import (
 from knott.schema.validator import format_field_path
 from knott.vault.discovery import iter_markdown
 from knott.vault.entity import MarkdownFile, read_markdown
+from knott.vault.files import ResolvedFile, resolve_file
 from knott.vault.kid import KidIndex, build_index
 from knott.vault.links import LinkError, ResolvedReference, list_dir_entries, resolve_reference
 
@@ -98,9 +99,13 @@ class VaultSession:
     `kid` or the reference graph pays nothing for them. Nothing outlives the session.
     """
 
-    def __init__(self, root: Path, schemas: dict[str, Schema]) -> None:
+    def __init__(
+        self, root: Path, schemas: dict[str, Schema], connectors: Collection[str] = ()
+    ) -> None:
         self.root = root
         self.schemas = schemas
+        self.connectors = frozenset(connectors)
+        """Names of the declared connectors (spec 0008)."""
         self._files: dict[str, MarkdownFile] = {}
         self._all_markdown: list[str] | None = None
         self._kids: KidIndex | None = None
@@ -142,6 +147,10 @@ class VaultSession:
         if isinstance(outcome, LinkError):
             raise LinkError(outcome.code, outcome.message)
         return outcome
+
+    def resolve_file(self, source: str, value: str, accept: tuple[str, ...] = ()) -> ResolvedFile:
+        """Resolve a file value held by ``source`` (spec 0008); raises ``LinkError``."""
+        return resolve_file(self.root, source, value, self.connectors, accept, self.list_dir)
 
     def list_dir(self, directory: Path) -> frozenset[str] | None:
         """``directory``'s entry names (``None`` if unlistable), listed once per session."""

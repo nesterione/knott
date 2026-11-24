@@ -46,10 +46,19 @@ class ReferenceShape:
     undefined one."""
 
 
-Shape = ScalarType | ListShape | ObjectShape | MapShape | ReferenceShape
+@dataclass(frozen=True)
+class FileShape:
+    """A file that is not treated as an entity: a vault path or a connector URI (spec 0008)."""
+
+    accept: tuple[str, ...] = ()
+    """Lowercase extensions a vault file may have, without the dot. Empty: any."""
+
+
+Shape = ScalarType | ListShape | ObjectShape | MapShape | ReferenceShape | FileShape
 
 COMPOUND_KINDS = ("list", "object", "map")
 REFERENCE_KIND = "reference"
+FILE_KIND = "file"
 
 
 def shape_kind(shape: Shape) -> str:
@@ -62,6 +71,8 @@ def shape_kind(shape: Shape) -> str:
         return "map"
     if isinstance(shape, ReferenceShape):
         return REFERENCE_KIND
+    if isinstance(shape, FileShape):
+        return FILE_KIND
     return shape.value
 
 
@@ -116,6 +127,21 @@ class RelationDef:
     """Vault-relative path of the relation file."""
     lines: dict[str, int | None] = field(default_factory=dict, compare=False)
     """1-based line of each top-level key of the relation file."""
+
+
+@dataclass(frozen=True)
+class ConnectorDef:
+    """A connector file in ``.knott/connectors/`` (spec 0008): a URI scheme the vault allows."""
+
+    name: str
+    """The URI scheme, lowercase."""
+    description: str | None
+    guidance: str | None
+    """The connector file's body, verbatim; None when it is blank."""
+    path: str
+    """Vault-relative path of the connector file."""
+    lines: dict[str, int | None] = field(default_factory=dict, compare=False)
+    """1-based line of each top-level key of the connector file."""
 
 
 SchemaPath = tuple[str, ...]

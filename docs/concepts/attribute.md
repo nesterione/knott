@@ -65,6 +65,8 @@ See [decision 0008](../decisions/0008-structured-attributes.md).
 
 A key that is present with `null` or an empty string counts as **absent**. So does an empty container of the declared kind: `[]` for a list, `{}` for an object or map. `required: true` means present and not empty, so a required list needs at least one item. An empty container of another kind (`title: []`) is a type mismatch. A list item or map value is never absent. See [decision 0005](../decisions/0005-empty-values.md).
 
+A property can also name a file that is not an entity, in the vault or kept elsewhere: see [File](file.md).
+
 A shape can hold references at any depth, e.g. a list of objects with a `person: {type: reference, target: person}` field. Those values are checked as [relations](relation.md).
 
 Not supported yet: enums, unions of scalar types, item counts, custom scalars.

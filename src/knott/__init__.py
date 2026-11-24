@@ -10,6 +10,7 @@ from knott.errors import (
     VaultNotFoundError,
 )
 from knott.models import (
+    ConnectorDefinition,
     EntityRef,
     FixedEntity,
     InitResult,
@@ -29,6 +30,7 @@ from knott.models import (
 
 __all__ = [
     "ConfigError",
+    "ConnectorDefinition",
     "EntityRef",
     "FixedEntity",
     "InitResult",

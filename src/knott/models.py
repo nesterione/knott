@@ -79,7 +79,7 @@ class OntologyAttribute(_Frozen):
     name: str | None
     """Field name; None for a list's `items` or a map's `values`."""
     type: str
-    """A scalar type name, or `list`, `object`, `map` or `reference`."""
+    """A scalar type name, or `list`, `object`, `map`, `reference` or `file`."""
     required: bool
     description: str | None
     items: OntologyAttribute | None = None
@@ -94,6 +94,8 @@ class OntologyAttribute(_Frozen):
     """For a `reference`: target types no concept defines (shown, never enforced)."""
     relation: str | None = None
     """For a `reference`: the relation it names, when a relation file defines it."""
+    accept: list[str] = []
+    """For a `file`: the extensions a vault file may have, without the dot. Empty: any."""
 
     @property
     def notation(self) -> str:
@@ -171,6 +173,18 @@ class RelationDefinition(_Frozen):
     """Vault-relative path of the relation file."""
 
 
+class ConnectorDefinition(_Frozen):
+    """A connector file in ``.knott/connectors/`` (spec 0008)."""
+
+    name: str
+    """The URI scheme of files kept behind this connector, lowercase."""
+    description: str | None
+    guidance: str | None
+    """The connector file's body, verbatim; None when blank."""
+    path: str
+    """Vault-relative path of the connector file."""
+
+
 class Ontology(_Frozen):
     """The vault's types, relations and the references between them."""
 
@@ -180,6 +194,8 @@ class Ontology(_Frozen):
     schema_issues: int
     relations: list[RelationDefinition] = []
     """Every relation that loaded, sorted by name."""
+    connectors: list[ConnectorDefinition] = []
+    """Every connector that loaded, sorted by name."""
 
 
 RefKind = Literal["inverse", "symmetric", "relation", "property"]
