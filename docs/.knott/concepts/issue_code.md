@@ -9,7 +9,7 @@ properties:
   stage:
     type: string
     required: true
-    description: Where it is detected - schema, entity, kid, attribute, or relation.
+    description: Where it is detected - schema, entity, kid, attribute, relation, or file.
   about:
     type: reference
     relation: about

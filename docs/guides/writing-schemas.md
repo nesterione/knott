@@ -115,6 +115,24 @@ forms:
 
 See [Attribute](../concepts/attribute.md) and [Relation](../concepts/relation.md) for the full rules.
 
+## Files
+
+When the knowledge is an mp3, a PDF, an image or a JSON file, keep the entity in Markdown and name the file in a [`file`](../concepts/file.md) property:
+
+```yaml
+properties:
+  audio: { type: file, required: true, accept: [mp3, wav], description: The mixed take. }
+  images:
+    type: list
+    items: { type: file, accept: [png, jpg] }
+```
+
+- **Name the property after what the file is** (`audio`, `cover`, `contract`), not `file` or `attachment`.
+- **Use `accept` when a wrong file type would be a mistake.** It is checked for files in the vault only.
+- **Declare a connector for each store outside the vault**, as `.knott/connectors/<scheme>.md`, and say in its description what follows the scheme. Values are then written `s3://bucket/key` or `gdrive:<id>`.
+- **Put a caption in a field**, with a list of objects: `fields: { file: { type: file, required: true }, caption: { type: string } }`.
+- **For a generic attachment type**, define a concept with one required `file` property. Knott ships none.
+
 ## Naming the link
 
 A property's key says where a link is stored. A **relation file** says what the link means, once, for every property that uses it. Add one when several properties mean the same thing (`decision.affects` and `issue_code.about` both say "this is about that concept"), when the link needs a name from the target side, or when it must never loop. This folder's `.knott/relations/supersedes.md`:

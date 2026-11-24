@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from knott import _yaml
 from knott._values import BOOLEAN_SPELLINGS, kind, show
 from knott.models import Issue
+from knott.schema.connectors import load_connectors
 from knott.schema.models import (
     COMPOUND_KINDS,
+    FILE_KIND,
     REFERENCE_KIND,
     AttributeDef,
+    ConnectorDef,
+    FileShape,
     ListShape,
     MapShape,
     ObjectShape,
@@ -42,7 +47,10 @@ _RESERVED_FIELDS = {
     "kid": "it is reserved for the knott-managed entity identity",
 }
 _DEFINITION_KEYS = ("type", "required", "description")
-_PROPERTY_TYPES = ", ".join([*(t.value for t in ScalarType), *COMPOUND_KINDS, REFERENCE_KIND])
+_PROPERTY_TYPES = ", ".join(
+    [*(t.value for t in ScalarType), *COMPOUND_KINDS, REFERENCE_KIND, FILE_KIND]
+)
+_EXTENSION = re.compile(r"^[a-z0-9]+$")
 # The key that nests the inner definition, by kind.
 _NESTING_KEYS = {"list": "items", "object": "fields", "map": "values", REFERENCE_KIND: "target"}
 _NESTING_EXAMPLES = {
@@ -86,11 +94,27 @@ def load_ontology(root: Path) -> tuple[dict[str, Schema], dict[str, RelationDef]
     """Load every concept and relation file (spec 0006).
 
     Returns the usable schemas by type, the usable relations by name, and all
-    schema issues. A vault that still has ``.knott/schemas/`` gets one
-    ``schema-legacy-layout`` issue and empty registries.
+    schema issues (connector files included). A vault that still has
+    ``.knott/schemas/`` gets one ``schema-legacy-layout`` issue and empty registries.
     """
+    loaded = load_definitions(root)
+    return loaded.schemas, loaded.relations, loaded.issues
+
+
+@dataclass
+class Definitions:
+    """Everything ``.knott/`` defines, with the problems found while loading it."""
+
+    schemas: dict[str, Schema] = field(default_factory=dict)
+    relations: dict[str, RelationDef] = field(default_factory=dict)
+    connectors: dict[str, ConnectorDef] = field(default_factory=dict)
+    issues: list[Issue] = field(default_factory=list)
+
+
+def load_definitions(root: Path) -> Definitions:
+    """Load every concept, relation and connector file (specs 0006 and 0008)."""
     if (root / LEGACY_SCHEMAS_DIR).exists():
-        return {}, {}, [legacy_layout_issue()]
+        return Definitions(issues=[legacy_layout_issue()])
     issues: list[Issue] = []
     registry: dict[str, Schema] = {}
     parsers: dict[str, _SchemaParser] = {}
@@ -131,7 +155,8 @@ def load_ontology(root: Path) -> tuple[dict[str, Schema], dict[str, RelationDef]
         lambda schema, path: parsers[schema.type].relation_line(path),
         issues,
     )
-    return registry, relations, issues
+    connectors = load_connectors(root, issues)
+    return Definitions(registry, relations, connectors, issues)
 
 
 def _resolve_targets(
@@ -441,6 +466,8 @@ class _SchemaParser:
             allowed.append(_NESTING_KEYS[kind_name])
         if kind_name == REFERENCE_KIND:
             allowed.append("relation")
+        if kind_name == FILE_KIND:
+            allowed.append("accept")
         for key in definition:
             if key == "required" and nested:
                 container = "list" if base[-1] == "items" else "map"
@@ -452,6 +479,8 @@ class _SchemaParser:
                 )
             elif key == "relation":
                 self._check_relation_placement(base, kind_name)
+            elif key == "accept":
+                self._check_accept_placement(base, kind_name)
             elif key in _NESTING_KEYS.values():
                 owner = next(k for k, v in _NESTING_KEYS.items() if v == key)
                 if kind_name is not None and kind_name != owner:
@@ -485,9 +514,64 @@ class _SchemaParser:
                 f"`relation` is only allowed when `type` is reference, but `type` is {kind_name}",
             )
 
+    def _check_accept_placement(self, base: _yaml.KeyPath, kind_name: str | None) -> None:
+        """`accept:` belongs on a file shape only (spec 0008)."""
+        if kind_name in ("list", "map"):
+            inner = _NESTING_KEYS[kind_name]
+            self.error(
+                "schema-invalid-field",
+                (*base, "accept"),
+                f"`accept` is not allowed on a {kind_name}: put `accept:` on `{inner}`",
+            )
+        elif kind_name is not None and kind_name != FILE_KIND:
+            self.error(
+                "schema-invalid-field",
+                (*base, "accept"),
+                f"`accept` is only allowed when `type` is file, but `type` is {kind_name}",
+            )
+
+    def _parse_accept(self, value: Any, base: _yaml.KeyPath) -> tuple[str, ...] | None:
+        """Parse `accept`: a non-empty list of unique lowercase extensions, without the dot."""
+        if value is None:
+            return ()
+        if not isinstance(value, list) or not value:
+            got = "an empty list" if value == [] else f"{kind(value)} {show(value)}"
+            self.error(
+                "schema-invalid-field",
+                base,
+                f"`accept` must be a non-empty list of file extensions, got {got}, "
+                "e.g. accept: [mp3, wav]",
+            )
+            return None
+        extensions: list[str] = []
+        ok = True
+        for index, item in enumerate(value):
+            if not isinstance(item, str) or not _EXTENSION.match(item):
+                message = (
+                    f"`accept` item {index + 1} must be a lowercase extension without the dot "
+                    f"(letters and digits), got {kind(item)} {show(item)}"
+                )
+                if isinstance(item, str) and _EXTENSION.match(item.lstrip(".").lower()):
+                    message += f"; write `{item.lstrip('.').lower()}`"
+                self.error("schema-invalid-field", (*base, index), message)
+                ok = False
+            elif item in extensions:
+                self.error(
+                    "schema-invalid-field",
+                    (*base, index),
+                    f"`accept` lists `{item}` twice; name each extension once",
+                )
+                ok = False
+            else:
+                extensions.append(item)
+        return tuple(extensions) if ok else None
+
     def _parse_shape(
         self, kind_name: str, definition: dict[Any, Any], base: _yaml.KeyPath, label: str
     ) -> Shape | None:
+        if kind_name == FILE_KIND:
+            accept = self._parse_accept(definition.get("accept"), (*base, "accept"))
+            return None if accept is None else FileShape(accept)
         if kind_name not in _NESTING_KEYS:
             return ScalarType(kind_name)
         key = _NESTING_KEYS[kind_name]
@@ -595,6 +679,5 @@ def _kind_name(raw_type: Any) -> str | None:
     """The property kind named by a schema `type` value, or None if it names none."""
     if not isinstance(raw_type, str):
         return None
-    if raw_type in (*COMPOUND_KINDS, REFERENCE_KIND) or raw_type in {t.value for t in ScalarType}:
-        return raw_type
-    return None
+    kinds = {*COMPOUND_KINDS, REFERENCE_KIND, FILE_KIND, *(t.value for t in ScalarType)}
+    return raw_type if raw_type in kinds else None

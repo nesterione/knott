@@ -14,6 +14,7 @@ from knott._yaml import KeyPath
 from knott.models import Issue
 from knott.schema.models import (
     AttributeDef,
+    FileShape,
     ListShape,
     MapShape,
     ObjectShape,
@@ -24,6 +25,7 @@ from knott.schema.models import (
     notation,
 )
 from knott.vault.entity import MarkdownFile
+from knott.vault.files import FILE_LINK_EXAMPLE, ResolvedFile
 from knott.vault.kid import KID_KEY, is_canonical, kid_problem
 from knott.vault.links import LINK_EXAMPLE, LinkError, ResolvedReference
 
@@ -33,6 +35,8 @@ _ISO_DATETIME = re.compile(r"^\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}")
 Resolver = Callable[[str, str], ResolvedReference]
 """(source path, reference) -> resolved reference; raises ``LinkError``."""
 FileLookup = Callable[[str], MarkdownFile]
+FileResolver = Callable[[str, str, tuple[str, ...]], ResolvedFile]
+"""(source path, file value, accepted extensions) -> resolved file; raises ``LinkError``."""
 
 
 @dataclass(frozen=True)
@@ -52,7 +56,9 @@ def validate_entity(
     schemas: dict[str, Schema],
     resolve: Resolver,
     lookup: FileLookup,
+    resolve_file: FileResolver | None = None,
 ) -> EntityReport:
+    """``resolve_file`` checks file values (spec 0008); without it they are not resolved."""
     assert entity.frontmatter is not None
     entity_type = entity.type
     schema = schemas.get(entity_type) if isinstance(entity_type, str) else None
@@ -70,7 +76,7 @@ def validate_entity(
         )
         return EntityReport([issue], 0)
 
-    checker = _ValueChecker(entity, resolve, lookup)
+    checker = _ValueChecker(entity, resolve, lookup, resolve_file)
     checker.issues.extend(_check_kid(entity, schema))
     for name, prop in schema.properties.items():
         checker.check(prop, (name,), entity.frontmatter.get(name))
@@ -122,13 +128,33 @@ def holds_references(shape: Shape) -> bool:
     return False
 
 
+def holds_files(shape: Shape) -> bool:
+    """A file, or a list or map whose items are files (at any depth).
+
+    Such a property reports `file-*` codes rather than `attribute-*` ones (spec 0008)."""
+    if isinstance(shape, FileShape):
+        return True
+    if isinstance(shape, ListShape):
+        return holds_files(shape.items.shape)
+    if isinstance(shape, MapShape):
+        return holds_files(shape.values.shape)
+    return False
+
+
 class _ValueChecker:
     """Checks one entity's frontmatter values; counts references that resolve."""
 
-    def __init__(self, entity: MarkdownFile, resolve: Resolver, lookup: FileLookup) -> None:
+    def __init__(
+        self,
+        entity: MarkdownFile,
+        resolve: Resolver,
+        lookup: FileLookup,
+        resolve_file: FileResolver | None = None,
+    ) -> None:
         self.entity = entity
         self.resolve = resolve
         self.lookup = lookup
+        self.resolve_file = resolve_file
         self.issues: list[Issue] = []
         self.relations = 0
 
@@ -150,33 +176,30 @@ class _ValueChecker:
         shape = definition.shape
         field = format_field_path(path)
         references = holds_references(shape)
-        noun = "relation" if references else "attribute"
+        files = holds_files(shape)
+        noun = "relation" if references else "file" if files else "attribute"
+        # What one value of the property is called, and the code for a malformed one.
+        thing = "reference" if references else "file" if files else None
+        invalid = f"{noun}-invalid-value" if thing else "attribute-type-mismatch"
 
         if _is_empty(value, shape):
             if definition.name is None:
                 what = "list item" if isinstance(path[-1], int) else "map value"
-                if references:
-                    self.report(
-                        "relation-invalid-value",
-                        f"relation `{field}` is an empty {what}; remove it or give it a reference",
-                        path,
-                    )
-                else:
-                    self.report(
-                        "attribute-type-mismatch",
-                        f"attribute `{field}` is an empty {what}; remove it or give it a value",
-                        path,
-                    )
+                self.report(
+                    invalid,
+                    f"{noun} `{field}` is an empty {what}; "
+                    f"remove it or give it a {thing or 'value'}",
+                    path,
+                )
             elif definition.required:
-                code = "relation-missing" if references else "attribute-missing"
                 if isinstance(shape, ListShape):
-                    hint = "; add at least one " + ("reference" if references else "item")
-                elif references:
-                    hint = "; add a reference"
+                    hint = f"; add at least one {thing or 'item'}"
+                elif thing:
+                    hint = f"; add a {thing}"
                 else:
                     hint = ""
                 self.report(
-                    code,
+                    f"{noun}-missing",
                     f"required {noun} `{field}` ({notation(shape)}) is missing or empty{hint}",
                     path,
                 )
@@ -184,6 +207,10 @@ class _ValueChecker:
 
         if isinstance(shape, ReferenceShape):
             self._check_reference(shape, path, value)
+            return
+
+        if isinstance(shape, FileShape):
+            self._check_file(shape, path, value)
             return
 
         if isinstance(shape, ScalarType):
@@ -210,17 +237,16 @@ class _ValueChecker:
                 if isinstance(key, str):
                     self.check(shape.values, (*path, key), item)
                 else:
-                    code = "relation-invalid-value" if references else "attribute-type-mismatch"
-                    self.report(code, _map_key_message(noun, field, key), path)
-        elif references:
+                    self.report(invalid, _map_key_message(noun, field, key), path)
+        elif thing:
             raw = self.entity.raws.get(path)
             message = (
-                f"relation `{field}` expects {notation(shape)} "
+                f"{noun} `{field}` expects {notation(shape)} "
                 f"but got {kind(value)} {show(value, raw)}"
             )
             if isinstance(shape, ListShape) and isinstance(value, str):
-                message += "; write it as a list of references, even for one"
-            self.report("relation-invalid-value", message, path)
+                message += f"; write it as a list of {thing}s, even for one"
+            self.report(invalid, message, path)
         else:
             raw = self.entity.raws.get(path)
             self.report(
@@ -229,6 +255,43 @@ class _ValueChecker:
                 f"but got {kind(value)} {show(value, raw)}",
                 path,
             )
+
+    def _check_file(self, shape: FileShape, path: KeyPath, value: Any) -> None:
+        field = format_field_path(path)
+        if type(value) is list:
+            if any(type(item) is list for item in value):
+                message = (
+                    f"file `{field}` contains a nested list; an unquoted [[...]] is parsed by "
+                    "YAML as a list. Quote the value; note that wikilinks are not supported, "
+                    f"so use a Markdown link such as {FILE_LINK_EXAMPLE}"
+                )
+            elif not value:
+                message = (
+                    f"file `{field}` expects one file but got an empty list; "
+                    "leave the value empty when there is none"
+                )
+            else:
+                message = (
+                    f"file `{field}` expects one file but got a list; "
+                    "declare `type: list` with file `items` for several"
+                )
+            self.report("file-invalid-value", message, path)
+            return
+        if not isinstance(value, str):
+            raw = self.entity.raws.get(path)
+            self.report(
+                "file-invalid-value",
+                f"file `{field}` must be a path or URI string, "
+                f"got {kind(value)} {show(value, raw)}",
+                path,
+            )
+            return
+        if self.resolve_file is None:
+            return
+        try:
+            self.resolve_file(self.entity.path, value, shape.accept)
+        except LinkError as exc:
+            self.report(exc.code, f"file `{field}`: {exc.message}", path)
 
     def _check_reference(self, shape: ReferenceShape, path: KeyPath, value: Any) -> None:
         field = format_field_path(path)

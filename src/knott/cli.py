@@ -19,6 +19,7 @@ from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent, merge_key_bin
 from knott.api import Knott, version
 from knott.errors import KnottError
 from knott.models import (
+    ConnectorDefinition,
     Issue,
     MigrateResult,
     OntologyAttribute,
@@ -99,7 +100,11 @@ def _notation(a: OntologyAttribute) -> str:
     if inner is not None:
         return f"{a.type} of {_notation(inner)}"
     targets = [*a.targets, *(f"{name} (unknown)" for name in a.unknown_targets)]
-    return f"{a.type} → {' | '.join(targets)}" if targets else a.type
+    if targets:
+        return f"{a.type} → {' | '.join(targets)}"
+    if a.accept:
+        return f"{a.type} {' | '.join(f'.{e}' for e in a.accept)}"
+    return a.type
 
 
 def _type_column(a: OntologyAttribute) -> str:
@@ -148,6 +153,18 @@ def format_relations(relations: list[RelationDefinition]) -> str:
                 lines += [f"    {line}".rstrip() for line in text.strip().splitlines()]
         blocks.append("\n".join(lines))
     return "relations:\n" + "\n\n".join(blocks)
+
+
+def format_connectors(connectors: list[ConnectorDefinition]) -> str:
+    """The ``connectors:`` section, in the format of the ``relations:`` section."""
+    blocks: list[str] = []
+    for c in connectors:
+        lines = [f"  {c.name}"]
+        for text in (c.description, c.guidance):
+            if text and text.strip():
+                lines += [f"    {line}".rstrip() for line in text.strip().splitlines()]
+        blocks.append("\n".join(lines))
+    return "connectors:\n" + "\n\n".join(blocks)
 
 
 def _label(name: str, required: bool) -> str:
@@ -267,7 +284,7 @@ def types(
             "-v",
             help=(
                 "Show each type's concept file, description, template, references and "
-                "properties, then the relations."
+                "properties, then the relations and connectors."
             ),
         ),
     ] = False,
@@ -282,6 +299,8 @@ def types(
         sections = [format_type(t) for t in ontology.types]
         if ontology.relations:
             sections.append(format_relations(ontology.relations))
+        if ontology.connectors:
+            sections.append(format_connectors(ontology.connectors))
         if sections:
             typer.echo("\n\n".join(sections))
     else:

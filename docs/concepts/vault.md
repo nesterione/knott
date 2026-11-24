@@ -16,7 +16,8 @@ my-vault/
 ├── .knott/
 │   ├── config.yaml        # knott_version, written once by `knott init`
 │   ├── concepts/          # one Markdown concept file per entity type
-│   └── relations/         # optional: one Markdown file per relation definition
+│   ├── relations/         # optional: one Markdown file per relation definition
+│   └── connectors/        # optional: one Markdown file per store of files kept elsewhere
 └── … your Markdown, organized however you like
 ```
 
@@ -30,6 +31,8 @@ Every `*.md` file under the root, recursively, except:
 
 - directories whose name starts with `.` (`.git`, `.knott`, `.obsidian`, …)
 - symlinked directories (never followed)
+
+A [file property](file.md) can point at any file in the vault, in hidden folders too.
 
 `.gitignore` is not consulted. Files are sorted, so output is deterministic.
 

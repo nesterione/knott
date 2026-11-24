@@ -29,3 +29,5 @@ The rule is: an empty container *of the declared kind* is absent, and one of ano
 **Consequences.** A blank optional field never fails, and a `required` list needs at least one item. A required one reports `attribute-missing` / `relation-missing`, pointing at the key's line when the key is present.
 
 **Amended 2026-11-23** by [0010](0010-concept-files-and-reference-properties.md): a relation is now a `reference` shape, single or in a `list`, so the Relation column splits the same way as the attribute columns. For a single `reference`, `[]` and `{}` are `relation-invalid-value`. For a `list` of references, `[]` is absent and `{}` is `relation-invalid-value`. `null` and `""` stay absent for both.
+
+**Amended 2026-11-24** by [0012](0012-files-are-property-values.md): a `file` shape follows the two Relation columns, single or in a `list`, with `file-invalid-value` in place of `relation-invalid-value` and `file-missing` in place of `relation-missing`.

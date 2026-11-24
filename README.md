@@ -168,6 +168,19 @@ Markdown links in properties are clickable in Obsidian 1.11+ and are updated on 
 - Files & links → *New link format*: **Relative path to file**
 - *Use [[Wikilinks]]*: **off**
 
+## Files
+
+A property of shape `file` names a file that is not Markdown: an mp3, a PDF, an image, a JSON file. The value is a path to a file in the vault, or a URI for a file kept elsewhere:
+
+```yaml
+# concept:  audio: { type: file, required: true, accept: [mp3, wav] }
+audio: ../audio/episode-42.mp3
+slides: s3://talks/episode-42.pdf
+cover: gdrive:1AbCdEf
+```
+
+For a path, knott checks that the file exists, with exact case, and has an accepted extension. For a URI, it checks that the scheme is a connector the vault declares in `.knott/connectors/` (a Markdown file with `name: s3`, a description, and guidance in its body). Knott never reads or fetches a file. Lists can mix both.
+
 ## Upgrading from 0.4
 
 Knott 0.5 reads types from `.knott/concepts/` only. A vault that still has `.knott/schemas/` reports one issue, `schema-legacy-layout`, and nothing else is checked until you convert it:

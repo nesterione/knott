@@ -9,7 +9,7 @@ concepts:
 ---
 # knott types
 
-Prints discovered type names, one per line, sorted. `--verbose` adds each type's concept file, description, whether it has a body template, its references, and its properties, then the vault's relations, so an agent knows what to write before opening the file:
+Prints discovered type names, one per line, sorted. `--verbose` adds each type's concept file, description, whether it has a body template, its references, and its properties, then the vault's relations and connectors, so an agent knows what to write before opening the file:
 
 ```
 $ knott types --verbose
@@ -35,6 +35,7 @@ lexeme  (.knott/concepts/lexeme.md)
 - `references:` lists the path of every reference at any depth, or `none`. Paths use `[]` for list items, `.*` for map values and `.field` for object fields.
 - `*` marks a required property. Object fields are indented under their property.
 - A reference shows its targets after `→`. A target that no concept defines is marked `(unknown)`.
+- A [file](../concepts/file.md) shows the extensions it accepts: `audio*  file .mp3 | .wav`, `images  list of file .png | .jpg`.
 - A reference that names a [relation](../concepts/relation.md) shows it in parentheses after the type: `affects*  list of reference → concept  (about)`. A name no relation file defines is not shown.
 
 Types are separated by a blank line.
@@ -59,5 +60,18 @@ relations:
 ```
 
 A vault without relation files has no `relations:` section.
+
+## Connectors
+
+A vault with [connector files](../concepts/file.md#uris-and-connectors) gets a `connectors:` section last, sorted by name, in the same format: the name, then its description and guidance indented.
+
+```
+connectors:
+  gdrive
+    The team's shared Google Drive. Written gdrive:<file id from the share link>.
+    <!-- Open as https://drive.google.com/file/d/<id>. Upload with the drive skill. -->
+
+  s3
+```
 
 If some concept files have errors, it still prints the types it could load, writes the errors to stderr, and exits `1`. A vault that still has `.knott/schemas/` prints no types and reports [`schema-legacy-layout`](../issues/schema-legacy-layout.md).

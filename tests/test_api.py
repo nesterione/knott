@@ -138,6 +138,7 @@ def test_ontology_types_properties_and_counts(tmp_path: Path) -> None:
         "targets": [],
         "unknown_targets": [],
         "relation": None,
+        "accept": [],
     }
     assert [a.model_dump() for a in person.properties[:2]] == [
         {"name": "name", "type": "string", "required": True, "description": "Full name.", **scalar},

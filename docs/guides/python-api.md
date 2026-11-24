@@ -39,9 +39,9 @@ Knott.init("new-vault")             # InitResult(root, created)
 - It raises only for exit-code-2 conditions, all subclasses of `KnottError`: `VaultNotFoundError`, `ConfigError`, `PathNotFoundError`, `PathOutsideVaultError`, and `MigrateError` from `migrate()`.
 - Relative paths passed to `validate()` and `refs()` are resolved against the vault root (the CLI resolves them against the current directory first).
 
-`ontology()` returns `Ontology(vault, types, schema_issues, relations)`. Each `OntologyType` has `type`, `description`, `path` (its concept file), `count` (entities of that type; files with invalid frontmatter are not counted), `kid_required`, `properties` (in concept-file order) and `template` (the concept file's body, `None` when blank).
+`ontology()` returns `Ontology(vault, types, schema_issues, relations, connectors)`. Each `OntologyType` has `type`, `description`, `path` (its concept file), `count` (entities of that type; files with invalid frontmatter are not counted), `kid_required`, `properties` (in concept-file order) and `template` (the concept file's body, `None` when blank).
 
-An `OntologyAttribute` mirrors its definition: `name`, `type` (a scalar name, or `list`, `object`, `map` or `reference`), `required` and `description`. A `list` has its item definition in `items`, a `map` its value definition in `values`, and an `object` its fields in `fields`, recursively; the `items` / `values` nodes have `name=None`. A `reference` has `targets`, the types some concept defines, `unknown_targets`, the ones none does (shown, never enforced), and `relation`, the relation it names (`None` when it names none, or one no relation file defines). `attribute.notation` gives the compact form, e.g. `list of object` or `reference → episode | meeting`.
+An `OntologyAttribute` mirrors its definition: `name`, `type` (a scalar name, or `list`, `object`, `map`, `reference` or `file`), `required` and `description`. A `list` has its item definition in `items`, a `map` its value definition in `values`, and an `object` its fields in `fields`, recursively; the `items` / `values` nodes have `name=None`. A `reference` has `targets`, the types some concept defines, `unknown_targets`, the ones none does (shown, never enforced), and `relation`, the relation it names (`None` when it names none, or one no relation file defines). A `file` has `accept`, the extensions a vault file may have (`[]` when any). `attribute.notation` gives the compact form, e.g. `list of object` or `reference → episode | meeting`.
 
 `OntologyType.references()` lists every reference at any depth as `(path, attribute)` pairs, in concept-file order. Paths use `[]` for a list's items, `.*` for a map's values and `.field` for an object's fields:
 
@@ -53,7 +53,7 @@ t = next(t for t in vault.ontology().types if t.type == "transcript")
 
 `knott types --verbose` prints the same paths, and `knott view` draws one edge per known target.
 
-`Ontology.relations` lists every relation file, sorted by name, as `RelationDefinition(name, description, inverse, symmetric, acyclic, guidance, path)`; it is `[]` for a vault without relation files.
+`Ontology.relations` lists every relation file, sorted by name, as `RelationDefinition(name, description, inverse, symmetric, acyclic, guidance, path)`; it is `[]` for a vault without relation files. `Ontology.connectors` lists every [connector file](../concepts/file.md#uris-and-connectors) the same way, as `ConnectorDefinition(name, description, guidance, path)`.
 
 ## Reverse lookup
 
@@ -81,10 +81,13 @@ src/knott/
   view.py       render_ontology(): Ontology → self-contained HTML (template in _view/)
   models.py     Issue, Stats, ValidationResult, SchemaInfo, InitResult, MigrateResult,
                 Ontology, OntologyType, OntologyAttribute, RelationDefinition,
+                ConnectorDefinition,
                 Refs, EntityRef, RefGroup, Ref
   errors.py     KnottError hierarchy
   schema/       loader (concept files), relations (relation files and their checks),
+                connectors (connector files),
                 validator (entities vs schemas), migrate (.knott/schemas/ → concepts)
-  vault/        discovery, entity (frontmatter), links (resolve_reference), index (the vault's
+  vault/        discovery, entity (frontmatter), links (resolve_reference),
+                files (resolve_file), index (the vault's
                 references, built once per run), cycles (relation-cycle), refs (reverse lookup)
 ```

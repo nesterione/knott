@@ -470,7 +470,9 @@ const notation = a => {
   if (inner) return `${esc(a.type)} of ${notation(inner)}`;
   const targets = [...a.targets.map(link), ...a.unknown_targets.map(x => `<span class="unknown" title="no concept defines this type">${esc(x)} (unknown)</span>`)];
   const rel = a.relation ? ` <span class="rel" title="relation">(${esc(a.relation)})</span>` : "";
-  return (targets.length ? `${esc(a.type)} → ${targets.join(" | ")}` : esc(a.type)) + rel;
+  // a file property lists the extensions it accepts: "file .mp3 | .wav"
+  const accept = (a.accept || []).length ? " " + a.accept.map(x => "." + esc(x)).join(" | ") : "";
+  return (targets.length ? `${esc(a.type)} → ${targets.join(" | ")}` : esc(a.type) + accept) + rel;
 };
 const link = id => `<a data-go="${esc(id)}">${esc(id)}</a>`;
 let relationsOpen = false;
