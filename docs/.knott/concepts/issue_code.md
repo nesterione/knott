@@ -12,8 +12,8 @@ properties:
     description: Where it is detected - schema, entity, kid, attribute, or relation.
   about:
     type: reference
-    target: concept
     relation: about
+    target: concept
     required: true
     description: The concept whose rule this code enforces.
 ---

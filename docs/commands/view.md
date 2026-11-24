@@ -18,7 +18,12 @@ Each type is a box with its name and entity count. Each reference is an arrow la
 - **References out**: each reference's path, with its relation in parentheses
 - **Referenced by**: every reference property, in any type, that can point at this one, grouped and labelled as [`knott refs`](refs.md) groups them (`discussed_in`, `related`, `← guide.concepts[]`). Each row is `<type>.<path>`.
 
-When the vault has relation files, a **Relations (N)** button in the header lists them with their keys, description and guidance.
+A **Relations (N defined · M inline)** button in the header lists every link in the vault, in two sections:
+
+- **Defined**: each [relation file](../concepts/relation.md#relation-definitions) with its keys and description, its guidance folded under "When to use it", and the properties that name it.
+- **Inline**: every reference that names no relation file, as `<type>.<path>`, grouped by what it points at, largest group first. Several inline relations with one target are the ones to consider for a shared relation file.
+
+The button is hidden only when the vault has neither.
 
 Three layouts sit behind a toggle: **Layered** (default), **Force** and **Radial**. The page remembers the last one, and the URL hash (`#layered`, `#force`, `#radial`) selects one directly.
 

@@ -136,7 +136,7 @@ A reference property names it with `relation:`. The property keeps its own `targ
 
 ```yaml
 properties:
-  supersedes: { type: reference, target: decision, relation: supersedes }
+  supersedes: { type: reference, relation: supersedes, target: decision }
 ```
 
 Nothing is stored on the target. `knott refs` reads links from the target side, grouped by inverse:

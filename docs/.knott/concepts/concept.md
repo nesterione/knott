@@ -16,10 +16,7 @@ properties:
   related:
     type: list
     description: Other concepts worth reading next.
-    items:
-      type: reference
-      target: concept
-      relation: related
+    items: { type: reference, relation: related, target: concept }
 ---
 # <!-- The concept's name, the same text as the `title` property. -->
 

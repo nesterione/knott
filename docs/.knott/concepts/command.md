@@ -16,9 +16,7 @@ properties:
   concepts:
     type: list
     description: Concepts the command operates on.
-    items:
-      type: reference
-      target: concept
+    items: { type: reference, target: concept }
 ---
 # <!-- The command, e.g. "knott validate". -->
 

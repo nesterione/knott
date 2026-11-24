@@ -84,19 +84,21 @@ Use `supersedes` when the old record is no longer the current answer. When only 
 | `symmetric` | no | `true`/`false`, default `false`: the link reads the same both ways |
 | `acyclic` | no | `true`/`false`, default `false`: following the links must never lead back |
 
-A reference property opts in with `relation:`, on the `reference` shape itself (for a list, on its `items`):
+A reference property opts in with `relation:`, on the `reference` shape itself (for a list, on its `items`). Write it on one line, straight after `type`, so a defined link is easy to tell from a plain one:
 
 ```yaml
 properties:
-  supersedes: { type: reference, target: decision, relation: supersedes }
+  supersedes: { type: reference, relation: supersedes, target: decision }   # defined
   affects:
     type: list
-    items: { type: reference, target: concept, relation: about }
+    items: { type: reference, relation: about, target: concept }            # defined
+  notes_on:   { type: reference, target: concept }                          # plain
 ```
 
+- **A plain reference is an inline relation.** It has no file and no shared meaning: its identity is `<type>.<property path>`, which is how `knott refs` labels it (`← guide.concepts[]`). Give it a relation file when a second property means the same thing, or when it needs an `inverse`, `symmetric` or `acyclic`. Those three live only on a definition, never on one property.
 - **The property keeps its own `target`.** A relation declares no source or target types and never adds a key to a concept, so a concept file still lists every key its entities may have.
 - **Shared.** Many properties may name one relation, in one concept or across concepts, under any key names. `knott refs` groups them together under the `inverse` (here `superseded_by`, `discussed_in`).
-- **Never written on the target.** `superseded_by` is a label, not a property.
+- **`inverse` is a read-side label.** `superseded_by` names the link when `knott refs` reads it from the target. It is not a property and not a second relation, and it is never written on the target.
 - **Symmetric links need one side.** For `related` (`symmetric: true`), `knott refs` shows the link from both sides; storing it on both is valid but adds nothing. The property's targets must include its own concept, so the link can point back.
 - **Acyclic relations are checked for loops** across the whole vault, every property that names the relation counting as one graph: [`relation-cycle`](../issues/relation-cycle.md).
 - **Unknown names still work.** A `relation:` no file defines is [`relation-unknown`](../issues/relation-unknown.md), and the reference stays a plain one.

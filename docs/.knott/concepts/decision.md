@@ -17,21 +17,15 @@ properties:
     type: list
     required: true
     description: Concepts whose behavior the decision shapes.
-    items:
-      type: reference
-      target: concept
-      relation: about
+    items: { type: reference, relation: about, target: concept }
   supersedes:
     type: reference
-    target: decision
     relation: supersedes
+    target: decision
   amends:
     type: list
     description: Earlier decisions this one changes in part. The earlier decision is not edited (decision 0011).
-    items:
-      type: reference
-      target: decision
-      relation: amends
+    items: { type: reference, relation: amends, target: decision }
 ---
 # <!-- "NNNN: <the decision as a sentence>", the same text as the `title` property; NNNN is the next free number in decisions/. -->
 

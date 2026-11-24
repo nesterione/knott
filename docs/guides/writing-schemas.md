@@ -34,14 +34,8 @@ properties:
     type: list
     required: true
     description: Concepts whose behavior the decision shapes.
-    items:
-      type: reference
-      target: concept
-      relation: about
-  supersedes:
-    type: reference
-    target: decision
-    relation: supersedes
+    items: { type: reference, relation: about, target: concept }
+  supersedes: { type: reference, relation: supersedes, target: decision }
 ---
 # <!-- "NNNN: <the decision as a sentence>", the same text as the `title` property. -->
 
@@ -139,7 +133,8 @@ When the old record still stands and only part of it changes, use `amends`. …
 
 A property names it with `relation:`, as in the `decision` example above.
 
-- **`relation:` goes on the `reference`**, so for a list it goes on `items`, for a map on `values`.
+- **`relation:` goes on the `reference`**, so for a list it goes on `items`, for a map on `values`. Write the reference on one line with `relation` straight after `type` (`items: { type: reference, relation: about, target: concept }`), so a defined link stands out from a plain one.
+- **A plain reference is an inline relation**: unnamed, known only as `<type>.<property path>`. Give it a relation file when a second property means the same thing or it needs `inverse`, `symmetric` or `acyclic`.
 - **Name the `inverse` from the target's side**: `superseded_by`, `discussed_in`. It is a label for [`knott refs`](../commands/refs.md), never a property, so it must not equal a top-level property of a concept the relation can point at.
 - **`symmetric: true` for peers**, such as `related`. Store the link on one side; `knott refs` shows it from both. A symmetric relation has no `inverse` and isn't `acyclic`.
 - **`acyclic: true` for anything that replaces or derives from something else.** A loop is reported as `relation-cycle`.

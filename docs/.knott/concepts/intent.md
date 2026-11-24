@@ -19,9 +19,7 @@ properties:
   concepts:
     type: list
     description: Concepts the intent would change.
-    items:
-      type: reference
-      target: concept
+    items: { type: reference, target: concept }
 ---
 # <!-- The intent as a short phrase, the same text as `title`. -->
 

@@ -67,6 +67,7 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 4. [Give entities a knott-managed `kid`](specs/0004-kid-identity.md)
 5. [Define types in concept files, with references as properties](specs/0005-concept-files.md)
 6. [Relation definitions and reverse lookup](specs/0006-relation-definitions.md)
+7. [The view's Relations panel lists inline relations](specs/0007-view-inline-relations.md)
 
 ### Intents
 

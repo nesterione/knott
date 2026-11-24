@@ -69,6 +69,27 @@ def referenced_by(ontology: Ontology) -> list[dict[str, Any]]:
     ]
 
 
+def reference_properties(ontology: Ontology) -> list[dict[str, Any]]:
+    """Every reference property, by type, then schema order (spec 0007).
+
+    One entry per property, whatever its targets. ``relation`` is the relation file it
+    names; None marks an inline relation: a property that names no relation, or a
+    name no file defines.
+    """
+    return [
+        {
+            "type": t.type,
+            "path": path,
+            "relation": node.relation,
+            "targets": list(node.targets),
+            "unknown_targets": list(node.unknown_targets),
+            "required": required,
+        }
+        for t in ontology.types
+        for path, node, required in iter_reference_paths(t.properties)
+    ]
+
+
 def render_ontology(ontology: Ontology) -> str:
     """Return the ontology viewer page with `ontology` embedded as JSON."""
     template = _template()
@@ -78,6 +99,7 @@ def render_ontology(ontology: Ontology) -> str:
         **ontology.model_dump(),
         "edges": ontology_edges(ontology),
         "referenced_by": referenced_by(ontology),
+        "reference_properties": reference_properties(ontology),
     }
     data = json.dumps(payload, ensure_ascii=False)
     # Lone surrogates (a YAML "\ud800" escape, an undecodable file name) cannot be
