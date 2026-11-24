@@ -1,8 +1,9 @@
 ---
 type: spec
 title: "0007: The view's Relations panel lists inline relations"
-status: accepted
+status: implemented
 created_on: 2026-11-24
+released_in: "0.6.1"
 decisions:
   - "[0010](../decisions/0010-concept-files-and-reference-properties.md)"
 concepts:
@@ -71,4 +72,4 @@ The page data gains `reference_properties`: a list of `{type, path, relation, ta
 
 ## Compatibility
 
-Additive. The page data gains one key; `relations`, `edges` and `referenced_by` are unchanged. The button's label changes from `Relations (N)`, and guidance in the panel is now one click away.
+Additive. The page data gains one key; `relations`, `edges` and `referenced_by` are unchanged. The button's label changes from `Relations (N)`, and guidance in the panel is now one click away. Version 0.6.1.
