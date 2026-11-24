@@ -24,35 +24,23 @@ properties:
   realizes:
     type: list
     description: The intents this spec turns into behaviour.
-    items:
-      type: reference
-      target: intent
+    items: { type: reference, target: intent }
   decisions:
     type: list
     description: The decisions whose reasoning this spec relies on.
-    items:
-      type: reference
-      target: decision
+    items: { type: reference, target: decision }
   concepts:
     type: list
     description: Concepts whose behaviour this spec defines or changes.
-    items:
-      type: reference
-      target: concept
+    items: { type: reference, target: concept }
   amends:
     type: list
     description: Earlier specs this one changes in part. The earlier spec is not edited.
-    items:
-      type: reference
-      target: spec
-      relation: amends
+    items: { type: reference, relation: amends, target: spec }
   supersedes:
     type: list
     description: Earlier specs this one replaces entirely. The earlier spec is not edited.
-    items:
-      type: reference
-      target: spec
-      relation: supersedes
+    items: { type: reference, relation: supersedes, target: spec }
 ---
 # <!-- "NNNN: <what the change does>", the same text as `title`; NNNN is the next free number in specs/. -->
 

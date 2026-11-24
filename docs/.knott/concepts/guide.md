@@ -12,15 +12,11 @@ properties:
   concepts:
     type: list
     description: Concepts the guide relies on.
-    items:
-      type: reference
-      target: concept
+    items: { type: reference, target: concept }
   commands:
     type: list
     description: Commands the guide uses.
-    items:
-      type: reference
-      target: command
+    items: { type: reference, target: command }
 ---
 # <!-- The guide's name, the same text as the `title` property. -->
 

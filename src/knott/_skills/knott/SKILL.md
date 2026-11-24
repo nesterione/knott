@@ -133,7 +133,7 @@ relations:
 
   Symmetric groups end each line with `←` (the other side stores it), `→` (this file does) or `⇄` (both).
 - `relation-cycle`: an `acyclic` relation loops (`decisions/a.md → decisions/b.md → decisions/a.md`). Remove the reference that is wrong (for `supersedes` and `amends`, the newer entity is the source).
-- Writing a concept file: put `relation:` on a `reference` shape (for a list, on its `items`), and name only relations defined in `.knott/relations/` (`relation-unknown` otherwise).
+- Writing a concept file: put `relation:` on a `reference` shape (for a list, on its `items`), on one line straight after `type` (`items: { type: reference, relation: about, target: concept }`), and name only relations defined in `.knott/relations/` (`relation-unknown` otherwise). A reference without `relation:` is a plain, inline link.
 
 ## Kids
 

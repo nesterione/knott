@@ -21,7 +21,7 @@ A symmetric relation reads the same both ways, so some combinations don't fit it
 properties:
   see_also:
     type: list
-    items: { type: reference, target: concept, relation: related }
+    items: { type: reference, relation: related, target: concept }
 ```
 
 ```

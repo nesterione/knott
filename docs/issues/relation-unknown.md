@@ -13,7 +13,7 @@ A reference property in a concept file names a relation that no file in `.knott/
 ```yaml
 # .knott/concepts/decision.md; .knott/relations/ has about, related and supersedes
 properties:
-  supersedes: { type: reference, target: decision, relation: replaces }
+  supersedes: { type: reference, relation: replaces, target: decision }
 ```
 
 ```

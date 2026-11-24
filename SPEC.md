@@ -399,10 +399,10 @@ A reference property names a relation with `relation:`:
 
 ```yaml
 properties:
-  supersedes: { type: reference, target: decision, relation: supersedes }
+  supersedes: { type: reference, relation: supersedes, target: decision }
   affects:
     type: list
-    items: { type: reference, target: concept, relation: about }
+    items: { type: reference, relation: about, target: concept }
 ```
 
 - `relation:` is allowed on a `reference` shape only, at any depth. On a `list` or `map` it is `schema-invalid-field` with "put `relation:` on `items`" (or `values`); on another shape, "only allowed when `type` is reference". Its value must be a string.
