@@ -69,6 +69,7 @@ def _embedded(html: str) -> Ontology:
     data = _payload(html)
     data.pop("edges")
     data.pop("referenced_by")
+    data.pop("reference_properties")
     return Ontology.model_validate(data)
 
 

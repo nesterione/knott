@@ -1,4 +1,4 @@
-"""Relations in the ontology API, `knott types --verbose` and `knott view` (spec 0006)."""
+"""Relations in the ontology API, `knott types --verbose` and `knott view` (specs 0006, 0007)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from typer.testing import CliRunner
 
 from knott import Knott, Ontology, RelationDefinition, view
 from knott.cli import app
-from knott.view import ontology_edges, referenced_by, render_ontology
+from knott.view import ontology_edges, reference_properties, referenced_by, render_ontology
 
 from .conftest import fixture_path
 
@@ -296,6 +296,7 @@ def test_view_payload_has_relations_and_referenced_by() -> None:
     assert data["relations"] == [r.model_dump() for r in ontology.relations]
     assert data["referenced_by"] == referenced_by(ontology)
     assert data["edges"] == ontology_edges(ontology)
+    assert data["reference_properties"] == reference_properties(ontology)
 
 
 def test_view_escapes_hostile_relation_text(tmp_path: Path) -> None:
@@ -333,3 +334,75 @@ def test_view_template_reads_relation_data() -> None:
     assert re.search(r"\ba\.relation\b", template)
     # an edge is labelled with its relation, else its path
     assert "name: d.relation || d.path" in template
+
+
+# ---------- knott view: the Relations panel lists inline relations (spec 0007) ----------
+
+
+def test_view_reference_properties_mark_inline_relations() -> None:
+    properties = [
+        (p["type"], p["path"], p["relation"], p["targets"])
+        for p in reference_properties(_ontology())
+    ]
+    assert properties == [
+        ("concept", "related[]", "related", ["concept"]),
+        ("decision", "affects[]", "about", ["concept"]),
+        ("decision", "supersedes", "supersedes", ["decision"]),
+        ("guide", "concepts[]", None, ["concept"]),
+        ("guide", "cites[]", "cites", ["concept"]),
+        ("guide", "see", None, ["guide"]),
+        ("issue_code", "about", "about", ["concept"]),
+    ]
+
+
+def test_view_reference_properties_one_entry_per_property() -> None:
+    """A property with several targets is one entry, where it is one edge per target."""
+    ontology = Knott.open(fixture_path("union-target")).ontology()
+    properties = reference_properties(ontology)
+    assert len({(p["type"], p["path"]) for p in properties}) == len(properties)
+    assert any(len(p["targets"]) > 1 for p in properties)
+    assert len(ontology_edges(ontology)) > len(properties)
+    assert {p["relation"] for p in properties} == {None}
+
+
+def test_view_reference_properties_keep_unknown_targets_and_required() -> None:
+    ontology = Knott.open(fixture_path("unknown-relation-target-type")).ontology()
+    assert any(p["unknown_targets"] for p in reference_properties(ontology))
+    ontology = Knott.open(fixture_path("valid-vault")).ontology()
+    assert any(p["required"] for p in reference_properties(ontology))
+
+
+def test_view_undefined_relation_name_is_inline(tmp_path: Path) -> None:
+    Knott.init(tmp_path)
+    (tmp_path / ".knott" / "concepts" / "note.md").write_text(
+        "---\nname: note\nproperties:\n"
+        "  about: { type: reference, relation: nowhere, target: note }\n---\n"
+    )
+    ontology = Knott.open(tmp_path).ontology()
+    assert ontology.relations == []
+    assert reference_properties(ontology) == [
+        {
+            "type": "note",
+            "path": "about",
+            "relation": None,
+            "targets": ["note"],
+            "unknown_targets": [],
+            "required": False,
+        }
+    ]
+
+
+def test_view_template_lists_defined_and_inline_relations() -> None:
+    template = view._template()
+    assert re.search(r"DATA\.reference_properties\b", template)
+    for key in ("type", "path", "relation", "targets", "unknown_targets", "required"):
+        assert re.search(rf"\bp\.{key}\b", template), key
+    assert "<h3>Defined</h3>" in template
+    assert "<h3>Inline</h3>" in template
+    # guidance is folded, and still escaped
+    assert (
+        "<details><summary>When to use it</summary><pre>${esc(r.guidance)}</pre></details>"
+        in template
+    )
+    # the button shows when either kind exists
+    assert "button.hidden = !counts.length" in template
