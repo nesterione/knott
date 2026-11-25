@@ -73,6 +73,8 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 8. [File properties and connectors](specs/0008-file-properties.md)
 9. [Enum properties](specs/0009-enum-properties.md)
 10. [Loops](specs/0010-loops.md)
+11. [Entity location](specs/0011-entity-location.md) (draft)
+12. [Entity file names](specs/0012-entity-file-names.md) (draft)
 
 ### Intents
 
@@ -81,3 +83,5 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 - [Remote sources](intents/remote-sources.md)
 - [Enumerated values](intents/enumerated-values.md)
 - [Loops](intents/loops.md)
+- [Entity location](intents/entity-location.md)
+- [Entity file names](intents/entity-file-names.md)
