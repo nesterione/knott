@@ -1,5 +1,6 @@
 ---
 name: decision
+path: decisions
 description: >
   An architecture decision record: a choice made where the spec was silent or ambiguous, and why.
 properties:

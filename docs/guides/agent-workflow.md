@@ -17,7 +17,7 @@ Knott is built for agents that persist knowledge as files. The full instructions
 
 1. `knott types --verbose`: find the right type and its concept file. The `relations:` section at the end says what each link means; when two properties fit, its guidance says which one to use.
 2. Read the concept file in `.knott/concepts/`: `description`, required properties, reference targets, and the body template.
-3. Create or edit the Markdown file directly. Knott has no `create` command; files are the interface. Start a new body from the template and delete each `<!-- -->` comment once its section is written.
+3. Create or edit the Markdown file directly, in a folder the type's `path:` line allows when `knott types --verbose` shows one. Knott has no `create` command; files are the interface. Start a new body from the template and delete each `<!-- -->` comment once its section is written.
 4. Write references as quoted Markdown links with paths relative to the file. A `reference` holds one; a `list` of references needs a list, even for one.
 5. `knott validate <file> --fix --format json`. `--fix` gives a new entity its [kid](../concepts/kid.md); it never changes an existing one.
 6. Fix every issue and re-validate until `ok` is `true`.

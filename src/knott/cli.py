@@ -90,6 +90,8 @@ def format_type(t: OntologyType) -> str:
     if t.kid_required:
         lines.append("  kid: required")
     lines.append(f"  template: {'yes' if t.template is not None else 'no'}")
+    if t.entity_paths:
+        lines.append(f"  path: {' | '.join(t.entity_paths)}")
     paths = [path for path, _ in t.references()]
     lines.append(f"  references: {', '.join(paths) if paths else 'none'}")
     if t.properties:

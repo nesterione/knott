@@ -1,5 +1,6 @@
 ---
 name: issue_code
+path: issues
 description: >
   A stable validation issue code reported by `knott validate`, with its cause and how to fix it.
 properties:

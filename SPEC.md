@@ -121,7 +121,7 @@ my-vault/
     └── episode-42-review.md
 ```
 
-Knott does not dictate where entity files live. Users organize Markdown however is useful to humans.
+Knott does not dictate where entity files live, unless a concept declares `path` (§7). Users organize Markdown however is useful to humans.
 
 ### Vault root
 
@@ -249,6 +249,7 @@ Allowed keys:
 | top | `name` | yes | matches `^[a-z][a-z0-9_-]*$` |
 | top | `description` | no | string |
 | top | `kid` | no | `required`: every entity of this type must have a `kid` (§12) |
+| top | `path` | no | a folder pattern, or a non-empty list of them: where entities of this type are stored (see Entity location) |
 | top | `properties` | no | mapping of property name → definition, in display order |
 | property | `type` | yes | a scalar type in §8, or `enum`, `list`, `object`, `map`, `reference` or `file` |
 | property | `required` | no | boolean, default `false` |
@@ -269,6 +270,20 @@ Schema rules:
 - `items`, `fields`, `values` and `target` are allowed only with their own `type`, and are required there.
 - `relation` is allowed only on a reference definition (§9); on a `list` or `map`, the error says to put it on `items` or `values`.
 - A property whose shape is `reference`, at any depth, is a **relation** (§9–11). Every other property is an **attribute** (§8). They share one map, so a name can't be both.
+
+### Entity location
+
+`path` names the folders a type's entities must be stored in. Without it, an entity can live anywhere.
+
+```yaml
+name: episode
+path: episodes/*          # or a list: [specs, drafts/**]
+```
+
+- A pattern is matched against the entity's **folder**: the vault-relative POSIX path of its directory, `.` for the vault root. The file name is never part of the match. The entity is in the right place when its folder matches at least one pattern; otherwise it is `entity-misplaced`, reported at the line of `type`, with no `field`. The entity's other checks still run.
+- A pattern is a `/`-separated list of segments, matched whole and with regard to case. `specs` is that folder only, not its subfolders. `*` is any run of characters inside one segment, also none (`episodes/*`, `drafts-*`). `**` is zero or more whole segments (`episodes/**` is `episodes` and everything below it; `**/specs` is a folder named `specs` at any depth). `.` is the vault root. No other character is special. One trailing `/` is ignored. A pattern that starts with `*` must be quoted (`path: "**/specs"`): YAML reads an unquoted leading `*` as an alias, and the file is then `schema-invalid-yaml`.
+- Each of these is `schema-invalid-field` at the line of the pattern, `field` = `path`, and the concept loads without `path`: a value that is not a string or a non-empty list of strings; an empty pattern; one that starts with `/`, contains `\` or an empty segment, or has a `.` or `..` segment; `**` that is not a whole segment; the same pattern twice. An empty `path:` is the same as no key. A pattern that no folder matches is valid.
+- `path` says where a type lives, not what a folder holds: other types and plain notes may share the folder.
 
 ### Body template
 
@@ -630,6 +645,7 @@ Validation is the primary feature of v0. A run loads all concept files, then the
 - An `enum`'s `options` are a non-empty list or mapping of unique string options (§8).
 - Each name in a reference's `target` names a discovered type (`schema-unknown-target`, one issue per unknown name, `field` = the full key path such as `properties.sources.items.target`). Unknown names are dropped from the target list. If none is left, values are still checked for shape and resolved, but the target-type check is skipped.
 - `kid`, when present, is `required`.
+- `path`, when present, is a folder pattern or a non-empty list of unique ones (§7).
 - No duplicate `name` across files (`schema-duplicate-type`).
 - No top-level property named `type` or `kid`.
 - A `file`'s `accept` is a non-empty list of unique lowercase extensions (§8).
@@ -640,6 +656,7 @@ Validation is the primary feature of v0. A run loads all concept files, then the
 ### Entity validation
 
 - `type` is the `name` of a discovered concept file (`entity-unknown-type`).
+- Location: when the concept declares `path`, the entity's folder matches one of its patterns (`entity-misplaced`, §7).
 - `kid`: present when the schema requires it (`kid-missing`), a canonical UUID (`kid-invalid`), and unique (`kid-duplicate`).
 - Attributes: required ones are present (`attribute-missing`) and values match their type (`attribute-type-mismatch`), at every nesting level. An `enum` value is one of its options (`attribute-unknown-option`). Declared objects have no undeclared keys (`attribute-unknown-field`).
 - References, at every nesting level: checked as in §11. A list or map whose items are references uses the `relation-*` codes.
@@ -703,7 +720,7 @@ transcript
 
 If schema errors exist, `types` still prints the types it could load, writes the errors to stderr, and exits with code `1`.
 
-`--verbose` adds, per type: the concept file path, the description, `kid: required` when set, `template: yes|no`, `references:` with the path of every reference at any depth (`[]` for list items, `.*` for map values, `.field` for object fields, or `none`), and the properties with nested shapes indented. A reference shows `→ target | target`; a target no concept defines is marked `(unknown)`. A reference that names a relation shows it after the type, as part of the type column: `affects  list of reference → concept  (about)`; a name no relation file defines is not shown. A `file` shows the extensions it accepts: `audio*  file .mp3 | .wav`, `images  list of file .png | .jpg`. An `enum` shows `enum`, and its options on lines under the property, indented by two more spaces: one line `one of: m | f` when no option has a description, else one line per option, `<option>: <description>` or the option alone.
+`--verbose` adds, per type: the concept file path, the description, `kid: required` when set, `template: yes|no`, `path:` with the folder patterns joined by ` | ` when the concept declares any, `references:` with the path of every reference at any depth (`[]` for list items, `.*` for map values, `.field` for object fields, or `none`), and the properties with nested shapes indented. A reference shows `→ target | target`; a target no concept defines is marked `(unknown)`. A reference that names a relation shows it after the type, as part of the type column: `affects  list of reference → concept  (about)`; a name no relation file defines is not shown. A `file` shows the extensions it accepts: `audio*  file .mp3 | .wav`, `images  list of file .png | .jpg`. An `enum` shows `enum`, and its options on lines under the property, indented by two more spaces: one line `one of: m | f` when no option has a description, else one line per option, `<option>: <description>` or the option alone.
 
 After the types, a `relations:` section lists every relation, sorted by name: on one line, indented by two spaces, the name, then `inverse: <x>`, `symmetric`, `acyclic` as they apply, separated by two spaces; then the description and the guidance, each line indented by four spaces (blank lines kept empty). Relations are separated by a blank line. A vault without relations has no `relations:` section. From `tests/fixtures/relation-refs`:
 
@@ -757,7 +774,7 @@ Prints the installed Knott version.
 
 ### `knott view [PATH] [-o FILE] [--no-open]`
 
-Writes the vault's ontology (types, properties, templates, references, entity counts) as one self-contained static HTML page and opens it in the browser. No server and no network. Each reference is an edge per known target, labelled with its path; it is drawn as required only when every step on its path is required. Targets no concept defines get no edge and are marked `(unknown)` in the type's panel. A reference that names a relation is labelled with the relation's name instead of its path; the type's panel shows the path with the relation in parentheses under "References out", and, under "Referenced by", every reference property (any depth, any type, T included) whose known targets include the type, grouped and labelled as in reverse lookup (§10), each row `<source type>.<property path>`. A "Relations (N defined · M inline)" button in the header, hidden when both counts are 0 (a zero part is left out), opens a panel with two sections. "Defined" lists every relation with its keys, description, guidance (HTML-escaped, folded under "When to use it") and the properties that name it, each `<type>.<property path> → <targets>`. "Inline" lists every reference property that names no relation file, one row per property as `<type>.<property path>`, grouped by its targets, largest group first. The embedded data has `relations`, a `relation` key on each edge, `referenced_by`: a list of `{type, groups}`, each group `{label, kind, relation, references: [{type, path, required}]}`, and `reference_properties`: a list of `{type, path, relation, targets, unknown_targets, required}`, one per reference property, `relation` being `None` for an inline one. A `file` property shows the extensions it accepts in the property table and draws no edge; the embedded data also has `connectors` and, on each attribute, `accept`. An `enum` shows its options under the property; each attribute has `options`, a list of `{value, description}`. A type's panel has a **Loops** section when a loop follows it: the loop's name, the stages with entity counts, and each stage's needs. A "Loops (N)" button in the header, hidden when no loop loaded, opens a board over the diagram, one loop at a time: a dropdown switches, and the URL hash `#loop=<name>` opens one directly. Columns are the stages on the path, then the side exits (dimmed), then `no stage` when it has entities; a column header shows the entity count and, when clicked, the stage's needs and guidance (HTML-escaped). Each entity is a card: its title, its vault-relative path as text, its unmet needs (the card is marked) and its missing for next, or `ready`, as `knott loops` words it. The embedded data has `loops`, the loop definitions, and `loop_reports`, the reports of `knott loops --format json`, so the page holds the title, path and `kid` of every entity whose type has a loop, and nothing else about entities. Cards are not links. Schema errors still produce a page, with a note to run `knott validate`; a vault that still has `.knott/schemas/` prints the `schema-legacy-layout` issue to stderr, writes no page and exits `1`; a vault with no types exits with code `2`. See `docs/commands/view.md`.
+Writes the vault's ontology (types, properties, templates, references, entity counts) as one self-contained static HTML page and opens it in the browser. No server and no network. Each reference is an edge per known target, labelled with its path; it is drawn as required only when every step on its path is required. Targets no concept defines get no edge and are marked `(unknown)` in the type's panel. A type that declares `path` shows its folder patterns in the panel; each type in the embedded data has `entity_paths`. A reference that names a relation is labelled with the relation's name instead of its path; the type's panel shows the path with the relation in parentheses under "References out", and, under "Referenced by", every reference property (any depth, any type, T included) whose known targets include the type, grouped and labelled as in reverse lookup (§10), each row `<source type>.<property path>`. A "Relations (N defined · M inline)" button in the header, hidden when both counts are 0 (a zero part is left out), opens a panel with two sections. "Defined" lists every relation with its keys, description, guidance (HTML-escaped, folded under "When to use it") and the properties that name it, each `<type>.<property path> → <targets>`. "Inline" lists every reference property that names no relation file, one row per property as `<type>.<property path>`, grouped by its targets, largest group first. The embedded data has `relations`, a `relation` key on each edge, `referenced_by`: a list of `{type, groups}`, each group `{label, kind, relation, references: [{type, path, required}]}`, and `reference_properties`: a list of `{type, path, relation, targets, unknown_targets, required}`, one per reference property, `relation` being `None` for an inline one. A `file` property shows the extensions it accepts in the property table and draws no edge; the embedded data also has `connectors` and, on each attribute, `accept`. An `enum` shows its options under the property; each attribute has `options`, a list of `{value, description}`. A type's panel has a **Loops** section when a loop follows it: the loop's name, the stages with entity counts, and each stage's needs. A "Loops (N)" button in the header, hidden when no loop loaded, opens a board over the diagram, one loop at a time: a dropdown switches, and the URL hash `#loop=<name>` opens one directly. Columns are the stages on the path, then the side exits (dimmed), then `no stage` when it has entities; a column header shows the entity count and, when clicked, the stage's needs and guidance (HTML-escaped). Each entity is a card: its title, its vault-relative path as text, its unmet needs (the card is marked) and its missing for next, or `ready`, as `knott loops` words it. The embedded data has `loops`, the loop definitions, and `loop_reports`, the reports of `knott loops --format json`, so the page holds the title, path and `kid` of every entity whose type has a loop, and nothing else about entities. Cards are not links. Schema errors still produce a page, with a note to run `knott validate`; a vault that still has `.knott/schemas/` prints the `schema-legacy-layout` issue to stderr, writes no page and exits `1`; a vault with no types exits with code `2`. See `docs/commands/view.md`.
 
 ### `knott loops [NAME] [--format text|json]`
 
@@ -840,7 +857,7 @@ Typical agent workflow:
 
 1. Run `knott types --verbose` and look in `.knott/concepts/`.
 2. Pick the relevant type and read its concept file.
-3. Create or update the Markdown entity, starting a new body from the concept's template.
+3. Create or update the Markdown entity, in a folder the type's `path` allows when it declares one, starting a new body from the concept's template.
 4. Write references as relative paths, one value for a `reference` and a list for a `list` of references.
 5. Run `knott validate <file>`.
 6. Fix every reported issue before finishing.
@@ -927,6 +944,7 @@ schema-unknown-target      schema-legacy-layout       schema-duplicate-relation
 schema-duplicate-connector
 relation-unknown           relation-inverse-conflict  relation-symmetric-mismatch
 entity-invalid-frontmatter entity-unknown-type        not-an-entity
+entity-misplaced
 kid-missing                kid-invalid                kid-duplicate
 attribute-missing          attribute-type-mismatch    attribute-unknown-field
 attribute-unknown-option
@@ -975,7 +993,7 @@ vault.loops("episode-production")  # one LoopReport; KnottError when no loop has
 vault.migrate()                    # MigrateResult(written, removed, list_fields); see §14
 ```
 
-`OntologyAttribute.relation` is the relation a reference names (`None` when none, or one no relation file defines). `OntologyAttribute.type` may be `file`; `accept` lists its extensions (`[]` when not declared). It may be `enum`; `options` is then a list of `EnumOption(value, description)`. `Refs` has `entity: EntityRef(path, type, kid)` and `groups: list[RefGroup(label, kind, relation, references: list[Ref(path, type, kid, field, line, direction)])]`; `type` is the frontmatter `type` as written. A relative path passed to `refs()` is resolved against the vault root, as in `validate()`.
+`OntologyType.entity_paths` lists the folder patterns of the concept's `path` (`[]` when not declared; `OntologyType.path` is the concept file). `OntologyAttribute.relation` is the relation a reference names (`None` when none, or one no relation file defines). `OntologyAttribute.type` may be `file`; `accept` lists its extensions (`[]` when not declared). It may be `enum`; `options` is then a list of `EnumOption(value, description)`. `Refs` has `entity: EntityRef(path, type, kid)` and `groups: list[RefGroup(label, kind, relation, references: list[Ref(path, type, kid, field, line, direction)])]`; `type` is the frontmatter `type` as written. A relative path passed to `refs()` is resolved against the vault root, as in `validate()`.
 
 `LoopDefinition.stages` and `.exits` are `list[LoopStage(name, needs, guidance)]`. `LoopNeed(kind, property, inverse, relation, type, since)`: `kind` is `property` or `inverse`, `since` is the stage that declares it, and an inverse need with several types is one `LoopNeed` per type. `LoopReport(loop, stages, exits, unplaced)`: `stages` and `exits` are `list[LoopPlacement(stage, entities)]`, empty ones included; `unplaced` and `entities` are `list[LoopEntity(path, kid, title, unmet, next, missing_next)]` in path order. `title` is the entity's `title` when its type declares a top-level `string` property of that name and the value is a non-blank string, else the file name. `loops()` does not validate.
 

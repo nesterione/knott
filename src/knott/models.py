@@ -128,6 +128,8 @@ class OntologyType(_Frozen):
     """Markdown files whose frontmatter `type` is this type."""
     kid_required: bool = False
     """The schema says `kid: required`."""
+    entity_paths: list[str] = []
+    """Folder patterns the concept's `path` allows; `[]` when entities can live anywhere."""
     properties: list[OntologyAttribute]
     """Top-level properties in schema order; references are properties too."""
     template: str | None = None

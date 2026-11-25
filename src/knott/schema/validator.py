@@ -25,6 +25,7 @@ from knott.schema.models import (
     Shape,
     notation,
 )
+from knott.schema.paths import entity_folder, folder_matches
 from knott.vault.entity import MarkdownFile
 from knott.vault.files import FILE_LINK_EXAMPLE, ResolvedFile
 from knott.vault.kid import KID_KEY, is_canonical, kid_problem
@@ -78,10 +79,31 @@ def validate_entity(
         return EntityReport([issue], 0)
 
     checker = _ValueChecker(entity, resolve, lookup, resolve_file)
+    checker.issues.extend(_check_location(entity, schema))
     checker.issues.extend(_check_kid(entity, schema))
     for name, prop in schema.properties.items():
         checker.check(prop, (name,), entity.frontmatter.get(name))
     return EntityReport(checker.issues, checker.relations)
+
+
+def _check_location(entity: MarkdownFile, schema: Schema) -> list[Issue]:
+    """`entity-misplaced`: the type declares `path` and the folder matches no pattern."""
+    if not schema.entity_paths:
+        return []
+    folder = entity_folder(entity.path)
+    if any(folder_matches(pattern, folder) for pattern in schema.entity_paths):
+        return []
+    allowed = " or ".join(f"`{pattern}`" for pattern in schema.entity_paths)
+    return [
+        Issue(
+            code="entity-misplaced",
+            path=entity.path,
+            line=entity.key_lines.get("type"),
+            message=(
+                f"`{schema.type}` entities are stored in {allowed}, but this file is in `{folder}`"
+            ),
+        )
+    ]
 
 
 def _check_kid(entity: MarkdownFile, schema: Schema) -> list[Issue]:

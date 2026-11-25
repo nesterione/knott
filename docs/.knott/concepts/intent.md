@@ -1,5 +1,6 @@
 ---
 name: intent
+path: intents
 description: >
   Something we want knott to do but have not specified yet: the need, a concrete example, and the open questions. A spec realizes it. Intents stay editable; an intent is "specified" when a spec's `realizes` points at it.
 properties:

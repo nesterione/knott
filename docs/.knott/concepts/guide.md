@@ -1,5 +1,6 @@
 ---
 name: guide
+path: guides
 description: Task-oriented documentation - how to do something with Knott.
 properties:
   title:

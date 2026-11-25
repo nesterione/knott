@@ -1,8 +1,9 @@
 ---
 type: spec
 title: "0011: Entity location"
-status: draft
+status: implemented
 created_on: 2026-11-25
+released_in: "0.10.0"
 realizes:
   - "[Entity location](../intents/entity-location.md)"
 decisions:
@@ -49,6 +50,7 @@ path: episodes/*          # episodes/2026, episodes/2027, …
 
 - No other character is special: no `?`, `[…]`, `{a,b}` and no regular expressions. Alternatives are written as a list.
 - A trailing `/` is ignored.
+- A pattern that starts with `*` must be quoted (`path: "**/specs"`): YAML reads an unquoted leading `*` as an alias, and the file is then `schema-invalid-yaml`.
 
 ### Checks on `path`
 
@@ -59,7 +61,7 @@ Each of these is `schema-invalid-field` at the line of the pattern. The concept 
 - `**` that is not a whole segment (`a**`);
 - the same pattern twice in the list.
 
-A pattern that no existing folder matches is valid.
+An empty `path:` is the same as no key. A pattern that no existing folder matches is valid. The `field` of these issues is `path`.
 
 ## Issue codes
 
@@ -88,6 +90,8 @@ Several patterns are joined with `or`. The vault root is printed as `.`.
 |---|---|
 | `path: specs`, entity at `specs/old/0001.md` | `entity-misplaced`; write `specs/**` to allow subfolders |
 | `path: episodes/*`, entity at `episodes/42.md` | `entity-misplaced`: `*` needs one segment |
+| `path: **/specs`, unquoted | `schema-invalid-yaml`; write `"**/specs"` |
+| `knott validate SPECS/a.md`, the folder on disk is `specs` | `entity-misplaced`: a path argument is taken as written; pass it as it is on disk |
 | `path: Specs`, entity in `specs/` | `entity-misplaced`, also on a file system that ignores case |
 | A file in `specs/` with another type, or with no `type` | not checked: `path` says where a type lives, not what a folder holds |
 
@@ -101,4 +105,4 @@ Several patterns are joined with `or`. The vault root is printed as `.`.
 
 ## Compatibility
 
-Additive. A concept with a `path` key got `schema-invalid-field` before. Adding `path` to a concept makes entities stored elsewhere invalid; `knott validate` lists them. Ontology API addition only. Minor version bump.
+Additive. A concept with a `path` key got `schema-invalid-field` before. Adding `path` to a concept makes entities stored elsewhere invalid; `knott validate` lists them. Ontology API addition only. Version 0.10.0.

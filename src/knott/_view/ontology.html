@@ -168,7 +168,7 @@ const DATA = /*__DATA__*/;
 // ---------- model ----------
 // Lookups keyed by type name have no prototype, so names like "constructor" stay plain keys.
 const dict = () => Object.create(null);
-const nodes = DATA.types.map(t => ({ id: t.type, count: t.count, kidRequired: t.kid_required, description: t.description, properties: t.properties, template: t.template, x: 0, y: 0, w: 0, h: 34 }));
+const nodes = DATA.types.map(t => ({ id: t.type, count: t.count, kidRequired: t.kid_required, entityPaths: t.entity_paths || [], description: t.description, properties: t.properties, template: t.template, x: 0, y: 0, w: 0, h: 34 }));
 const byId = dict();
 for (const n of nodes) byId[n.id] = n;
 // DATA.edges: one per known target of each reference property, with its path
@@ -636,7 +636,7 @@ function showPanel(id) {
   const incRows = groups.map(g => `<tr class="group"><td colspan="2" title="${esc(g.kind)}">${esc(g.label)}</td></tr>` +
     g.references.map(r => row(link(r.type) + "." + esc(r.path), "", r.required)).join("")).join("");
   const typeLoops = LOOPS.filter(r => r.loop.type === id);
-  const head = `<div class="sub">${plural(n.count, "entity", "entities")}${n.kidRequired ? " · kid required" : ""}</div>${n.description ? `<p>${esc(n.description)}</p>` : ""}`;
+  const head = `<div class="sub">${plural(n.count, "entity", "entities")}${n.kidRequired ? " · kid required" : ""}</div>${n.entityPaths.length ? `<div class="sub">stored in ${n.entityPaths.map(p => `<code>${esc(p)}</code>`).join(" or ")}</div>` : ""}${n.description ? `<p>${esc(n.description)}</p>` : ""}`;
   panel.innerHTML = `
     <button class="close" aria-label="Close">×</button>
     <h2>${esc(n.id)}</h2>

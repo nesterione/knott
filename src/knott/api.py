@@ -159,6 +159,7 @@ class Knott:
                 path=s.path,
                 count=counts.get(s.type, 0),
                 kid_required=s.kid_required,
+                entity_paths=list(s.entity_paths),
                 properties=[_ontology_attribute(a) for a in s.properties.values()],
                 template=s.template,
             )
