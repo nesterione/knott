@@ -72,6 +72,7 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 7. [The view's Relations panel lists inline relations](specs/0007-view-inline-relations.md)
 8. [File properties and connectors](specs/0008-file-properties.md)
 9. [Enum properties](specs/0009-enum-properties.md)
+10. [Loops](specs/0010-loops.md) (accepted)
 
 ### Intents
 
@@ -79,3 +80,4 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 - [File properties](intents/file-properties.md)
 - [Remote sources](intents/remote-sources.md)
 - [Enumerated values](intents/enumerated-values.md)
+- [Loops](intents/loops.md)
