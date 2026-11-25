@@ -103,6 +103,8 @@ properties:
         role:   { type: string }
 ```
 
+A property with a fixed set of values is an `enum`: `level: { type: enum, options: [A1, A2, B1] }`. A value outside the set is reported with the allowed options.
+
 The body of a concept file is an optional template for entity bodies: real headings, with a `<!-- -->` comment under each saying what goes there. Knott stores it and never checks entities against it.
 
 ## References

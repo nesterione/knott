@@ -11,7 +11,7 @@ A Knott vault is an ordinary directory of Markdown files with a `.knott/` direct
 
 - **Entity**: a Markdown file whose YAML frontmatter is a mapping with a `type` key. Files without frontmatter, or without `type`, are ordinary notes and are ignored.
 - **Concept file**: `.knott/concepts/**/*.md`, one file per type. Its frontmatter is the type's schema: `name:` (the type's name; the file name and folder do not matter), `description`, and `properties`. Its body, if any, is a template for entity bodies.
-- **Property**: a frontmatter value declared under `properties:`: a scalar (`string`, `integer`, `number`, `boolean`, `date`, `datetime`), a `reference`, a `file`, or a `list`, `object` or `map` of them, nested.
+- **Property**: a frontmatter value declared under `properties:`: a scalar (`string`, `integer`, `number`, `boolean`, `date`, `datetime`), an `enum`, a `reference`, a `file`, or a `list`, `object` or `map` of them, nested.
 - **Reference**: a property with `type: reference` and a `target` type; its value points to another entity file by relative path (or by `kid`). It lives only on the source file; never add an inverse on the target.
 - **Relation file**: `.knott/relations/**/*.md`, one file per relation, naming what a link means. Frontmatter: `name`, `description`, and optionally `inverse` (its name read from the target side), `symmetric: true` (goes both ways) or `acyclic: true` (must not loop). Its body says when to use it. A reference property opts in with `relation: <name>`.
 - **File**: a property with `type: file`; its value names a file that is not an entity (audio, PDF, image, JSON), by a relative path in the vault or by a URI for a file kept elsewhere (`s3://bucket/key`, `gdrive:<id>`).
@@ -78,6 +78,7 @@ forms:                          # map of map of string: free keys
   sg: {nom: draũgas, gen: draũgo}
 ```
 
+- An `enum` accepts **only** its listed options. `knott types --verbose` prints them under the property (`one of: m | f`, or one line per option with its meaning). Copy an option exactly: it is case-sensitive, and a synonym (`female` for `f`) is `attribute-unknown-option`. Quote an option that YAML would read as a boolean, number or date (`"no"`, `"1"`). Never add an option to a concept just to make a value pass.
 - An `object` accepts **only** its declared fields; any other key is an error (`attribute-unknown-field`). A `map` accepts any string keys.
 - A required list needs at least one item. Never leave a list item or map value empty (`[a, null]`, `{nom: ~}`).
 - Strict typing applies at every level: quote `"no"`, `"42"`, and so on inside lists and objects too.

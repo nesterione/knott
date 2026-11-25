@@ -548,6 +548,11 @@ function showPanel(id) {
       if (inner.description) notes.push(`${node.items ? "each item" : "each value"}: ${inner.description}`);
       node = inner;
     }
+    // an enum lists its options, with their descriptions when any has one
+    const opts = node.options || [];
+    if (opts.length) notes.push(opts.some(o => o.description)
+      ? opts.map(o => o.description ? `${o.value}: ${o.description}` : o.value).join(" · ")
+      : "one of: " + opts.map(o => o.value).join(" | "));
     return row(esc(a.name), notation(a), a.required, notes.join(" · "), depth) + attrRows(node.fields || [], depth + 1);
   }).join("");
   // DATA.referenced_by: per type, the properties that can point at it, grouped and

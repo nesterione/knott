@@ -14,6 +14,7 @@ from knott._yaml import KeyPath
 from knott.models import Issue
 from knott.schema.models import (
     AttributeDef,
+    EnumShape,
     FileShape,
     ListShape,
     MapShape,
@@ -213,6 +214,10 @@ class _ValueChecker:
             self._check_file(shape, path, value)
             return
 
+        if isinstance(shape, EnumShape):
+            self._check_enum(shape, path, value)
+            return
+
         if isinstance(shape, ScalarType):
             problem = type_mismatch(shape, value, self.entity.raws.get(path))
             if problem is not None:
@@ -255,6 +260,26 @@ class _ValueChecker:
                 f"but got {kind(value)} {show(value, raw)}",
                 path,
             )
+
+    def _check_enum(self, shape: EnumShape, path: KeyPath, value: Any) -> None:
+        field = format_field_path(path)
+        if type(value) is not str:
+            problem = type_mismatch(ScalarType.STRING, value, self.entity.raws.get(path))
+            assert problem is not None
+            problem = problem.replace("expects string", "expects enum (a string)", 1)
+            self.report("attribute-type-mismatch", f"attribute `{field}` {problem}", path)
+            return
+        names = shape.names
+        if value in names:
+            return
+        message = (
+            f"attribute `{field}` must be one of {', '.join(f'`{n}`' for n in names)}, "
+            f"but got {show(value)}"
+        )
+        suggestion = closest_option(value, names)
+        if suggestion is not None:
+            message += f"; did you mean `{suggestion}`?"
+        self.report("attribute-unknown-option", message, path)
 
     def _check_file(self, shape: FileShape, path: KeyPath, value: Any) -> None:
         field = format_field_path(path)
@@ -349,6 +374,16 @@ class _ValueChecker:
             )
             return
         self.relations += 1
+
+
+def closest_option(value: str, options: tuple[str, ...]) -> str | None:
+    """The option to suggest for ``value``: the one equal when case is ignored, else
+    the closest spelling; None when nothing is close (spec 0009)."""
+    same = [o for o in options if o.lower() == value.lower()]
+    if len(same) == 1:
+        return same[0]
+    close = difflib.get_close_matches(value, options, n=1)
+    return close[0] if close else None
 
 
 def _is_empty(value: Any, shape: Shape) -> bool:

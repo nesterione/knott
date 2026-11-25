@@ -73,13 +73,20 @@ class MigrateResult(_Frozen):
     """Relations converted to ``list`` of ``reference``, as ``<type>.<field>``."""
 
 
+class EnumOption(_Frozen):
+    """One allowed value of an `enum` property (spec 0009)."""
+
+    value: str
+    description: str | None = None
+
+
 class OntologyAttribute(_Frozen):
     """An attribute declared by a type's schema, or a nested part of one."""
 
     name: str | None
     """Field name; None for a list's `items` or a map's `values`."""
     type: str
-    """A scalar type name, or `list`, `object`, `map`, `reference` or `file`."""
+    """A scalar type name, or `list`, `object`, `map`, `reference`, `file` or `enum`."""
     required: bool
     description: str | None
     items: OntologyAttribute | None = None
@@ -96,6 +103,8 @@ class OntologyAttribute(_Frozen):
     """For a `reference`: the relation it names, when a relation file defines it."""
     accept: list[str] = []
     """For a `file`: the extensions a vault file may have, without the dot. Empty: any."""
+    options: list[EnumOption] = []
+    """For an `enum`: the allowed values, in the concept's order."""
 
     @property
     def notation(self) -> str:

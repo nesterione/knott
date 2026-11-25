@@ -207,7 +207,7 @@ def test_file_definition_errors(tmp_path: Path, properties: str, field: str, fra
 def test_unknown_type_message_lists_file(tmp_path: Path) -> None:
     root = _vault(tmp_path, "---\nname: recording\nproperties:\n  a: { type: files }\n---\n")
     (issue,) = Knott.open(root).schema_issues()
-    assert issue.message.endswith("list, object, map, reference, file")
+    assert issue.message.endswith("list, object, map, reference, file, enum")
 
 
 # --- connector files --------------------------------------------------------------

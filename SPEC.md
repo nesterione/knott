@@ -250,7 +250,7 @@ Allowed keys:
 | top | `description` | no | string |
 | top | `kid` | no | `required`: every entity of this type must have a `kid` (§12) |
 | top | `properties` | no | mapping of property name → definition, in display order |
-| property | `type` | yes | a scalar type in §8, or `list`, `object`, `map`, `reference` or `file` |
+| property | `type` | yes | a scalar type in §8, or `enum`, `list`, `object`, `map`, `reference` or `file` |
 | property | `required` | no | boolean, default `false` |
 | property | `description` | no | string |
 | property | `items` | with `type: list` | the definition of each item (`type`, `description`, nesting keys; no `required`) |
@@ -258,6 +258,7 @@ Allowed keys:
 | property | `values` | with `type: map` | the definition of each value (`type`, `description`, nesting keys; no `required`) |
 | property | `target` | with `type: reference` | a type name, or a non-empty list of unique type names (self-reference allowed) |
 | property | `relation` | no; `type: reference` only | the `name` of a relation definition (§9) |
+| property | `options` | with `type: enum` | a non-empty list of unique strings, or a mapping of option → description (§8) |
 | property | `accept` | no; `type: file` only | a non-empty list of unique lowercase extensions, no dot (§8) |
 
 Schema rules:
@@ -306,6 +307,27 @@ Rules:
 - A key that is present with a `null` or empty value counts as absent.
 - `required: true` means the key is present and not null.
 
+### Enums
+
+A property of shape `enum` is a string that must be one of the listed `options`:
+
+```yaml
+properties:
+  gender: { type: enum, options: [m, f] }
+  level:
+    type: enum
+    options:
+      A1: Understands and uses familiar everyday expressions.
+      A2:
+```
+
+- `options` is required: a non-empty list of unique strings, or a mapping of option → description (a string, or empty). An option is a non-empty string with no whitespace at either end. A non-string option (unquoted `no`, `1`, a date) is `schema-invalid-field` with a hint to quote it. `options` on another shape is `schema-invalid-field`. A duplicate key in the mapping form can't be detected.
+- A value passes when it is a YAML string equal to an option: no trimming, no case folding. Another string is `attribute-unknown-option`; a value of another kind is `attribute-type-mismatch`, as for `string`. `null` and `""` are absent.
+- The `attribute-unknown-option` message lists every option in concept order, and ends with `; did you mean …?` for the one option equal when case is ignored, else the closest spelling, else nothing.
+- `enum` may appear anywhere a shape can; a list of enums picks several, and repeats are allowed.
+
+See `docs/specs/0009-enum-properties.md`.
+
 ### Structured attributes
 
 A property can also be a `list` (every item matches `items`), an `object` (exactly the declared `fields`; objects are closed) or a `map` (free string keys; every value matches `values`). Shapes nest to any depth:
@@ -336,7 +358,7 @@ See `docs/decisions/0008-structured-attributes.md`.
 
 A `reference` (§9) or a `file` (below) may appear anywhere a shape can: list `items`, map `values`, or an object field.
 
-Not in v0: enums, unions of scalar types, item counts, named reusable shapes, custom scalars, inheritance, composition.
+Not in v0: sets of options shared between types, unions of scalar types, item counts, named reusable shapes, custom scalars, inheritance, composition.
 
 ### File properties
 
@@ -605,6 +627,7 @@ Validation is the primary feature of v0. A run loads all concept files, then val
 - Each concept file has frontmatter, which is valid YAML and a mapping.
 - `name` is present and well-formed. No unknown keys (§7).
 - Each property has a known `type`; `list`, `object`, `map` and `reference` have their nested key, recursively valid.
+- An `enum`'s `options` are a non-empty list or mapping of unique string options (§8).
 - Each name in a reference's `target` names a discovered type (`schema-unknown-target`, one issue per unknown name, `field` = the full key path such as `properties.sources.items.target`). Unknown names are dropped from the target list. If none is left, values are still checked for shape and resolved, but the target-type check is skipped.
 - `kid`, when present, is `required`.
 - No duplicate `name` across files (`schema-duplicate-type`).
@@ -617,7 +640,7 @@ Validation is the primary feature of v0. A run loads all concept files, then val
 
 - `type` is the `name` of a discovered concept file (`entity-unknown-type`).
 - `kid`: present when the schema requires it (`kid-missing`), a canonical UUID (`kid-invalid`), and unique (`kid-duplicate`).
-- Attributes: required ones are present (`attribute-missing`) and values match their type (`attribute-type-mismatch`), at every nesting level. Declared objects have no undeclared keys (`attribute-unknown-field`).
+- Attributes: required ones are present (`attribute-missing`) and values match their type (`attribute-type-mismatch`), at every nesting level. An `enum` value is one of its options (`attribute-unknown-option`). Declared objects have no undeclared keys (`attribute-unknown-field`).
 - References, at every nesting level: checked as in §11. A list or map whose items are references uses the `relation-*` codes.
 - Files, at every nesting level: checked as in §8. A list or map whose items are files uses the `file-*` codes.
 - No relation with `acyclic: true` forms a loop (`relation-cycle`, §9).
@@ -677,7 +700,7 @@ transcript
 
 If schema errors exist, `types` still prints the types it could load, writes the errors to stderr, and exits with code `1`.
 
-`--verbose` adds, per type: the concept file path, the description, `kid: required` when set, `template: yes|no`, `references:` with the path of every reference at any depth (`[]` for list items, `.*` for map values, `.field` for object fields, or `none`), and the properties with nested shapes indented. A reference shows `→ target | target`; a target no concept defines is marked `(unknown)`. A reference that names a relation shows it after the type, as part of the type column: `affects  list of reference → concept  (about)`; a name no relation file defines is not shown. A `file` shows the extensions it accepts: `audio*  file .mp3 | .wav`, `images  list of file .png | .jpg`.
+`--verbose` adds, per type: the concept file path, the description, `kid: required` when set, `template: yes|no`, `references:` with the path of every reference at any depth (`[]` for list items, `.*` for map values, `.field` for object fields, or `none`), and the properties with nested shapes indented. A reference shows `→ target | target`; a target no concept defines is marked `(unknown)`. A reference that names a relation shows it after the type, as part of the type column: `affects  list of reference → concept  (about)`; a name no relation file defines is not shown. A `file` shows the extensions it accepts: `audio*  file .mp3 | .wav`, `images  list of file .png | .jpg`. An `enum` shows `enum`, and its options on lines under the property, indented by two more spaces: one line `one of: m | f` when no option has a description, else one line per option, `<option>: <description>` or the option alone.
 
 After the types, a `relations:` section lists every relation, sorted by name: on one line, indented by two spaces, the name, then `inverse: <x>`, `symmetric`, `acyclic` as they apply, separated by two spaces; then the description and the guidance, each line indented by four spaces (blank lines kept empty). Relations are separated by a blank line. A vault without relations has no `relations:` section. From `tests/fixtures/relation-refs`:
 
@@ -729,7 +752,7 @@ Prints the installed Knott version.
 
 ### `knott view [PATH] [-o FILE] [--no-open]`
 
-Writes the vault's ontology (types, properties, templates, references, entity counts) as one self-contained static HTML page and opens it in the browser. No server and no network. Each reference is an edge per known target, labelled with its path; it is drawn as required only when every step on its path is required. Targets no concept defines get no edge and are marked `(unknown)` in the type's panel. A reference that names a relation is labelled with the relation's name instead of its path; the type's panel shows the path with the relation in parentheses under "References out", and, under "Referenced by", every reference property (any depth, any type, T included) whose known targets include the type, grouped and labelled as in reverse lookup (§10), each row `<source type>.<property path>`. A "Relations (N defined · M inline)" button in the header, hidden when both counts are 0 (a zero part is left out), opens a panel with two sections. "Defined" lists every relation with its keys, description, guidance (HTML-escaped, folded under "When to use it") and the properties that name it, each `<type>.<property path> → <targets>`. "Inline" lists every reference property that names no relation file, one row per property as `<type>.<property path>`, grouped by its targets, largest group first. The embedded data has `relations`, a `relation` key on each edge, `referenced_by`: a list of `{type, groups}`, each group `{label, kind, relation, references: [{type, path, required}]}`, and `reference_properties`: a list of `{type, path, relation, targets, unknown_targets, required}`, one per reference property, `relation` being `None` for an inline one. A `file` property shows the extensions it accepts in the property table and draws no edge; the embedded data also has `connectors` and, on each attribute, `accept`. Schema errors still produce a page, with a note to run `knott validate`; a vault that still has `.knott/schemas/` prints the `schema-legacy-layout` issue to stderr, writes no page and exits `1`; a vault with no types exits with code `2`. See `docs/commands/view.md`.
+Writes the vault's ontology (types, properties, templates, references, entity counts) as one self-contained static HTML page and opens it in the browser. No server and no network. Each reference is an edge per known target, labelled with its path; it is drawn as required only when every step on its path is required. Targets no concept defines get no edge and are marked `(unknown)` in the type's panel. A reference that names a relation is labelled with the relation's name instead of its path; the type's panel shows the path with the relation in parentheses under "References out", and, under "Referenced by", every reference property (any depth, any type, T included) whose known targets include the type, grouped and labelled as in reverse lookup (§10), each row `<source type>.<property path>`. A "Relations (N defined · M inline)" button in the header, hidden when both counts are 0 (a zero part is left out), opens a panel with two sections. "Defined" lists every relation with its keys, description, guidance (HTML-escaped, folded under "When to use it") and the properties that name it, each `<type>.<property path> → <targets>`. "Inline" lists every reference property that names no relation file, one row per property as `<type>.<property path>`, grouped by its targets, largest group first. The embedded data has `relations`, a `relation` key on each edge, `referenced_by`: a list of `{type, groups}`, each group `{label, kind, relation, references: [{type, path, required}]}`, and `reference_properties`: a list of `{type, path, relation, targets, unknown_targets, required}`, one per reference property, `relation` being `None` for an inline one. A `file` property shows the extensions it accepts in the property table and draws no edge; the embedded data also has `connectors` and, on each attribute, `accept`. An `enum` shows its options under the property; each attribute has `options`, a list of `{value, description}`. Schema errors still produce a page, with a note to run `knott validate`; a vault that still has `.knott/schemas/` prints the `schema-legacy-layout` issue to stderr, writes no page and exits `1`; a vault with no types exits with code `2`. See `docs/commands/view.md`.
 
 ### `knott refs PATH [--format text|json]`
 
@@ -878,6 +901,7 @@ relation-unknown           relation-inverse-conflict  relation-symmetric-mismatc
 entity-invalid-frontmatter entity-unknown-type        not-an-entity
 kid-missing                kid-invalid                kid-duplicate
 attribute-missing          attribute-type-mismatch    attribute-unknown-field
+attribute-unknown-option
 relation-missing           relation-invalid-value     relation-target-outside-vault
 relation-target-not-found  relation-target-not-entity relation-target-type-mismatch
 relation-target-ambiguous  relation-cycle
@@ -918,7 +942,7 @@ refs = vault.refs("concepts/kid.md")   # or "kid:<uuid>"; Refs(entity, groups), 
 vault.migrate()                    # MigrateResult(written, removed, list_fields); see §14
 ```
 
-`OntologyAttribute.relation` is the relation a reference names (`None` when none, or one no relation file defines). `OntologyAttribute.type` may be `file`; `accept` lists its extensions (`[]` when not declared). `Refs` has `entity: EntityRef(path, type, kid)` and `groups: list[RefGroup(label, kind, relation, references: list[Ref(path, type, kid, field, line, direction)])]`; `type` is the frontmatter `type` as written. A relative path passed to `refs()` is resolved against the vault root, as in `validate()`.
+`OntologyAttribute.relation` is the relation a reference names (`None` when none, or one no relation file defines). `OntologyAttribute.type` may be `file`; `accept` lists its extensions (`[]` when not declared). It may be `enum`; `options` is then a list of `EnumOption(value, description)`. `Refs` has `entity: EntityRef(path, type, kid)` and `groups: list[RefGroup(label, kind, relation, references: list[Ref(path, type, kid, field, line, direction)])]`; `type` is the frontmatter `type` as written. A relative path passed to `refs()` is resolved against the vault root, as in `validate()`.
 
 `validate()` returns validation problems as data and never raises for them. It raises only for `2`-class conditions (`KnottError` subclasses in `errors.py`).
 
