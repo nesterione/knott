@@ -6,7 +6,7 @@ about: "[Loop](../concepts/loop.md)"
 ---
 # `schema-duplicate-loop`
 
-Two [loop](../concepts/loop.md) files have the same `name`, or follow the same property of the same type.
+Two [loop](../concepts/loop.md) files have the same `name`, or follow the same property of the same type, or of a type and its [subtype](../concepts/schema.md#inheritance): a loop on a type already follows its subtypes.
 
 ## Example
 

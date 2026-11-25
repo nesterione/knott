@@ -13,7 +13,7 @@ A relation's `inverse` can't name the link read from the target side, because th
 | another relation's `inverse` | both relations and their files |
 | its own `name` | use `symmetric: true` |
 | another relation's `name` | that relation and its file |
-| a top-level property of a concept this relation can point at | the concept and its file |
+| a top-level property, own or inherited, of a concept this relation can point at, [subtypes](../concepts/schema.md#inheritance) included | the concept that declares the property, and its file |
 
 ## Example
 

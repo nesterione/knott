@@ -108,6 +108,8 @@ class OntologyAttribute(_Frozen):
     """A scalar type name, or `list`, `object`, `map`, `reference`, `file` or `enum`."""
     required: bool
     description: str | None
+    inherited_from: str | None = None
+    """For a top-level property a type inherits: the ancestor that declares it."""
     items: OntologyAttribute | None = None
     """For a `list`: the definition of each item."""
     values: OntologyAttribute | None = None
@@ -144,9 +146,21 @@ class OntologyType(_Frozen):
     path: str
     """Vault-relative path of the schema file."""
     count: int
-    """Markdown files whose frontmatter `type` is this type."""
+    """Markdown files whose frontmatter `type` is this type; subtypes are not counted."""
+    extends: str | None = None
+    """The parent type (spec 0013); None for a root."""
+    abstract: bool = False
+    """The concept says `abstract: true`: no entity may have this type."""
+    ancestors: list[str] = []
+    """The parent, its parent, and so on, nearest first."""
+    subtypes: list[str] = []
+    """The direct children, sorted."""
+    inherited: dict[str, str] = {}
+    """Which ancestor each inherited setting comes from, by key: `template`, `path`,
+    `filename` or `kid`. A key is absent when the type declares the setting itself or
+    has none."""
     kid_required: bool = False
-    """The schema says `kid: required`."""
+    """The schema, or an ancestor's, says `kid: required`."""
     entity_paths: list[str] = []
     """Folder patterns the concept's `path` allows; `[]` when entities can live anywhere."""
     filename: FilenamePattern | None = None
@@ -285,6 +299,8 @@ class LoopEntity(_Frozen):
     title: str
     """The entity's `title` when its type has that string property and it is set,
     else the file name."""
+    type: str = ""
+    """The entity's own type: the loop's type, or a subtype of it (spec 0013)."""
     unmet: list[LoopNeed] = []
     """Needs of its stage, or an earlier one, that are not met: `loop-stage-unmet`."""
     next: str | None = None

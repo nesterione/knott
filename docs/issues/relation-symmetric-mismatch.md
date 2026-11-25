@@ -12,7 +12,7 @@ A symmetric relation reads the same both ways, so some combinations don't fit it
 |---|---|
 | `symmetric: true` with an `inverse` | the relation file's `inverse:` line |
 | `symmetric: true` with `acyclic: true` (every symmetric link is a two-step cycle) | the relation file's `acyclic:` line |
-| a property names a symmetric relation, but its targets don't include the property's own concept | the concept file's `relation:` line |
+| a property names a symmetric relation, but its own concept is not one of its targets or a [subtype](../concepts/schema.md#inheritance) of one | the concept file's `relation:` line |
 
 ## Example
 
@@ -36,4 +36,4 @@ In the relation file, remove `inverse` or `acyclic`, or remove `symmetric`. On t
 
 ## Notes
 
-Only known targets count. A property whose targets are `[concept, guide]`, on `concept`, is valid. A symmetric relation that is also `acyclic` is not checked for cycles.
+Only known targets count. A property on `tool` with `target: concept` is valid when `tool` extends `concept`; an inherited property is checked once, at the concept that declares it. A property whose targets are `[concept, guide]`, on `concept`, is valid. A symmetric relation that is also `acyclic` is not checked for cycles.

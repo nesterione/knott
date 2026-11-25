@@ -132,6 +132,7 @@ def test_ontology_types_properties_and_counts(tmp_path: Path) -> None:
     assert person.description == "A human."
     assert person.path == ".knott/concepts/person.md"
     scalar: dict[str, object] = {
+        "inherited_from": None,
         "items": None,
         "values": None,
         "fields": [],

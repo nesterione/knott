@@ -71,6 +71,9 @@ def _embedded(html: str) -> Ontology:
     data.pop("referenced_by")
     data.pop("reference_properties")
     data.pop("loop_reports")
+    data.pop("inheritance")
+    for dumped in data["types"]:
+        dumped.pop("count_with_subtypes")
     return Ontology.model_validate(data)
 
 

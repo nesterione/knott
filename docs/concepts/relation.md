@@ -99,7 +99,7 @@ properties:
 - **The property keeps its own `target`.** A relation declares no source or target types and never adds a key to a concept, so a concept file still lists every key its entities may have.
 - **Shared.** Many properties may name one relation, in one concept or across concepts, under any key names. `knott refs` groups them together under the `inverse` (here `superseded_by`, `discussed_in`).
 - **`inverse` is a read-side label.** `superseded_by` names the link when `knott refs` reads it from the target. It is not a property and not a second relation, and it is never written on the target.
-- **Symmetric links need one side.** For `related` (`symmetric: true`), `knott refs` shows the link from both sides; storing it on both is valid but adds nothing. The property's targets must include its own concept, so the link can point back.
+- **Symmetric links need one side.** For `related` (`symmetric: true`), `knott refs` shows the link from both sides; storing it on both is valid but adds nothing. The property's targets must include its own concept, or a concept it [extends](schema.md#inheritance), so the link can point back.
 - **Acyclic relations are checked for cycles** across the whole vault, every property that names the relation counting as one graph: [`relation-cycle`](../issues/relation-cycle.md).
 - **Unknown names still work.** A `relation:` no file defines is [`relation-unknown`](../issues/relation-unknown.md), and the reference stays a plain one.
 

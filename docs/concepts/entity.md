@@ -40,7 +40,7 @@ This very folder mixes both: `README.md` is a plain note, everything under `conc
 
 ## One type
 
-Each entity has exactly one `type`, which must be the `name` of a concept file ([schema](schema.md)). There is no inheritance and no multiple typing; connections to other concepts are expressed through relations.
+Each entity has exactly one `type`, which must be the `name` of a concept file ([schema](schema.md)). There is no multiple typing. A type may [extend](schema.md#inheritance) another, but the entity still names one type, its own, and that type cannot be abstract. Connections to other concepts are expressed through relations.
 
 Where the file is stored is free, unless the type's concept file declares a [`path`](schema.md#where-entities-live). The same holds for the file's name and [`filename`](schema.md#file-names).
 

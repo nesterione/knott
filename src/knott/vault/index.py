@@ -209,7 +209,7 @@ class VaultSession:
             relation=shape.relation,
             target=resolved.target,
             target_type=target.type,
-            type_ok=not shape.targets or target.type in shape.targets,
+            type_ok=shape.accepts_type(target.type),
         )
 
 

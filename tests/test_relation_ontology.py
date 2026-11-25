@@ -207,7 +207,7 @@ def test_view_edges_carry_the_relation() -> None:
 
 def test_view_referenced_by_uses_refs_groups_and_labels() -> None:
     def ref(type_: str, path: str) -> dict[str, Any]:
-        return {"type": type_, "path": path, "required": False}
+        return {"type": type_, "path": path, "required": False, "via": None}
 
     assert referenced_by(_ontology()) == [
         {
@@ -333,7 +333,7 @@ def test_view_template_reads_relation_data() -> None:
     assert re.search(r"DATA\.relations\b", template)
     assert re.search(r"\ba\.relation\b", template)
     # an edge is labelled with its relation, else its path
-    assert "name: d.relation || d.path" in template
+    assert "name = d.relation || d.path" in template
 
 
 # ---------- knott view: the Relations panel lists inline relations (spec 0007) ----------

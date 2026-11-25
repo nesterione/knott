@@ -42,7 +42,7 @@ no stage
 - **`✗ needs`** marks a need of the entity's own stage, or an earlier one, that is not met. `knott validate` reports each as [`loop-stage-unmet`](../issues/loop-stage-unmet.md).
 - **Stages with no entities** are left out. Side exits and `no stage` come last.
 
-`--format json` prints `{"loops": [...]}` with, per loop, its definition (stages, needs and guidance), the entities under each stage and side exit, and the unplaced ones. Each entity has `path`, `kid`, `title`, `unmet`, `next` and `missing_next`.
+`--format json` prints `{"loops": [...]}` with, per loop, its definition (stages, needs and guidance), the entities under each stage and side exit, and the unplaced ones. Each entity has `path`, `kid`, `title`, `type` (its own type: the loop's, or a subtype of it), `unmet`, `next` and `missing_next`.
 
 `loops` does not validate entities. Work in progress never changes the exit code.
 

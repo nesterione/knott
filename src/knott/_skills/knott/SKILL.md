@@ -174,6 +174,23 @@ A vault can define **loops** in `.knott/loops/`: a process that entities of one 
 - A stage set too early is `loop-stage-unmet` in `knott validate`. Fix it by adding what is missing, or by setting the property back. Never remove a need from a loop file just to make an entity pass.
 - A value the loop does not list as a stage (such as `dropped`) is a side exit: it needs nothing.
 
+## Subtypes
+
+A concept can extend another (`extends: concept`), and a concept can be `abstract`. `knott types --verbose` shows `extends:`, `abstract: yes` and `subtypes:` under a type.
+
+- An entity's `type` is always a concrete type. When a reference wants `concept` and that type shows `abstract: yes`, create or pick an entity of one of its `subtypes`.
+- Pick the most specific type that fits: a `tool`, not a `concept`, when the entity is a tool.
+- Fill the properties in the `properties (from …)` blocks too; they are required or optional exactly as marked there.
+- Take the template, folder and file-name pattern from the lines marked `(from <type>)` as if the type declared them.
+- A reference that targets a type accepts its subtypes: `→ concept` takes a `tool`.
+- Never write `extends` or the parent's name in an entity.
+- `entity-abstract-type`: change `type` to the subtype the message lists that fits. Never remove `abstract` from the concept to make an entity pass.
+- When writing a concept file:
+  - `extends` is for a real "is a": the child shares the parent's properties and is accepted wherever the parent is. Kinds with the same properties are a `kind` enum, not subtypes.
+  - A child only adds properties. Never repeat an inherited one (`schema-property-redefined`); if a child needs it different, the property belongs on the children, not the parent.
+  - To let a reference accept a set of types, give them an abstract parent and target it, rather than repeating a list on every property.
+  - Target the narrowest type that is true; target the parent only when any kind is right.
+
 ## Obsidian settings
 
 For vaults edited in Obsidian, set Files & links → *New link format* to **Relative path to file** and turn **off** *Use [[Wikilinks]]*. Otherwise Obsidian may rewrite links on rename into forms `knott validate` rejects.

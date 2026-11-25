@@ -161,10 +161,29 @@ class Knott:
                 description=s.description,
                 path=s.path,
                 count=counts.get(s.type, 0),
+                extends=s.extends,
+                abstract=s.abstract,
+                ancestors=list(s.ancestors),
+                subtypes=sorted(c.type for c in schemas.values() if c.extends == s.type),
+                inherited={
+                    key: owner
+                    for key, owner in (
+                        ("template", s.template_from),
+                        ("path", s.entity_paths_from),
+                        ("filename", s.filename_from),
+                        ("kid", s.kid_required_from),
+                    )
+                    if owner is not None
+                },
                 kid_required=s.kid_required,
                 entity_paths=list(s.entity_paths),
                 filename=_filename_pattern(s.filename),
-                properties=[_ontology_attribute(a) for a in s.properties.values()],
+                properties=[
+                    _ontology_attribute(a).model_copy(
+                        update={"inherited_from": s.declared_in.get(name)}
+                    )
+                    for name, a in s.properties.items()
+                ],
                 template=s.template,
             )
             for _, s in sorted(schemas.items())

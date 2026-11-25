@@ -211,7 +211,7 @@ Frontmatter parsing rules:
 
 Every entity has exactly one primary type, given by the reserved key `type`. Its value must be a string equal to the `name` of a discovered concept file.
 
-No multiple types, no inheritance. Connections to other concepts are expressed through relations.
+No multiple types. A concept may extend one other concept (§7, Inheritance); the entity still names one type, its own. Connections to other concepts are expressed through relations.
 
 ---
 
@@ -248,6 +248,8 @@ Allowed keys:
 |---|---|---|---|
 | top | `name` | yes | matches `^[a-z][a-z0-9_-]*$` |
 | top | `description` | no | string |
+| top | `extends` | no | the `name` of one other concept: this type's parent (see Inheritance) |
+| top | `abstract` | no | `true`/`false`, default `false`: no entity may have this type |
 | top | `kid` | no | `required`: every entity of this type must have a `kid` (§12) |
 | top | `path` | no | a folder pattern, or a non-empty list of them: where entities of this type are stored (see Entity location) |
 | top | `filename` | no | a mapping with `pattern` and `parts`: how entity files of this type are named (see Entity file names) |
@@ -271,6 +273,38 @@ Schema rules:
 - `items`, `fields`, `values` and `target` are allowed only with their own `type`, and are required there.
 - `relation` is allowed only on a reference definition (§9); on a `list` or `map`, the error says to put it on `items` or `values`.
 - A property whose shape is `reference`, at any depth, is a **relation** (§9–11). Every other property is an **attribute** (§8). They share one map, so a name can't be both.
+
+### Inheritance
+
+```yaml
+# .knott/concepts/concept.md
+name: concept
+abstract: true
+properties:
+  title: { type: string, required: true }
+  related:
+    type: list
+    items: { type: reference, target: concept }
+```
+
+```yaml
+# .knott/concepts/tool.md
+name: tool
+extends: concept
+properties:
+  homepage: { type: string }
+  made_by:  { type: reference, target: organization }
+```
+
+- `extends` names one other concept, the **parent**. A concept has at most one parent; any depth is allowed. The *ancestors* of a type are its parent, the parent's parent, and so on; its *subtypes* are every type that has it as an ancestor. Type `A` **is-a** `B` when `A` is `B` or `B` is an ancestor of `A`. An entity writes its own type (`type: tool`) and never names the parent.
+- `abstract: true` marks a concept no entity may have as its `type` (`entity-abstract-type`, at the line of `type`, `field` = `type`; the message lists the concrete subtypes at any depth, sorted). Such an entity's properties are still checked. `abstract` is not inherited. An abstract type is a valid reference target, which makes it the way to name a group of types.
+- **A child inherits** the parent's properties with every key: its effective properties are the inherited ones, root ancestor first, then its own, each in schema order. It inherits the body template when its own body is empty (the two are never merged), `path` and `filename` when it declares none (its own replaces the parent's), and `kid: required` (it cannot turn it off). `description` and `abstract` are not inherited.
+- **A child only adds properties.** A property whose name an ancestor already declares is `schema-property-redefined` (`field` = `properties.<name>`, at the child's line): the child's definition is dropped and the inherited one stands. Two children of one parent may declare the same name.
+- **Checks.** A non-string `extends` or a non-boolean `abstract` is `schema-invalid-field`, and the concept loads without the key. `extends` naming no loaded concept is `schema-unknown-parent` (the message lists the known types; a parent whose file did not load counts as unknown), and the concept loads as a root type. An `extends` cycle, a concept that extends itself included, is `schema-extends-cycle`, one issue per concept in the cycle, showing it (`` `a` → `b` → `a` ``); each of them loads without a parent, and a concept below the cycle keeps its chain up to the first concept in it.
+- **References accept subtypes.** A reference with target `T` accepts an entity whose type is-a `T`; with a list, a type that is-a one of them. `target: concept` accepts `tool`; `target: tool` does not accept a plain `concept`. The message of `relation-target-type-mismatch` still names the declared targets. "Can target" has this meaning in §9, §10 and §27.
+- **An issue on an inherited property** is reported on the entity as before, and its message ends with a line naming the declaring file: ``declared in .knott/concepts/concept.md (`tool` extends `concept`)``, or ``(`cli` extends `concept` through `tool`)`` for a farther ancestor.
+- **Relation checks (§9).** An inherited property is checked once, at the concept that declares it. `relation-symmetric-mismatch`: the declaring concept is-a at least one of the property's targets. `relation-inverse-conflict`: the `inverse` must not equal a top-level property, own or inherited, of any concept the naming property can target, subtypes included; it is reported once per conflicting concept that declares the property.
+- **Loops (§27).** A loop with `type: T` follows every entity whose type is-a `T`; its `property` and property needs may be inherited. An inverse need `<inverse>: U` is met by an entity whose type is-a `U`. Two loops that name the same `property`, on one type or on a type and its subtype, are `schema-duplicate-loop`. A loop on an abstract type is valid. `LoopEntity.type` is the entity's own type.
 
 ### Entity location
 
@@ -519,7 +553,7 @@ Run on every command, after all concept and relation files are read. Only known 
 | An `inverse` equals a top-level property name of a concept that a property naming this relation can target | `relation-inverse-conflict`, naming the concept | the `inverse:` line, one issue per concept |
 | `symmetric: true` with an `inverse` | `relation-symmetric-mismatch` | the `inverse:` line |
 | `symmetric: true` with `acyclic: true` | `relation-symmetric-mismatch` | the `acyclic:` line |
-| A property names a symmetric relation, but its known targets don't include the property's own concept | `relation-symmetric-mismatch` | the concept file's `relation:` line |
+| A property names a symmetric relation, but its own concept is not one of its known targets or a subtype of one (§7) | `relation-symmetric-mismatch` | the concept file's `relation:` line |
 
 A nested field name (`speakers[].role`) never conflicts with an `inverse`, and neither does a property of a concept the relation's properties can't target.
 
@@ -625,7 +659,7 @@ reference parses as a plain path or Markdown link → relation-invalid-value
 resolved path stays inside the vault root          → relation-target-outside-vault
 target exists, with exact case matching            → relation-target-not-found
 target is a Knott entity                           → relation-target-not-entity
-target's type is in the property's target list     → relation-target-type-mismatch
+target's type is-a one of the property's targets   → relation-target-type-mismatch
 ```
 
 A reference written `kid:<uuid>` skips the path steps. It must be a canonical lowercase UUID (`relation-invalid-value`; a `[label](kid:…)` link is rejected too), exactly one entity must have that `kid` (`relation-target-not-found`, or `relation-target-ambiguous` when several do), and then the type check runs as above.
@@ -669,6 +703,7 @@ Validation is the primary feature of v0. A run loads all concept files, then the
 - Each property has a known `type`; `list`, `object`, `map` and `reference` have their nested key, recursively valid.
 - An `enum`'s `options` are a non-empty list or mapping of unique string options (§8).
 - Each name in a reference's `target` names a discovered type (`schema-unknown-target`, one issue per unknown name, `field` = the full key path such as `properties.sources.items.target`). Unknown names are dropped from the target list. If none is left, values are still checked for shape and resolved, but the target-type check is skipped.
+- `extends`, when present, names a loaded concept (`schema-unknown-parent`) and forms no cycle (`schema-extends-cycle`); `abstract` is a boolean; no property repeats an ancestor's (`schema-property-redefined`; §7).
 - `kid`, when present, is `required`.
 - `path`, when present, is a folder pattern or a non-empty list of unique ones (§7).
 - `filename`, when present, is a well-formed pattern whose parts are all defined and used (§7).
@@ -681,7 +716,7 @@ Validation is the primary feature of v0. A run loads all concept files, then the
 
 ### Entity validation
 
-- `type` is the `name` of a discovered concept file (`entity-unknown-type`).
+- `type` is the `name` of a discovered concept file (`entity-unknown-type`) that is not abstract (`entity-abstract-type`, §7).
 - Location: when the concept declares `path`, the entity's folder matches one of its patterns (`entity-misplaced`, §7).
 - File name: when the concept declares `filename`, the name matches its pattern (`entity-invalid-name`, §7).
 - `kid`: present when the schema requires it (`kid-missing`), a canonical UUID (`kid-invalid`), and unique (`kid-duplicate`).
@@ -747,7 +782,7 @@ transcript
 
 If schema errors exist, `types` still prints the types it could load, writes the errors to stderr, and exits with code `1`.
 
-`--verbose` adds, per type: the concept file path, the description, `kid: required` when set, `template: yes|no`, `path:` with the folder patterns joined by ` | ` when the concept declares any, `filename:` with the pattern and `.md` when the concept declares one, followed by one line per part (name, `match`, description, in columns), `references:` with the path of every reference at any depth (`[]` for list items, `.*` for map values, `.field` for object fields, or `none`), and the properties with nested shapes indented. A reference shows `→ target | target`; a target no concept defines is marked `(unknown)`. A reference that names a relation shows it after the type, as part of the type column: `affects  list of reference → concept  (about)`; a name no relation file defines is not shown. A `file` shows the extensions it accepts: `audio*  file .mp3 | .wav`, `images  list of file .png | .jpg`. An `enum` shows `enum`, and its options on lines under the property, indented by two more spaces: one line `one of: m | f` when no option has a description, else one line per option, `<option>: <description>` or the option alone.
+`--verbose` adds, per type: the concept file path, the description, `extends: <parent>`, `abstract: yes` and `subtypes:` (the direct children, sorted) when they apply, `kid: required` when set, `template: yes|no`, `path:` with the folder patterns joined by ` | ` when the concept declares any, `filename:` with the pattern and `.md` when the concept declares one, followed by one line per part (name, `match`, description, in columns), `references:` with the path of every reference at any depth (`[]` for list items, `.*` for map values, `.field` for object fields, or `none`), and the properties with nested shapes indented. An inherited template, `path`, `filename` or `kid: required` ends with `(from <type>)`, naming the ancestor that declares it. The properties come in one `properties (from <type>):` block per ancestor that declares any, root first, then `properties:` for the type's own; `references:` lists inherited and own references, in that order. A reference shows `→ target | target`; a target no concept defines is marked `(unknown)`. A reference that names a relation shows it after the type, as part of the type column: `affects  list of reference → concept  (about)`; a name no relation file defines is not shown. A `file` shows the extensions it accepts: `audio*  file .mp3 | .wav`, `images  list of file .png | .jpg`. An `enum` shows `enum`, and its options on lines under the property, indented by two more spaces: one line `one of: m | f` when no option has a description, else one line per option, `<option>: <description>` or the option alone.
 
 After the types, a `relations:` section lists every relation, sorted by name: on one line, indented by two spaces, the name, then `inverse: <x>`, `symmetric`, `acyclic` as they apply, separated by two spaces; then the description and the guidance, each line indented by four spaces (blank lines kept empty). Relations are separated by a blank line. A vault without relations has no `relations:` section. From `tests/fixtures/relation-refs`:
 
@@ -801,7 +836,7 @@ Prints the installed Knott version.
 
 ### `knott view [PATH] [-o FILE] [--no-open]`
 
-Writes the vault's ontology (types, properties, templates, references, entity counts) as one self-contained static HTML page and opens it in the browser. No server and no network. Each reference is an edge per known target, labelled with its path; it is drawn as required only when every step on its path is required. Targets no concept defines get no edge and are marked `(unknown)` in the type's panel. A type that declares `path` shows its folder patterns in the panel; each type in the embedded data has `entity_paths`. A type that declares `filename` shows the pattern and its parts there; each type has `filename`. A reference that names a relation is labelled with the relation's name instead of its path; the type's panel shows the path with the relation in parentheses under "References out", and, under "Referenced by", every reference property (any depth, any type, T included) whose known targets include the type, grouped and labelled as in reverse lookup (§10), each row `<source type>.<property path>`. A "Relations (N defined · M inline)" button in the header, hidden when both counts are 0 (a zero part is left out), opens a panel with two sections. "Defined" lists every relation with its keys, description, guidance (HTML-escaped, folded under "When to use it") and the properties that name it, each `<type>.<property path> → <targets>`. "Inline" lists every reference property that names no relation file, one row per property as `<type>.<property path>`, grouped by its targets, largest group first. The embedded data has `relations`, a `relation` key on each edge, `referenced_by`: a list of `{type, groups}`, each group `{label, kind, relation, references: [{type, path, required}]}`, and `reference_properties`: a list of `{type, path, relation, targets, unknown_targets, required}`, one per reference property, `relation` being `None` for an inline one. A `file` property shows the extensions it accepts in the property table and draws no edge; the embedded data also has `connectors` and, on each attribute, `accept`. An `enum` shows its options under the property; each attribute has `options`, a list of `{value, description}`. A type's panel has a **Loops** section when a loop follows it: the loop's name, the stages with entity counts, and each stage's needs. A "Loops (N)" button in the header, hidden when no loop loaded, opens a board over the diagram, one loop at a time: a dropdown switches, and the URL hash `#loop=<name>` opens one directly. Columns are the stages on the path, then the side exits (dimmed), then `no stage` when it has entities; a column header shows the entity count and, when clicked, the stage's needs and guidance (HTML-escaped). Each entity is a card: its title, its vault-relative path as text, its unmet needs (the card is marked) and its missing for next, or `ready`, as `knott loops` words it. The embedded data has `loops`, the loop definitions, and `loop_reports`, the reports of `knott loops --format json`, so the page holds the title, path and `kid` of every entity whose type has a loop, and nothing else about entities. Cards are not links. Schema errors still produce a page, with a note to run `knott validate`; a vault that still has `.knott/schemas/` prints the `schema-legacy-layout` issue to stderr, writes no page and exits `1`; a vault with no types exits with code `2`. See `docs/commands/view.md`.
+Writes the vault's ontology (types, properties, templates, references, entity counts) as one self-contained static HTML page and opens it in the browser. No server and no network. Each reference is an edge per known target, labelled with its path; it is drawn as required only when every step on its path is required. Targets no concept defines get no edge and are marked `(unknown)` in the type's panel. A type that declares `path` shows its folder patterns in the panel; each type in the embedded data has `entity_paths`. A type that declares `filename` shows the pattern and its parts there; each type has `filename`. **Inheritance (§7).** A reference is drawn once, from the type that declares it to each declared target; a child draws no edge for an inherited reference. "Is a" is its own edge, from child to parent: thin, grey, solid, with a hollow triangle at the parent and no label. In the Layered layout a child sits in the layer after its parent. An abstract type has a dashed border, its name in italics, and `abstract` where the entity count would be. Hovering a type highlights its own edges and the reference edges of its ancestors. A type with subtypes has a `▾ N` mark (N subtypes at any depth); clicking it hides them and shows `▸ N`. While they are hidden, an edge to or from a hidden type is drawn at the folded ancestor, edges that then share source, target and label are drawn once (required if any is), and one that starts and ends at the folded type is a self-reference. A header button, `Fold subtypes` / `Unfold subtypes`, applies to every family and is hidden when no type has a parent; it reads `Unfold subtypes` when no type on screen still shows its subtypes. The page starts unfolded and remembers the folded types per vault. The panel shows `extends <parent>`, `abstract` and `subtypes: …` under the name, marks an inherited property, reference or loop with `from <type>`, ends a "Referenced by" row that reaches the type through an ancestor with `via <ancestor>`, and follows the entity count with `N with subtypes`. On the Loops board a card of a subtype entity shows its type after the path. In the embedded data each type gains `extends`, `abstract`, `ancestors`, `subtypes`, `inherited` and `count_with_subtypes`, each top-level attribute `inherited_from`, `edges` and `reference_properties` hold each property once at its declaring type, `inheritance` lists `{child, parent}`, and a `referenced_by` row gains `via`. A reference that names a relation is labelled with the relation's name instead of its path; the type's panel shows the path with the relation in parentheses under "References out", and, under "Referenced by", every reference property (any depth, any type, T included) whose known targets include the type, grouped and labelled as in reverse lookup (§10), each row `<source type>.<property path>`. A "Relations (N defined · M inline)" button in the header, hidden when both counts are 0 (a zero part is left out), opens a panel with two sections. "Defined" lists every relation with its keys, description, guidance (HTML-escaped, folded under "When to use it") and the properties that name it, each `<type>.<property path> → <targets>`. "Inline" lists every reference property that names no relation file, one row per property as `<type>.<property path>`, grouped by its targets, largest group first. The embedded data has `relations`, a `relation` key on each edge, `referenced_by`: a list of `{type, groups}`, each group `{label, kind, relation, references: [{type, path, required}]}`, and `reference_properties`: a list of `{type, path, relation, targets, unknown_targets, required}`, one per reference property, `relation` being `None` for an inline one. A `file` property shows the extensions it accepts in the property table and draws no edge; the embedded data also has `connectors` and, on each attribute, `accept`. An `enum` shows its options under the property; each attribute has `options`, a list of `{value, description}`. A type's panel has a **Loops** section when a loop follows it: the loop's name, the stages with entity counts, and each stage's needs. A "Loops (N)" button in the header, hidden when no loop loaded, opens a board over the diagram, one loop at a time: a dropdown switches, and the URL hash `#loop=<name>` opens one directly. Columns are the stages on the path, then the side exits (dimmed), then `no stage` when it has entities; a column header shows the entity count and, when clicked, the stage's needs and guidance (HTML-escaped). Each entity is a card: its title, its vault-relative path as text, its unmet needs (the card is marked) and its missing for next, or `ready`, as `knott loops` words it. The embedded data has `loops`, the loop definitions, and `loop_reports`, the reports of `knott loops --format json`, so the page holds the title, path and `kid` of every entity whose type has a loop, and nothing else about entities. Cards are not links. Schema errors still produce a page, with a note to run `knott validate`; a vault that still has `.knott/schemas/` prints the `schema-legacy-layout` issue to stderr, writes no page and exits `1`; a vault with no types exits with code `2`. See `docs/commands/view.md`.
 
 ### `knott loops [NAME] [--format text|json]`
 
@@ -878,6 +913,7 @@ Ship an agent instruction document in the repo at `src/knott/_skills/knott/SKILL
 - how to discover types (`knott types`)
 - how to create an entity and write references (relative paths, Markdown-link form, quoted; strict cardinality; nested references)
 - that `knott validate <file>` must be run after every change
+- inheritance: an entity's type is concrete and the most specific that fits, inherited properties and settings count as the type's own, and `extends` is for a real "is a"
 - relation files: how to read their guidance, never to write an inverse, `knott refs` before renaming or deleting, and `relation-cycle`
 
 Typical agent workflow:
@@ -968,10 +1004,11 @@ Success output:
 ```
 schema-invalid-yaml        schema-invalid-field       schema-duplicate-type
 schema-unknown-target      schema-legacy-layout       schema-duplicate-relation
-schema-duplicate-connector
+schema-duplicate-connector schema-unknown-parent      schema-extends-cycle
+schema-property-redefined
 relation-unknown           relation-inverse-conflict  relation-symmetric-mismatch
 entity-invalid-frontmatter entity-unknown-type        not-an-entity
-entity-misplaced           entity-invalid-name
+entity-misplaced           entity-invalid-name        entity-abstract-type
 kid-missing                kid-invalid                kid-duplicate
 attribute-missing          attribute-type-mismatch    attribute-unknown-field
 attribute-unknown-option
@@ -1020,9 +1057,9 @@ vault.loops("episode-production")  # one LoopReport; KnottError when no loop has
 vault.migrate()                    # MigrateResult(written, removed, list_fields); see §14
 ```
 
-`OntologyType.entity_paths` lists the folder patterns of the concept's `path` (`[]` when not declared; `OntologyType.path` is the concept file). `OntologyType.filename` is `FilenamePattern(pattern, parts)` or `None`; each part is `FilenamePart(name, match, description)`, in the pattern's order. `OntologyAttribute.relation` is the relation a reference names (`None` when none, or one no relation file defines). `OntologyAttribute.type` may be `file`; `accept` lists its extensions (`[]` when not declared). It may be `enum`; `options` is then a list of `EnumOption(value, description)`. `Refs` has `entity: EntityRef(path, type, kid)` and `groups: list[RefGroup(label, kind, relation, references: list[Ref(path, type, kid, field, line, direction)])]`; `type` is the frontmatter `type` as written. A relative path passed to `refs()` is resolved against the vault root, as in `validate()`.
+`OntologyType.extends`, `abstract`, `ancestors` (nearest first) and `subtypes` (direct children, sorted) describe the hierarchy (§7). `properties`, `template`, `entity_paths`, `filename` and `kid_required` are the effective values; `OntologyAttribute.inherited_from` names the ancestor that declares an inherited top-level property, and `OntologyType.inherited` maps `template`, `path`, `filename` and `kid` to the ancestor each comes from, when it is inherited. `count` is the type's own entities. `OntologyType.entity_paths` lists the folder patterns of the concept's `path` (`[]` when not declared; `OntologyType.path` is the concept file). `OntologyType.filename` is `FilenamePattern(pattern, parts)` or `None`; each part is `FilenamePart(name, match, description)`, in the pattern's order. `OntologyAttribute.relation` is the relation a reference names (`None` when none, or one no relation file defines). `OntologyAttribute.type` may be `file`; `accept` lists its extensions (`[]` when not declared). It may be `enum`; `options` is then a list of `EnumOption(value, description)`. `Refs` has `entity: EntityRef(path, type, kid)` and `groups: list[RefGroup(label, kind, relation, references: list[Ref(path, type, kid, field, line, direction)])]`; `type` is the frontmatter `type` as written. A relative path passed to `refs()` is resolved against the vault root, as in `validate()`.
 
-`LoopDefinition.stages` and `.exits` are `list[LoopStage(name, needs, guidance)]`. `LoopNeed(kind, property, inverse, relation, type, since)`: `kind` is `property` or `inverse`, `since` is the stage that declares it, and an inverse need with several types is one `LoopNeed` per type. `LoopReport(loop, stages, exits, unplaced)`: `stages` and `exits` are `list[LoopPlacement(stage, entities)]`, empty ones included; `unplaced` and `entities` are `list[LoopEntity(path, kid, title, unmet, next, missing_next)]` in path order. `title` is the entity's `title` when its type declares a top-level `string` property of that name and the value is a non-blank string, else the file name. `loops()` does not validate.
+`LoopDefinition.stages` and `.exits` are `list[LoopStage(name, needs, guidance)]`. `LoopNeed(kind, property, inverse, relation, type, since)`: `kind` is `property` or `inverse`, `since` is the stage that declares it, and an inverse need with several types is one `LoopNeed` per type. `LoopReport(loop, stages, exits, unplaced)`: `stages` and `exits` are `list[LoopPlacement(stage, entities)]`, empty ones included; `unplaced` and `entities` are `list[LoopEntity(path, kid, title, type, unmet, next, missing_next)]` in path order. `title` is the entity's `title` when its type declares a top-level `string` property of that name and the value is a non-blank string, else the file name. `loops()` does not validate.
 
 `validate()` returns validation problems as data and never raises for them. It raises only for `2`-class conditions (`KnottError` subclasses in `errors.py`).
 
@@ -1065,7 +1102,7 @@ At minimum, test: schema discovery and parsing, entity detection, attribute typi
 
 Do not add, unless needed purely to meet the requirements above:
 
-database as source of truth · search indexes · semantic or vector search · embeddings · automatic inverse relations · global relation registry · RDF / OWL · inference or reasoning · schema inheritance, composition, or versioning · migration framework (`knott migrate` is a one-off converter for decision 0010) · UI (an interactive or served app; the static page `knott view` writes is not one) · HTTP server · daemon · filesystem watcher · automatic knowledge extraction · automatic memory selection · agent deciding autonomously what to persist · plugin architecture · wikilink resolution.
+database as source of truth · search indexes · semantic or vector search · embeddings · automatic inverse relations · global relation registry · RDF / OWL · inference or reasoning · several parents for one concept, schema composition or versioning · migration framework (`knott migrate` is a one-off converter for decision 0010) · UI (an interactive or served app; the static page `knott view` writes is not one) · HTTP server · daemon · filesystem watcher · automatic knowledge extraction · automatic memory selection · agent deciding autonomously what to persist · plugin architecture · wikilink resolution.
 
 Avoid speculative abstractions. Prefer the smallest implementation that satisfies the contract.
 
@@ -1220,7 +1257,7 @@ Run on every command, after concepts and relations are loaded.
 - A missing or invalid `name`: `schema-invalid-field`, and no loop. An unknown key: `schema-invalid-field` with a suggestion; the loop still loads. An invalid `description` is dropped.
 - A missing `type`, `property` or `stages` (reported at line 1), a `type` or `property` that is not a string, or a malformed `stages` or `needs` (not a mapping or list, empty, a stage key that is not a string, a stage key other than `needs`, a need that is neither a string nor a one-key mapping of strings): `schema-invalid-field`, and the loop is not loaded.
 - `loop-invalid-target`, at the line of the value, and the loop is not loaded: `type` names no concept; `property` is not a top-level `enum` property of the type (a list of enums is not one); a stage is not an option (the message lists the options and suggests one); a property need names no top-level property, or the loop's own `property`; an inverse need names no relation's `inverse`; a type in an inverse need names no concept, or one with no reference property that names the relation and can target the loop's type.
-- Two files with one `name` (`field` `name`), or two loaded loops with the same `type` and `property` (`field` `property`): `schema-duplicate-loop`, at the second file in path order, which defines no loop.
+- Two files with one `name` (`field` `name`), or two loaded loops with the same `property` on one `type`, or on a type and its subtype (§7; `field` `property`): `schema-duplicate-loop`, at the second file in path order, which defines no loop.
 - Entities are not checked against a loop that is not loaded; `knott loops` and `knott view` leave it out.
 
 ### Placement and `loop-stage-unmet`

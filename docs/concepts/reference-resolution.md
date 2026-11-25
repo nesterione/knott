@@ -18,7 +18,7 @@ Each reference is resolved **relative to the directory of the file that contains
 | 3 | stays inside the vault root, including through symlinks | `relation-target-outside-vault` |
 | 4 | target exists, with **exact case** | `relation-target-not-found` |
 | 5 | target is a Knott entity | `relation-target-not-entity` |
-| 6 | target's `type` is the property's `target`, or one of them when `target` is a list | `relation-target-type-mismatch` |
+| 6 | target's `type` is the property's `target` or a [subtype](schema.md#inheritance) of it, or of one of them when `target` is a list | `relation-target-type-mismatch` |
 
 ## `kid:` references
 

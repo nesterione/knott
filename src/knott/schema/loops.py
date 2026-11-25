@@ -52,7 +52,7 @@ def load_loops(
     """
     loops: dict[str, LoopDef] = {}
     name_owner: dict[str, str] = {}
-    followed: dict[tuple[str, str], LoopDef] = {}
+    followed: list[LoopDef] = []
     for rel_path in discover_loop_files(root):
         parser = _LoopParser(rel_path, issues)
         raw = parser.parse(root / rel_path)
@@ -71,17 +71,31 @@ def load_loops(
         loop = parser.resolve(raw, schemas, relations)
         if loop is None:
             continue
-        other = followed.get((loop.type, loop.property))
+        # The same property, on one type or on a type and its subtype (spec 0013).
+        other = next(
+            (
+                earlier
+                for earlier in followed
+                if earlier.property == loop.property
+                and (schemas[loop.type].is_a(earlier.type) or schemas[earlier.type].is_a(loop.type))
+            ),
+            None,
+        )
         if other is not None:
             parser.error(
                 ("property",),
                 f"loops `{other.name}` (`{other.path}`) and `{loop.name}` (`{rel_path}`) both "
-                f"follow `{loop.type}.{loop.property}`\n"
-                "one property can be the stage of one loop",
+                + (
+                    f"follow `{loop.type}.{loop.property}`\n"
+                    if other.type == loop.type
+                    else f"follow `{loop.property}`: on `{other.type}` and on `{loop.type}`, "
+                    "and one of them extends the other\n"
+                )
+                + "one property can be the stage of one loop",
                 code="schema-duplicate-loop",
             )
             continue
-        followed[(loop.type, loop.property)] = loop
+        followed.append(loop)
         loops[loop.name] = loop
     return loops
 
@@ -414,7 +428,7 @@ class _LoopParser:
 
 def _can_point(source: Schema, relation: str, target: str) -> bool:
     return any(
-        shape.relation == relation and target in shape.targets
+        shape.relation == relation and target in (shape.accepts or shape.targets)
         for _, shape in iter_references(source)
     )
 

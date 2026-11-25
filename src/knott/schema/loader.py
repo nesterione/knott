@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,7 +41,16 @@ from knott.vault.entity import MarkdownFile, markdown_body, parse_markdown
 
 TYPE_NAME = re.compile(r"^[a-z][a-z0-9_-]*$")
 
-_TOP_KEYS = ("name", "description", "kid", "path", "filename", "properties")
+_TOP_KEYS = (
+    "name",
+    "description",
+    "extends",
+    "abstract",
+    "kid",
+    "path",
+    "filename",
+    "properties",
+)
 # Top-level keys with a targeted hint instead of the generic "unknown key".
 _TOP_KEY_HINTS = {
     "type": "concept files use `name:`; `type:` belongs to entities",
@@ -149,13 +159,15 @@ def load_definitions(root: Path) -> Definitions:
         registry[schema.type] = schema
         parsers[schema.type] = parser
 
+    _link_parents(registry, parsers)
     relations = load_relations(root, issues)
     for schema in registry.values():
         parser = parsers[schema.type]
-        schema.properties = {
+        schema.own_properties = {
             name: _resolve_targets(definition, (name,), registry, relations, parser)
-            for name, definition in schema.properties.items()
+            for name, definition in schema.own_properties.items()
         }
+    _inherit(registry, parsers)
     check_definitions(
         registry,
         relations,
@@ -165,6 +177,102 @@ def load_definitions(root: Path) -> Definitions:
     connectors = load_connectors(root, issues)
     loops = load_loops(root, registry, relations, issues)
     return Definitions(registry, relations, connectors, loops, issues)
+
+
+def _link_parents(registry: dict[str, Schema], parsers: dict[str, _SchemaParser]) -> None:
+    """Check every `extends` and set each concept's ancestors (spec 0013).
+
+    An unknown parent and every concept in a cycle lose their parent; a concept
+    below a cycle keeps its chain up to the first concept in it.
+    """
+    for schema in registry.values():
+        parent = schema.extends
+        if parent is not None and parent not in registry:
+            known = ", ".join(f"`{t}`" for t in sorted(registry)) or "none"
+            message = f"`extends` names type `{parent}`, which no concept defines"
+            close = difflib.get_close_matches(parent, list(registry), n=1)
+            if close:
+                message += f"; did you mean `{close[0]}`?"
+            parsers[schema.type].error(
+                "schema-unknown-parent", ("extends",), f"{message} (known types: {known})"
+            )
+            schema.extends = None
+    in_cycle: dict[str, list[str]] = {}
+    for name in registry:
+        chain = [name]
+        current = registry[name].extends
+        while current is not None and current not in chain:
+            chain.append(current)
+            current = registry[current].extends
+        if current == name:
+            in_cycle[name] = chain
+    for name in sorted(in_cycle):
+        cycle = " → ".join(f"`{t}`" for t in (*in_cycle[name], name))
+        parsers[name].error(
+            "schema-extends-cycle",
+            ("extends",),
+            f"`extends` forms a cycle: {cycle}\n"
+            "a concept cannot be its own ancestor; remove one `extends`",
+        )
+    for name in in_cycle:
+        registry[name].extends = None
+    for schema in registry.values():
+        ancestors: list[str] = []
+        current = schema.extends
+        while current is not None:
+            ancestors.append(current)
+            current = registry[current].extends
+        schema.ancestors = tuple(ancestors)
+
+
+def _inherit(registry: dict[str, Schema], parsers: dict[str, _SchemaParser]) -> None:
+    """Give every concept what its ancestors declare (spec 0013): properties, root
+    ancestor first, then the template, `path`, `filename` and `kid: required`."""
+    for schema in registry.values():
+        effective: dict[str, AttributeDef] = {}
+        declared_in: dict[str, str] = {}
+        for ancestor in reversed(schema.ancestors):
+            for name, definition in registry[ancestor].own_properties.items():
+                if name not in effective:
+                    effective[name] = definition
+                    declared_in[name] = ancestor
+        own: dict[str, AttributeDef] = {}
+        for name, definition in schema.own_properties.items():
+            owner = declared_in.get(name)
+            if owner is None:
+                own[name] = definition
+                continue
+            parsers[schema.type].error(
+                "schema-property-redefined",
+                ("properties", name),
+                f"property `{name}` is already declared by `{owner}` "
+                f"(`{registry[owner].path}`), which `{schema.type}` extends\n"
+                "a concept can only add properties; remove it here, or move it from "
+                f"`{owner}` to the concepts that need it",
+            )
+        schema.own_properties = own
+        schema.properties = {**effective, **own}
+        schema.declared_in = declared_in
+        for ancestor in schema.ancestors:
+            parent = registry[ancestor]
+            if schema.template is None and schema.template_from is None and parent.template:
+                schema.template_from = ancestor
+            if not schema.entity_paths and schema.entity_paths_from is None and parent.entity_paths:
+                schema.entity_paths_from = ancestor
+            if schema.filename is None and schema.filename_from is None and parent.filename:
+                schema.filename_from = ancestor
+            if not schema.kid_required and schema.kid_required_from is None and parent.kid_required:
+                schema.kid_required_from = ancestor
+    # Own values are read above; only now replace them with the inherited ones.
+    for schema in registry.values():
+        if schema.template_from is not None:
+            schema.template = registry[schema.template_from].template
+        if schema.entity_paths_from is not None:
+            schema.entity_paths = registry[schema.entity_paths_from].entity_paths
+        if schema.filename_from is not None:
+            schema.filename = registry[schema.filename_from].filename
+        if schema.kid_required_from is not None:
+            schema.kid_required = True
 
 
 def _resolve_targets(
@@ -190,7 +298,10 @@ def _resolve_targets(
         if relation is not None and relation not in relations:
             parser.unknown_relation(path, relation, relations)
             relation = None
-        new_shape = ReferenceShape(known, unknown, relation)
+        accepts = frozenset(
+            s.type for s in registry.values() if any(s.is_a(target) for target in known)
+        )
+        new_shape = ReferenceShape(known, unknown, relation, accepts)
     elif isinstance(shape, ListShape):
         new_shape = ListShape(
             _resolve_targets(shape.items, (*path, "items"), registry, relations, parser)
@@ -308,6 +419,8 @@ class _SchemaParser:
         kid_required = self._kid_required(data)
         entity_paths = self._entity_paths(data)
         filename = self._filename(data)
+        extends = self._extends(data)
+        abstract = self._abstract(data)
         properties = self._parse_properties(data.get("properties"))
         if type_name is None:
             return None
@@ -319,8 +432,36 @@ class _SchemaParser:
             entity_paths=entity_paths,
             filename=filename,
             properties=properties,
+            own_properties=dict(properties),
             template=markdown_body(text),
+            extends=extends,
+            abstract=abstract,
         )
+
+    def _extends(self, data: dict[str, Any]) -> str | None:
+        value = data.get("extends")
+        if value is None or isinstance(value, str):
+            return value
+        self.error(
+            "schema-invalid-field",
+            ("extends",),
+            f"`extends` must be the name of one concept, got {kind(value)} {show(value)}",
+        )
+        return None
+
+    def _abstract(self, data: dict[str, Any]) -> bool:
+        value = data.get("abstract", False)
+        if value is None:
+            return False
+        raw = self.file.raws.get(("abstract",))
+        if type(value) is bool and (raw is None or raw in BOOLEAN_SPELLINGS):
+            return value
+        self.error(
+            "schema-invalid-field",
+            ("abstract",),
+            f"`abstract` must be true or false, got {kind(value)} {show(value, raw)}",
+        )
+        return False
 
     def _check_top_keys(self, data: dict[str, Any]) -> None:
         for key in data:
