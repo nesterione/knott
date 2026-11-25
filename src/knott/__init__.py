@@ -12,6 +12,7 @@ from knott.errors import (
 from knott.models import (
     ConnectorDefinition,
     EntityRef,
+    EnumOption,
     FixedEntity,
     InitResult,
     Issue,
@@ -32,6 +33,7 @@ __all__ = [
     "ConfigError",
     "ConnectorDefinition",
     "EntityRef",
+    "EnumOption",
     "FixedEntity",
     "InitResult",
     "Issue",

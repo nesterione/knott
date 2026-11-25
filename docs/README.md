@@ -38,7 +38,7 @@ This README has no frontmatter, so Knott treats it as an ordinary note.
 | schema | [schema-invalid-yaml](issues/schema-invalid-yaml.md) · [schema-invalid-field](issues/schema-invalid-field.md) · [schema-duplicate-type](issues/schema-duplicate-type.md) · [schema-unknown-target](issues/schema-unknown-target.md) · [schema-legacy-layout](issues/schema-legacy-layout.md) · [schema-duplicate-relation](issues/schema-duplicate-relation.md) · [schema-duplicate-connector](issues/schema-duplicate-connector.md) · [relation-unknown](issues/relation-unknown.md) · [relation-inverse-conflict](issues/relation-inverse-conflict.md) · [relation-symmetric-mismatch](issues/relation-symmetric-mismatch.md) |
 | entity | [entity-invalid-frontmatter](issues/entity-invalid-frontmatter.md) · [entity-unknown-type](issues/entity-unknown-type.md) · [not-an-entity](issues/not-an-entity.md) |
 | kid | [kid-missing](issues/kid-missing.md) · [kid-invalid](issues/kid-invalid.md) · [kid-duplicate](issues/kid-duplicate.md) |
-| attribute | [attribute-missing](issues/attribute-missing.md) · [attribute-type-mismatch](issues/attribute-type-mismatch.md) · [attribute-unknown-field](issues/attribute-unknown-field.md) |
+| attribute | [attribute-missing](issues/attribute-missing.md) · [attribute-type-mismatch](issues/attribute-type-mismatch.md) · [attribute-unknown-field](issues/attribute-unknown-field.md) · [attribute-unknown-option](issues/attribute-unknown-option.md) |
 | relation | [relation-missing](issues/relation-missing.md) · [relation-invalid-value](issues/relation-invalid-value.md) · [relation-target-outside-vault](issues/relation-target-outside-vault.md) · [relation-target-not-found](issues/relation-target-not-found.md) · [relation-target-not-entity](issues/relation-target-not-entity.md) · [relation-target-type-mismatch](issues/relation-target-type-mismatch.md) · [relation-target-ambiguous](issues/relation-target-ambiguous.md) · [relation-cycle](issues/relation-cycle.md) |
 | file | [file-missing](issues/file-missing.md) · [file-invalid-value](issues/file-invalid-value.md) · [file-unknown-connector](issues/file-unknown-connector.md) · [file-outside-vault](issues/file-outside-vault.md) · [file-not-found](issues/file-not-found.md) · [file-extension-mismatch](issues/file-extension-mismatch.md) |
 
@@ -71,9 +71,11 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 6. [Relation definitions and reverse lookup](specs/0006-relation-definitions.md)
 7. [The view's Relations panel lists inline relations](specs/0007-view-inline-relations.md)
 8. [File properties and connectors](specs/0008-file-properties.md)
+9. [Enum properties](specs/0009-enum-properties.md)
 
 ### Intents
 
 - [Relation definitions](intents/relation-definitions.md)
 - [File properties](intents/file-properties.md)
 - [Remote sources](intents/remote-sources.md)
+- [Enumerated values](intents/enumerated-values.md)

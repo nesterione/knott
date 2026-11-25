@@ -41,7 +41,7 @@ Knott.init("new-vault")             # InitResult(root, created)
 
 `ontology()` returns `Ontology(vault, types, schema_issues, relations, connectors)`. Each `OntologyType` has `type`, `description`, `path` (its concept file), `count` (entities of that type; files with invalid frontmatter are not counted), `kid_required`, `properties` (in concept-file order) and `template` (the concept file's body, `None` when blank).
 
-An `OntologyAttribute` mirrors its definition: `name`, `type` (a scalar name, or `list`, `object`, `map`, `reference` or `file`), `required` and `description`. A `list` has its item definition in `items`, a `map` its value definition in `values`, and an `object` its fields in `fields`, recursively; the `items` / `values` nodes have `name=None`. A `reference` has `targets`, the types some concept defines, `unknown_targets`, the ones none does (shown, never enforced), and `relation`, the relation it names (`None` when it names none, or one no relation file defines). A `file` has `accept`, the extensions a vault file may have (`[]` when any). `attribute.notation` gives the compact form, e.g. `list of object` or `reference → episode | meeting`.
+An `OntologyAttribute` mirrors its definition: `name`, `type` (a scalar name, or `list`, `object`, `map`, `reference`, `file` or `enum`), `required` and `description`. A `list` has its item definition in `items`, a `map` its value definition in `values`, and an `object` its fields in `fields`, recursively; the `items` / `values` nodes have `name=None`. A `reference` has `targets`, the types some concept defines, `unknown_targets`, the ones none does (shown, never enforced), and `relation`, the relation it names (`None` when it names none, or one no relation file defines). An `enum` has `options`, a list of `EnumOption(value, description)` in concept order. A `file` has `accept`, the extensions a vault file may have (`[]` when any). `attribute.notation` gives the compact form, e.g. `list of object` or `reference → episode | meeting`.
 
 `OntologyType.references()` lists every reference at any depth as `(path, attribute)` pairs, in concept-file order. Paths use `[]` for a list's items, `.*` for a map's values and `.field` for an object's fields:
 
@@ -81,7 +81,7 @@ src/knott/
   view.py       render_ontology(): Ontology → self-contained HTML (template in _view/)
   models.py     Issue, Stats, ValidationResult, SchemaInfo, InitResult, MigrateResult,
                 Ontology, OntologyType, OntologyAttribute, RelationDefinition,
-                ConnectorDefinition,
+                ConnectorDefinition, EnumOption,
                 Refs, EntityRef, RefGroup, Ref
   errors.py     KnottError hierarchy
   schema/       loader (concept files), relations (relation files and their checks),

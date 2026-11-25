@@ -13,6 +13,7 @@ from knott.errors import ConfigError, KnottError, PathNotFoundError, PathOutside
 from knott.models import (
     ConnectorDefinition,
     EntityRef,
+    EnumOption,
     FixedEntity,
     InitResult,
     Issue,
@@ -30,6 +31,7 @@ from knott.schema.loader import load_definitions, load_ontology, load_schemas
 from knott.schema.migrate import migrate_vault
 from knott.schema.models import (
     AttributeDef,
+    EnumShape,
     FileShape,
     ListShape,
     MapShape,
@@ -391,6 +393,11 @@ def _ontology_attribute(a: AttributeDef) -> OntologyAttribute:
         unknown_targets=list(shape.unknown) if isinstance(shape, ReferenceShape) else [],
         relation=shape.relation if isinstance(shape, ReferenceShape) else None,
         accept=list(shape.accept) if isinstance(shape, FileShape) else [],
+        options=(
+            [EnumOption(value=v, description=d) for v, d in shape.options]
+            if isinstance(shape, EnumShape)
+            else []
+        ),
     )
 
 

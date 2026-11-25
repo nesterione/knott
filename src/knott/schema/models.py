@@ -54,11 +54,24 @@ class FileShape:
     """Lowercase extensions a vault file may have, without the dot. Empty: any."""
 
 
-Shape = ScalarType | ListShape | ObjectShape | MapShape | ReferenceShape | FileShape
+@dataclass(frozen=True)
+class EnumShape:
+    """A string that must be one of the listed options (spec 0009)."""
+
+    options: tuple[tuple[str, str | None], ...]
+    """``(option, description)`` pairs in the concept's order; never empty."""
+
+    @property
+    def names(self) -> tuple[str, ...]:
+        return tuple(name for name, _ in self.options)
+
+
+Shape = ScalarType | ListShape | ObjectShape | MapShape | ReferenceShape | FileShape | EnumShape
 
 COMPOUND_KINDS = ("list", "object", "map")
 REFERENCE_KIND = "reference"
 FILE_KIND = "file"
+ENUM_KIND = "enum"
 
 
 def shape_kind(shape: Shape) -> str:
@@ -73,6 +86,8 @@ def shape_kind(shape: Shape) -> str:
         return REFERENCE_KIND
     if isinstance(shape, FileShape):
         return FILE_KIND
+    if isinstance(shape, EnumShape):
+        return ENUM_KIND
     return shape.value
 
 

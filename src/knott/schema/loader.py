@@ -13,10 +13,12 @@ from knott.models import Issue
 from knott.schema.connectors import load_connectors
 from knott.schema.models import (
     COMPOUND_KINDS,
+    ENUM_KIND,
     FILE_KIND,
     REFERENCE_KIND,
     AttributeDef,
     ConnectorDef,
+    EnumShape,
     FileShape,
     ListShape,
     MapShape,
@@ -48,7 +50,7 @@ _RESERVED_FIELDS = {
 }
 _DEFINITION_KEYS = ("type", "required", "description")
 _PROPERTY_TYPES = ", ".join(
-    [*(t.value for t in ScalarType), *COMPOUND_KINDS, REFERENCE_KIND, FILE_KIND]
+    [*(t.value for t in ScalarType), *COMPOUND_KINDS, REFERENCE_KIND, FILE_KIND, ENUM_KIND]
 )
 _EXTENSION = re.compile(r"^[a-z0-9]+$")
 # The key that nests the inner definition, by kind.
@@ -468,6 +470,8 @@ class _SchemaParser:
             allowed.append("relation")
         if kind_name == FILE_KIND:
             allowed.append("accept")
+        if kind_name == ENUM_KIND:
+            allowed.append("options")
         for key in definition:
             if key == "required" and nested:
                 container = "list" if base[-1] == "items" else "map"
@@ -480,7 +484,9 @@ class _SchemaParser:
             elif key == "relation":
                 self._check_relation_placement(base, kind_name)
             elif key == "accept":
-                self._check_accept_placement(base, kind_name)
+                self._check_owner(base, kind_name, "accept", FILE_KIND)
+            elif key == "options":
+                self._check_owner(base, kind_name, "options", ENUM_KIND)
             elif key in _NESTING_KEYS.values():
                 owner = next(k for k, v in _NESTING_KEYS.items() if v == key)
                 if kind_name is not None and kind_name != owner:
@@ -514,21 +520,82 @@ class _SchemaParser:
                 f"`relation` is only allowed when `type` is reference, but `type` is {kind_name}",
             )
 
-    def _check_accept_placement(self, base: _yaml.KeyPath, kind_name: str | None) -> None:
-        """`accept:` belongs on a file shape only (spec 0008)."""
+    def _check_owner(
+        self, base: _yaml.KeyPath, kind_name: str | None, key: str, owner: str
+    ) -> None:
+        """`accept:` belongs on a file shape only (spec 0008), `options:` on an enum (0009)."""
         if kind_name in ("list", "map"):
             inner = _NESTING_KEYS[kind_name]
             self.error(
                 "schema-invalid-field",
-                (*base, "accept"),
-                f"`accept` is not allowed on a {kind_name}: put `accept:` on `{inner}`",
+                (*base, key),
+                f"`{key}` is not allowed on a {kind_name}: put `{key}:` on `{inner}`",
             )
-        elif kind_name is not None and kind_name != FILE_KIND:
+        elif kind_name is not None and kind_name != owner:
             self.error(
                 "schema-invalid-field",
-                (*base, "accept"),
-                f"`accept` is only allowed when `type` is file, but `type` is {kind_name}",
+                (*base, key),
+                f"`{key}` is only allowed when `type` is {owner}, but `type` is {kind_name}",
             )
+
+    def _parse_options(
+        self, value: Any, base: _yaml.KeyPath, label: str
+    ) -> tuple[tuple[str, str | None], ...] | None:
+        """Parse `options`: a list of strings, or a mapping of option → description."""
+        if value is None:
+            self.error(
+                "schema-invalid-field",
+                base[:-1],
+                f"{label} has type enum but no `options`, e.g. options: [draft, published]",
+            )
+            return None
+        if not isinstance(value, list | dict) or not value:
+            got = (
+                "an empty " + ("list" if value == [] else "mapping")
+                if value in ([], {})
+                else (f"{kind(value)} {show(value)}")
+            )
+            self.error(
+                "schema-invalid-field",
+                base,
+                f"`options` must be a non-empty list of options, or a mapping of option to "
+                f"description, got {got}, e.g. options: [draft, published]",
+            )
+            return None
+        pairs = (
+            [(index, item, None) for index, item in enumerate(value)]
+            if isinstance(value, list)
+            else [(key, key, description) for key, description in value.items()]
+        )
+        options: dict[str, str | None] = {}
+        ok = True
+        for where, option, description in pairs:
+            at = (*base, where)
+            if not isinstance(option, str):
+                self._option_not_string(value, base, where, option)
+                ok = False
+            elif not option or option != option.strip():
+                problem = "is empty" if not option else "has whitespace at its start or end"
+                self.error("schema-invalid-field", at, f"option {show(option)} {problem}")
+                ok = False
+            elif option in options:
+                self.error(
+                    "schema-invalid-field",
+                    at,
+                    f"`options` lists `{option}` twice; name each option once",
+                )
+                ok = False
+            elif description is not None and not isinstance(description, str):
+                self.error(
+                    "schema-invalid-field",
+                    at,
+                    f"the description of option `{option}` must be a string, "
+                    f"got {kind(description)} {show(description)}",
+                )
+                ok = False
+            else:
+                options[option] = description or None
+        return tuple(options.items()) if ok else None
 
     def _parse_accept(self, value: Any, base: _yaml.KeyPath) -> tuple[str, ...] | None:
         """Parse `accept`: a non-empty list of unique lowercase extensions, without the dot."""
@@ -566,12 +633,44 @@ class _SchemaParser:
                 extensions.append(item)
         return tuple(extensions) if ok else None
 
+    def _option_not_string(self, value: Any, base: _yaml.KeyPath, where: Any, option: Any) -> None:
+        """Report an option YAML did not read as a string, with a hint to quote a scalar."""
+        if isinstance(value, dict):
+            # A non-string mapping key has no source position or spelling of its own.
+            message = (
+                f"an option must be a string, but YAML reads the key {show(option)} as "
+                f"{kind(option)}; quote the key"
+            )
+            if type(option) is bool:
+                message += " (YAML reads unquoted yes/no/on/off as booleans)"
+            self.error("schema-invalid-field", base, message)
+            return
+        at = (*base, where)
+        if isinstance(option, list | dict) or option is None:
+            self.error(
+                "schema-invalid-field",
+                at,
+                f"an option must be a string, got {kind(option)} {show(option)}",
+            )
+            return
+        raw = self.file.raws.get(at)
+        text = raw if raw is not None else show(option).strip("`")
+        self.error(
+            "schema-invalid-field",
+            at,
+            f"an option must be a string, but YAML reads {show(option, raw)} as "
+            f'{kind(option)}; quote it, e.g. "{text}"',
+        )
+
     def _parse_shape(
         self, kind_name: str, definition: dict[Any, Any], base: _yaml.KeyPath, label: str
     ) -> Shape | None:
         if kind_name == FILE_KIND:
             accept = self._parse_accept(definition.get("accept"), (*base, "accept"))
             return None if accept is None else FileShape(accept)
+        if kind_name == ENUM_KIND:
+            options = self._parse_options(definition.get("options"), (*base, "options"), label)
+            return None if options is None else EnumShape(options)
         if kind_name not in _NESTING_KEYS:
             return ScalarType(kind_name)
         key = _NESTING_KEYS[kind_name]
@@ -679,5 +778,11 @@ def _kind_name(raw_type: Any) -> str | None:
     """The property kind named by a schema `type` value, or None if it names none."""
     if not isinstance(raw_type, str):
         return None
-    kinds = {*COMPOUND_KINDS, REFERENCE_KIND, FILE_KIND, *(t.value for t in ScalarType)}
+    kinds = {
+        *COMPOUND_KINDS,
+        REFERENCE_KIND,
+        FILE_KIND,
+        ENUM_KIND,
+        *(t.value for t in ScalarType),
+    }
     return raw_type if raw_type in kinds else None

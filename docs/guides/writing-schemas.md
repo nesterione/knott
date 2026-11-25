@@ -61,6 +61,7 @@ This is a shortened copy of this folder's `.knott/concepts/decision.md`.
 - **Several possible types?** Use `target: [episode, meeting]` rather than two properties.
 - **Prefer a reference over a string** when the value names another entity. You get existence and type checks for free.
 - **Require a `kid` when outside tools track entities**: `kid: required` at the top level. Progress records and logs can then refer to the entity even after its file moves. See [Kid](../concepts/kid.md).
+- **Use an `enum` for a fixed set of values**: `status: { type: enum, options: [draft, verified] }`. A typo or a synonym is then reported. Describe the options when their meaning isn't obvious, with the mapping form.
 - **Don't fight strict typing.** If a value may be `"N/A"`, it's a `string`, not an `integer`.
 
 ## Structured properties

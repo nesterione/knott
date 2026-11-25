@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Attribute
-summary: A property that holds a value of its own (a scalar, list, object or map), declared under `properties:` in its concept file.
+summary: A property that holds a value of its own (a scalar, enum, list, object or map), declared under `properties:` in its concept file.
 spec_section: "§8"
 related:
   - "[Schema](schema.md)"
@@ -9,7 +9,7 @@ related:
 ---
 # Attribute
 
-An attribute is a property whose value belongs to the entity itself: a scalar, or a **list**, **object** or **map** nested to any depth. A property that points at another entity is a [relation](relation.md); it uses the same shapes, with `reference` in place of a scalar.
+An attribute is a property whose value belongs to the entity itself: a scalar, an **enum**, or a **list**, **object** or **map** nested to any depth. A property that points at another entity is a [relation](relation.md); it uses the same shapes, with `reference` in place of a scalar.
 
 ## Scalars
 
@@ -23,6 +23,26 @@ Typing is strict. There is no coercion beyond this table:
 | `boolean` | `true` / `false` | everything else, including `yes`/`no`/`on`/`off` |
 | `date` | YAML date, or `"2026-10-06"` | datetimes |
 | `datetime` | YAML timestamp, or ISO 8601 string with a time | plain dates |
+
+## Enums
+
+An `enum` is a string that must be one of the options its concept lists:
+
+```yaml
+properties:
+  gender: { type: enum, options: [m, f] }
+  level:
+    type: enum
+    options:
+      A1: Understands and uses familiar everyday expressions.
+      A2: Handles simple, routine exchanges.
+```
+
+- `options` is a list of strings, or a mapping of option to description when the options need explaining.
+- Options are compared exactly: `a1` is not `A1`, and a value is not trimmed. A string outside the set is [`attribute-unknown-option`](../issues/attribute-unknown-option.md), with the options listed.
+- Options are strings. Quote one that YAML would read as something else (`"no"`, `"1"`), in the concept and in the entity.
+- For several values from one set, declare a `list` with `enum` `items`.
+- Each concept lists its own options; a set can't be shared between types yet.
 
 ## Lists, objects and maps
 
@@ -69,4 +89,4 @@ A property can also name a file that is not an entity, in the vault or kept else
 
 A shape can hold references at any depth, e.g. a list of objects with a `person: {type: reference, target: person}` field. Those values are checked as [relations](relation.md).
 
-Not supported yet: enums, unions of scalar types, item counts, custom scalars.
+Not supported yet: unions of scalar types, item counts, custom scalars.

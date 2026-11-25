@@ -132,9 +132,21 @@ def _attribute_lines(attributes: list[OntologyAttribute], indent: str) -> list[s
                 what = "each item" if node.items is not None else "each value"
                 lines.append(f"{indent}  {what}: {_one_line(inner.description)}")
             node = inner
+        lines += [f"{indent}  {line}" for line in _option_lines(node)]
         if node.fields:
             lines += _attribute_lines(node.fields, indent + "  ")
     return lines
+
+
+def _option_lines(a: OntologyAttribute) -> list[str]:
+    """An enum's options: one `one of:` line, or a line per option when any is described."""
+    if not a.options:
+        return []
+    if not any(o.description for o in a.options):
+        return ["one of: " + " | ".join(o.value for o in a.options)]
+    return [
+        f"{o.value}: {_one_line(o.description)}" if o.description else o.value for o in a.options
+    ]
 
 
 def format_relations(relations: list[RelationDefinition]) -> str:

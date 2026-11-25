@@ -46,11 +46,12 @@ Concept files use `name:`, not `type:`. Entities keep `type: transcript`, so a c
 | top | `description` | no | string |
 | top | `kid` | no | `required`: every entity needs a [kid](kid.md) |
 | top | `properties` | no | property name → definition, in the order you want them shown |
-| property | `type` | yes | a scalar type, `list`, `object`, `map`, `reference` or `file` |
+| property | `type` | yes | a scalar type, `enum`, `list`, `object`, `map`, `reference` or `file` |
 | property | `required` | no | `true`/`false`, default `false` |
 | property | `description` | no | string |
 | property | `items` / `fields` / `values` | with `list` / `object` / `map` | see [Attribute](attribute.md) |
 | property | `target` | with `reference` | a type name, or a list of type names: `target: [episode, meeting]` |
+| property | `options` | with `enum` | the allowed values: `options: [m, f]`, or option → description, see [Attribute](attribute.md#enums) |
 | property | `accept` | no, `file` only | the extensions a vault file may have: `accept: [mp3, wav]`, see [File](file.md) |
 | property | `relation` | no, `reference` only | a relation defined in `.knott/relations/`, see [relation definitions](relation.md#relation-definitions) |
 
