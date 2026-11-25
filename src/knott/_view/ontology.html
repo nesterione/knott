@@ -457,7 +457,7 @@ function setMode(m, instant) {
   while (alpha >= 0.005) { forceStep(); alpha *= 0.985; }
   draw(); fit(false);
 }
-document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => setMode(b.dataset.l));
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => { if (boardLoop !== null) closeBoard(); setMode(b.dataset.l); });
 
 // ---------- drag ----------
 let dragMoved = false;
