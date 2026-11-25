@@ -1,5 +1,6 @@
 ---
 name: spec
+path: specs
 description: >
   A change specification: the exact behaviour one change adds or alters (formats, rules, issue codes, CLI and API output, edge cases). Editable while draft or accepted, frozen once implemented. A later change writes a new spec that amends or supersedes it. SPEC.md holds the current state.
 properties:

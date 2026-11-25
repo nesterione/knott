@@ -1,5 +1,6 @@
 ---
 name: command
+path: commands
 description: A `knott` CLI command.
 properties:
   title:

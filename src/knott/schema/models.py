@@ -120,6 +120,8 @@ class Schema:
     description: str | None = None
     kid_required: bool = False
     """Set by `kid: required`: every entity of this type must have a `kid`."""
+    entity_paths: tuple[str, ...] = ()
+    """Folder patterns from `path` (spec 0011); empty when entities can live anywhere."""
     properties: dict[str, AttributeDef] = field(default_factory=dict)
     """Top-level properties in schema order; references are properties too."""
     template: str | None = None

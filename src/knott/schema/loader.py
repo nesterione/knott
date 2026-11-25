@@ -32,13 +32,14 @@ from knott.schema.models import (
     SchemaPath,
     Shape,
 )
+from knott.schema.paths import normalize_pattern, pattern_problem
 from knott.schema.relations import check_definitions, load_relations
 from knott.vault.discovery import CONCEPTS_DIR, LEGACY_SCHEMAS_DIR
 from knott.vault.entity import MarkdownFile, markdown_body, parse_markdown
 
 TYPE_NAME = re.compile(r"^[a-z][a-z0-9_-]*$")
 
-_TOP_KEYS = ("name", "description", "kid", "properties")
+_TOP_KEYS = ("name", "description", "kid", "path", "properties")
 # Top-level keys with a targeted hint instead of the generic "unknown key".
 _TOP_KEY_HINTS = {
     "type": "concept files use `name:`; `type:` belongs to entities",
@@ -304,6 +305,7 @@ class _SchemaParser:
         type_name = self._check_name(data)
         description = self._optional_str(data, ("description",))
         kid_required = self._kid_required(data)
+        entity_paths = self._entity_paths(data)
         properties = self._parse_properties(data.get("properties"))
         if type_name is None:
             return None
@@ -312,6 +314,7 @@ class _SchemaParser:
             path=self.path,
             description=description,
             kid_required=kid_required,
+            entity_paths=entity_paths,
             properties=properties,
             template=markdown_body(text),
         )
@@ -355,6 +358,53 @@ class _SchemaParser:
             f"`kid` must be `required`, got {show(value)}; omit it to make `kid` optional",
         )
         return False
+
+    def _entity_paths(self, data: dict[str, Any]) -> tuple[str, ...]:
+        """The folder patterns of `path` (spec 0011); none when any of them is invalid."""
+        value = data.get("path")
+        if value is None:
+            return ()
+        if isinstance(value, str):
+            items: list[tuple[_yaml.KeyPath, Any]] = [(("path",), value)]
+        elif isinstance(value, list) and value:
+            items = [(("path", i), item) for i, item in enumerate(value)]
+        else:
+            self.error(
+                "schema-invalid-field",
+                ("path",),
+                "`path` must be a folder pattern or a non-empty list of them, "
+                f"got {kind(value)} {show(value)}",
+            )
+            return ()
+        patterns: list[str] = []
+        valid = True
+        for key_path, item in items:
+            problem: str | None
+            if not isinstance(item, str):
+                problem = f"must be a string, got {kind(item)} {show(item)}"
+            else:
+                pattern = normalize_pattern(item)
+                problem = pattern_problem(pattern)
+                if problem is None and pattern in patterns:
+                    problem = "is listed twice"
+                if problem is None:
+                    patterns.append(pattern)
+            if problem is not None:
+                valid = False
+                self._path_error(key_path, f"`path` pattern {show(item)} {problem}")
+        return tuple(patterns) if valid else ()
+
+    def _path_error(self, key_path: _yaml.KeyPath, message: str) -> None:
+        line = self.line(key_path) or self.line(("path",))
+        self.issues.append(
+            Issue(
+                code="schema-invalid-field",
+                path=self.path,
+                line=line,
+                field="path",
+                message=message,
+            )
+        )
 
     def _optional_str(self, mapping: dict[Any, Any], key_path: _yaml.KeyPath) -> str | None:
         value = mapping.get(key_path[-1])

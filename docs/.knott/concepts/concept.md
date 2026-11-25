@@ -1,5 +1,6 @@
 ---
 name: concept
+path: concepts
 description: >
   A core idea in Knott's model. Read concepts first to understand what the other documents refer to.
 properties:

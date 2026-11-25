@@ -45,6 +45,7 @@ Concept files use `name:`, not `type:`. Entities keep `type: transcript`, so a c
 | top | `name` | yes | `^[a-z][a-z0-9_-]*$` |
 | top | `description` | no | string |
 | top | `kid` | no | `required`: every entity needs a [kid](kid.md) |
+| top | `path` | no | the folders entities of this type are stored in: `path: specs`, or a list, see [Where entities live](#where-entities-live) |
 | top | `properties` | no | property name → definition, in the order you want them shown |
 | property | `type` | yes | a scalar type, `enum`, `list`, `object`, `map`, `reference` or `file` |
 | property | `required` | no | `true`/`false`, default `false` |
@@ -58,6 +59,27 @@ Concept files use `name:`, not `type:`. Entities keep `type: transcript`, so a c
 Unknown keys are **errors** in concept files (Knott owns these files, so `propertes:` must not pass silently), unlike in entities. A top-level property can't be named `type` or `kid`; both belong to knott.
 
 A property whose shape is `reference` is a [relation](relation.md). Every other property is an [attribute](attribute.md). Both live in the one `properties` map.
+
+## Where entities live
+
+Without `path`, an entity of the type can be stored anywhere in the vault. With it, an entity in any other folder is [`entity-misplaced`](../issues/entity-misplaced.md):
+
+```yaml
+name: episode
+path: episodes/*        # or a list: [specs, drafts/**]
+```
+
+A pattern is matched against the entity's folder, relative to the vault root; the file name is not part of it. Matching regards case.
+
+| Pattern | Matches |
+|---|---|
+| `specs` | the folder `specs` only, not its subfolders |
+| `episodes/*` | any folder directly in `episodes`. `*` is any run of characters inside one folder name, also none: `drafts-*` |
+| `episodes/**` | `episodes` and every folder below it |
+| `"**/specs"` | a folder named `specs` at any depth |
+| `.` | the vault root |
+
+Nothing else is special: no `?`, `[…]` or regular expressions. Quote a pattern that starts with `*` (`path: "**/specs"`), or YAML reads it as an alias. `path` says where a type lives, not what a folder holds, so other types and plain notes can share the folder. Knott never moves a file: references are relative paths, so a move changes the links around it.
 
 ## The template
 

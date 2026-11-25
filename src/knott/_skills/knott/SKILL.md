@@ -23,7 +23,7 @@ A Knott vault is an ordinary directory of Markdown files with a `.knott/` direct
 
 1. Run `knott types --verbose` to see each type's concept file, whether it has a template, its references and its properties (with nested shapes), and the vault's relations and connectors with their usage guidance. If it reports `schema-legacy-layout`, migrate first (see Commands).
 2. Pick the relevant type and read its concept file: `description`, `properties`, which fields are `required: true`, and the body template.
-3. Create or update the Markdown entity. Put it wherever it makes sense to a human; Knott does not dictate folders. For a new entity, start the body from the concept's template (`template: yes`): keep its headings, fill each section, and delete a section's `<!-- … -->` guidance once it is filled. Knott never checks the body.
+3. Create or update the Markdown entity. If `knott types --verbose` shows a `path:` line for the type, put the file in a folder that matches it (`specs` is that folder only, `episodes/*` one level below, `episodes/**` any depth, `.` the vault root); `entity-misplaced` means it is somewhere else. Without a `path:` line, put it wherever it makes sense to a human. For a new entity, start the body from the concept's template (`template: yes`): keep its headings, fill each section, and delete a section's `<!-- … -->` guidance once it is filled. Knott never checks the body.
 4. Write references as relative paths (see below).
 5. Run `knott validate --fix <file>` after creating an entity (it adds the `kid`), and `knott validate <file>` after **every** change.
 6. Fix every reported issue and validate again before finishing.

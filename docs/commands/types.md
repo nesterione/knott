@@ -17,6 +17,7 @@ lexeme  (.knott/concepts/lexeme.md)
   A word with its senses and forms.
   kid: required
   template: yes
+  path: lexemes/**
   references: senses[].see_also, topic
   properties:
     lemma*   string
@@ -32,6 +33,7 @@ lexeme  (.knott/concepts/lexeme.md)
 
 - `kid: required` appears when the concept file says so.
 - `template:` is `yes` when the concept file has a body.
+- `path:` appears when the concept file says [where its entities are stored](../concepts/schema.md#where-entities-live); several patterns are joined with ` | `.
 - `references:` lists the path of every reference at any depth, or `none`. Paths use `[]` for list items, `.*` for map values and `.field` for object fields.
 - `*` marks a required property. Object fields are indented under their property.
 - A reference shows its targets after `→`. A target that no concept defines is marked `(unknown)`.
