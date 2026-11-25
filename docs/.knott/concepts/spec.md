@@ -7,9 +7,13 @@ properties:
     type: string
     required: true
   status:
-    type: string
+    type: enum
     required: true
-    description: draft, accepted, or implemented. An implemented spec is never edited again; "superseded" is found by reverse lookup, not stored.
+    description: An implemented spec is never edited again; "superseded" is found by reverse lookup, not stored.
+    options:
+      draft: Being written.
+      accepted: Agreed; gaps found while implementing are fixed in the spec itself.
+      implemented: Merged and released. Frozen.
   created_on:
     type: date
     required: true

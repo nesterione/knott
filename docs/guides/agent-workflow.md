@@ -26,6 +26,8 @@ When starting a new entity from a copy of another file, delete the copied `kid:`
 
 Before renaming, deleting or replacing an entity, run `knott refs <file>` to see who links to it, and update those files too.
 
+Before changing a property that a [loop](../concepts/loop.md) follows (often `status`), run `knott loops <name>`: it lists what each entity's next stage still needs. Add those first, then change the property. Setting a stage whose needs are not met is [`loop-stage-unmet`](../issues/loop-stage-unmet.md).
+
 If every command reports only `schema-legacy-layout`, the vault predates 0.5. Run `knott migrate` and show the diff to the user.
 
 ## Reading results

@@ -7,6 +7,7 @@ concepts:
   - "[Ontology](../concepts/ontology.md)"
   - "[Schema](../concepts/schema.md)"
   - "[Relation](../concepts/relation.md)"
+  - "[Loop](../concepts/loop.md)"
 ---
 # knott view
 
@@ -24,6 +25,14 @@ A **Relations (N defined · M inline)** button in the header lists every link in
 - **Inline**: every reference that names no relation file, as `<type>.<path>`, grouped by what it points at, largest group first. Several inline relations with one target are the ones to consider for a shared relation file.
 
 The button is hidden only when the vault has neither.
+
+A **Loops (N)** button opens a board for the vault's [loops](../concepts/loop.md), one loop at a time, over the diagram. A dropdown switches loops, and the URL hash `#loop=<name>` opens one directly.
+
+- **Columns** are the stages on the path, in order, then the side exits, dimmed, then `no stage` when it has entities. Click a column header to see what the stage needs and its guidance.
+- **Cards** are entities: the title (the `title` property when the type has one, else the file name), the path, and what the next stage still needs, or `ready`.
+- **A red card** is at a stage whose needs it doesn't meet; `knott validate` reports the same as [`loop-stage-unmet`](../issues/loop-stage-unmet.md).
+
+A type's panel also lists the loops that follow it, with entity counts per stage. The button is hidden when the vault has no loops. With loops, the page contains the titles and paths of the entities whose type has a loop; keep that in mind before sharing the file. Cards are not links: the page is static and usually sits in a temp folder.
 
 Three layouts sit behind a toggle: **Layered** (default), **Force** and **Radial**. The page remembers the last one, and the URL hash (`#layered`, `#force`, `#radial`) selects one directly.
 

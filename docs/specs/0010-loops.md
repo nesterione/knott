@@ -1,8 +1,9 @@
 ---
 type: spec
 title: "0010: Loops"
-status: accepted
+status: implemented
 created_on: 2026-11-25
+released_in: "0.9.0"
 realizes:
   - "[Loops](../intents/loops.md)"
 decisions:
@@ -166,7 +167,7 @@ After the connectors, a `loops:` section lists every loop, sorted by name: the n
 - A **Loops (N)** button in the header, hidden when the vault has no loaded loop, opens a board. One loop is shown at a time; a dropdown switches, and the URL hash `#loop=<name>` opens one directly.
 - Columns are the stages on the path, in order, then the side exits, dimmed, then `no stage` when it has entities. Each column header shows the entity count; clicking it shows the stage's needs and guidance (HTML-escaped).
 - Each entity is a card: its `title` when the type has a top-level string property of that name and the entity sets it, otherwise the file name; its vault-relative path, as text; and its missing for next. A card with unmet needs is marked and lists them.
-- The embedded data gains `loops`, the same data as `knott loops --format json`. The page now holds the titles and paths of entities whose type has a loop; nothing else about entities is embedded.
+- The embedded data gains `loops`, the loop definitions, and `loop_reports`, the same data as `knott loops --format json`. The page now holds the titles and paths of entities whose type has a loop; nothing else about entities is embedded.
 - The page stays static: no server, no network, no editing. Cards are not links.
 
 ### Python API

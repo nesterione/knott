@@ -21,6 +21,8 @@ from knott.errors import KnottError
 from knott.models import (
     ConnectorDefinition,
     Issue,
+    LoopDefinition,
+    LoopReport,
     MigrateResult,
     OntologyAttribute,
     OntologyType,
@@ -29,6 +31,7 @@ from knott.models import (
     ValidationResult,
 )
 from knott.skills import InstallResult, InstallStatus, SkillTarget, install_skill
+from knott.vault.loops import need_label, need_text
 from knott.view import render_ontology
 
 app = typer.Typer(
@@ -179,6 +182,77 @@ def format_connectors(connectors: list[ConnectorDefinition]) -> str:
     return "connectors:\n" + "\n\n".join(blocks)
 
 
+def format_loop_definitions(loops: list[LoopDefinition]) -> str:
+    """The ``loops:`` section: per loop its name and property, then its description,
+    path, side exits, each stage's needs and the guidance, indented."""
+    blocks: list[str] = []
+    for loop in loops:
+        lines = [f"  {loop.name}  {loop.type}.{loop.property}"]
+        if loop.description and loop.description.strip():
+            lines += [f"    {line}".rstrip() for line in loop.description.strip().splitlines()]
+        lines.append("    stages: " + " → ".join(s.name for s in loop.stages))
+        if loop.exits:
+            lines.append("    exits: " + " | ".join(s.name for s in loop.exits))
+        for stage in loop.stages:
+            if stage.needs:
+                needs = ", ".join(need_label(n) for n in stage.needs)
+                lines.append(f"    {stage.name} needs: {needs}")
+        guidance = [loop.guidance] if loop.guidance else []
+        guidance += [
+            f"## {s.name}\n{s.guidance}" for s in [*loop.stages, *loop.exits] if s.guidance
+        ]
+        for text in guidance:
+            lines += [f"    {line}".rstrip() for line in text.splitlines()]
+        blocks.append("\n".join(lines))
+    return "loops:\n" + "\n\n".join(blocks)
+
+
+NO_STAGE = "no stage"
+
+
+def format_loops(reports: list[LoopReport]) -> str:
+    """One line per loop: name, ``type.property``, then entity counts per stage."""
+    rows: list[tuple[str, str, str]] = []
+    for report in reports:
+        loop = report.loop
+        counts = [f"{p.stage} {len(p.entities)}" for p in report.stages]
+        if report.exits:
+            exits = " · ".join(f"{p.stage} {len(p.entities)}" for p in report.exits)
+            counts.append(f"({exits})")
+        if report.unplaced:
+            counts.append(f"{NO_STAGE} {len(report.unplaced)}")
+        rows.append((loop.name, f"{loop.type}.{loop.property}", " · ".join(counts)))
+    if not rows:
+        return ""
+    widths = [max(len(row[i]) for row in rows) for i in range(2)]
+    return "\n".join(
+        f"{name:<{widths[0]}}  {followed:<{widths[1]}}  {counts}" for name, followed, counts in rows
+    )
+
+
+def format_loop(report: LoopReport) -> str:
+    """Each stage that has entities, then side exits, then ``no stage``; under each
+    entity its unmet needs and what the next stage still misses."""
+    blocks: list[str] = []
+    for placement in report.stages:
+        if not placement.entities:
+            continue
+        lines = [placement.stage]
+        for entity in placement.entities:
+            lines.append(f"  {entity.path}")
+            lines += [f"    ✗ needs {need_text(need)}" for need in entity.unmet]
+            if entity.next is not None:
+                missing = ", ".join(need_label(need) for need in entity.missing_next)
+                state = f"missing {missing}" if missing else "ready"
+                lines.append(f"    next: {entity.next} — {state}")
+        blocks.append("\n".join(lines))
+    groups = [(p.stage, p.entities) for p in report.exits] + [(NO_STAGE, report.unplaced)]
+    for label, entities in groups:
+        if entities:
+            blocks.append("\n".join([label, *(f"  {entity.path}" for entity in entities)]))
+    return "\n".join(blocks)
+
+
 def _label(name: str, required: bool) -> str:
     return name + ("*" if required else "")
 
@@ -296,7 +370,7 @@ def types(
             "-v",
             help=(
                 "Show each type's concept file, description, template, references and "
-                "properties, then the relations and connectors."
+                "properties, then the relations, connectors and loops."
             ),
         ),
     ] = False,
@@ -313,6 +387,8 @@ def types(
             sections.append(format_relations(ontology.relations))
         if ontology.connectors:
             sections.append(format_connectors(ontology.connectors))
+        if ontology.loops:
+            sections.append(format_loop_definitions(ontology.loops))
         if sections:
             typer.echo("\n\n".join(sections))
     else:
@@ -378,6 +454,34 @@ def refs(
 
 
 @app.command()
+def loops(
+    name: Annotated[
+        str | None, typer.Argument(help="A loop's name (default: every loop).", metavar="[NAME]")
+    ] = None,
+    output: Annotated[
+        OutputFormat, typer.Option("--format", help="Output format.")
+    ] = OutputFormat.TEXT,
+) -> None:
+    """Show where entities stand in the vault's loops, and what each still needs."""
+    try:
+        vault = Knott.open(".")
+        reports = vault.loops() if name is None else [vault.loops(name)]
+    except KnottError as error:
+        raise _fail(error) from None
+    if output is OutputFormat.JSON:
+        data = {"loops": [report.model_dump() for report in reports]}
+        typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        text = format_loops(reports) if name is None else format_loop(reports[0])
+        if text:
+            typer.echo(text)
+    issues = vault.schema_issues()
+    if issues:
+        typer.echo("\n\n".join(format_issue(issue) for issue in issues), err=True)
+        raise typer.Exit(EXIT_INVALID)
+
+
+@app.command()
 def view(
     path: Annotated[
         Path, typer.Argument(help="A path inside the vault (default: current directory).")
@@ -396,6 +500,7 @@ def view(
     try:
         vault = Knott.open(path)
         ontology = vault.ontology()
+        loop_reports = vault.loops()
     except KnottError as error:
         raise _fail(error) from None
     legacy = [i for i in vault.schema_issues() if i.code == "schema-legacy-layout"]
@@ -409,7 +514,7 @@ def view(
     try:
         if output is None:
             _check_private(target.parent)
-        target.write_text(render_ontology(ontology), encoding="utf-8")
+        target.write_text(render_ontology(ontology, loop_reports), encoding="utf-8")
     except OSError as error:
         raise _fail(KnottError(f"cannot write {target}: {error.strerror or error}")) from None
     typer.echo(f"Wrote {target}")

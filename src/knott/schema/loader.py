@@ -11,6 +11,7 @@ from knott import _yaml
 from knott._values import BOOLEAN_SPELLINGS, kind, show
 from knott.models import Issue
 from knott.schema.connectors import load_connectors
+from knott.schema.loops import load_loops
 from knott.schema.models import (
     COMPOUND_KINDS,
     ENUM_KIND,
@@ -21,6 +22,7 @@ from knott.schema.models import (
     EnumShape,
     FileShape,
     ListShape,
+    LoopDef,
     MapShape,
     ObjectShape,
     ReferenceShape,
@@ -110,6 +112,7 @@ class Definitions:
     schemas: dict[str, Schema] = field(default_factory=dict)
     relations: dict[str, RelationDef] = field(default_factory=dict)
     connectors: dict[str, ConnectorDef] = field(default_factory=dict)
+    loops: dict[str, LoopDef] = field(default_factory=dict)
     issues: list[Issue] = field(default_factory=list)
 
 
@@ -158,7 +161,8 @@ def load_definitions(root: Path) -> Definitions:
         issues,
     )
     connectors = load_connectors(root, issues)
-    return Definitions(registry, relations, connectors, issues)
+    loops = load_loops(root, registry, relations, issues)
+    return Definitions(registry, relations, connectors, loops, issues)
 
 
 def _resolve_targets(

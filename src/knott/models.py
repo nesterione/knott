@@ -194,6 +194,84 @@ class ConnectorDefinition(_Frozen):
     """Vault-relative path of the connector file."""
 
 
+LoopNeedKind = Literal["property", "inverse"]
+
+
+class LoopNeed(_Frozen):
+    """One thing a loop stage needs (spec 0010)."""
+
+    kind: LoopNeedKind
+    property: str | None = None
+    """For ``property``: the top-level property that must be set."""
+    inverse: str | None = None
+    """For ``inverse``: the relation's inverse, e.g. ``materials``."""
+    relation: str | None = None
+    """For ``inverse``: the relation the pointing entity's reference names."""
+    type: str | None = None
+    """For ``inverse``: the type of the entity that must point here."""
+    since: str
+    """The stage that declares the need."""
+
+
+class LoopStage(_Frozen):
+    """A stage of a loop, or a side exit (which never has needs)."""
+
+    name: str
+    needs: list[LoopNeed] = []
+    guidance: str | None = None
+    """The part of the loop file's body under ``## <name>``; None when blank."""
+
+
+class LoopDefinition(_Frozen):
+    """A loop file in ``.knott/loops/`` (spec 0010)."""
+
+    name: str
+    description: str | None
+    type: str
+    property: str
+    """The top-level enum property of ``type`` whose value is an entity's stage."""
+    stages: list[LoopStage]
+    """The path, in the loop's order."""
+    exits: list[LoopStage]
+    """Options of the enum the loop leaves out, in the enum's order."""
+    guidance: str | None
+    """The body before the first stage heading; None when blank."""
+    path: str
+    """Vault-relative path of the loop file."""
+
+
+class LoopEntity(_Frozen):
+    """An entity in a loop."""
+
+    path: str
+    kid: str | None
+    title: str
+    """The entity's `title` when its type has that string property and it is set,
+    else the file name."""
+    unmet: list[LoopNeed] = []
+    """Needs of its stage, or an earlier one, that are not met: `loop-stage-unmet`."""
+    next: str | None = None
+    """The following stage on the path; None at the last stage, a side exit or no stage."""
+    missing_next: list[LoopNeed] = []
+    """Needs of ``next`` that are not met yet. Not issues."""
+
+
+class LoopPlacement(_Frozen):
+    stage: str
+    entities: list[LoopEntity]
+
+
+class LoopReport(_Frozen):
+    """Where every entity of a loop's type stands (spec 0010)."""
+
+    loop: LoopDefinition
+    stages: list[LoopPlacement]
+    """One per stage on the path, in order, empty stages included."""
+    exits: list[LoopPlacement]
+    unplaced: list[LoopEntity]
+    """Entities whose stage property is absent or not an option."""
+
+
 class Ontology(_Frozen):
     """The vault's types, relations and the references between them."""
 
@@ -205,6 +283,8 @@ class Ontology(_Frozen):
     """Every relation that loaded, sorted by name."""
     connectors: list[ConnectorDefinition] = []
     """Every connector that loaded, sorted by name."""
+    loops: list[LoopDefinition] = []
+    """Every loop that loaded, sorted by name."""
 
 
 RefKind = Literal["inverse", "symmetric", "relation", "property"]

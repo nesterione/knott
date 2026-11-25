@@ -99,8 +99,31 @@
   aside .relation .empty { margin-top: 6px; font-size: 12.5px; }
   aside .note { color: var(--muted); font-size: 12.5px; margin: -2px 0 10px; }
   aside .note code { font: 12px ui-monospace, "SF Mono", Menlo, monospace; }
-  #relations { border: 1px solid var(--border); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 8px; cursor: pointer; }
-  #relations[hidden] { display: none; }
+  #relations, #loops { border: 1px solid var(--border); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 8px; cursor: pointer; }
+  #relations[hidden], #loops[hidden] { display: none; }
+  #loops.on { border-color: var(--accent); color: var(--accent); }
+  #board { position: absolute; inset: 0; background: var(--bg); z-index: 2; display: flex; flex-direction: column; padding: 10px 24px 18px; }
+  #board[hidden] { display: none; }
+  #board .bar { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  #board select { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; max-width: 100%; }
+  #board .follows { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; color: var(--muted); }
+  #board .about { color: var(--muted); font-size: 13px; }
+  #board .cols { flex: 1; display: flex; gap: 12px; overflow: auto; align-items: flex-start; }
+  #board .col { flex: 0 0 236px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px; max-height: 100%; overflow: auto; }
+  #board .col.exit, #board .col.none { opacity: .7; border-style: dashed; }
+  #board .col > button { all: unset; cursor: pointer; display: flex; width: 100%; justify-content: space-between; align-items: baseline; font-weight: 600; font-size: 13.5px; }
+  #board .col > button .n { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+  #board .about-stage { margin: 8px 0 2px; font-size: 12.5px; color: var(--muted); }
+  #board .about-stage pre { margin: 6px 0 0; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+  #board .card { margin-top: 8px; padding: 9px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+  #board .card .title { font-weight: 550; overflow-wrap: anywhere; }
+  #board .card .path { font: 11.5px ui-monospace, "SF Mono", Menlo, monospace; color: var(--muted); overflow-wrap: anywhere; user-select: all; }
+  #board .card .next { margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+  #board .card .ready { color: var(--accent); }
+  #board .card.unmet { border-color: #d6453d; }
+  #board .card .bad { margin-top: 6px; font-size: 12.5px; color: #d6453d; }
+  #board .col .empty { margin-top: 8px; font-size: 12.5px; }
+  aside .stages { font-size: 12.5px; color: var(--muted); margin: 2px 0 6px; }
   aside .close { position: absolute; top: 14px; right: 16px; border: 0; background: none; color: var(--muted); font-size: 18px; cursor: pointer; }
   .empty { color: var(--muted); font-size: 13px; }
   @media (max-width: 640px) {
@@ -114,6 +137,7 @@
 <header>
   <h1>Ontology <span id="meta"></span></h1>
   <button id="relations" hidden>Relations</button>
+  <button id="loops" hidden>Loops</button>
   <nav id="tabs">
     <button data-l="layered" class="on">Layered</button>
     <button data-l="force">Force</button>
@@ -135,6 +159,7 @@
     <span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="1.3" stroke-dasharray="4 4"/></svg>optional</span>
   </div>
   <aside id="panel"></aside>
+  <section id="board" hidden></section>
 </main>
 
 <script>
@@ -534,6 +559,56 @@ function showRelations() {
   button.hidden = !counts.length;
   button.onclick = showRelations;
 }
+// ---------- loops ----------
+// DATA.loop_reports: one report per loop (spec 0010): its definition, the entities under each
+// stage on the path, under each side exit, and those with no stage. The page shows one
+// loop at a time as a board; "#loop=<name>" in the URL opens it.
+const LOOPS = DATA.loop_reports || [];
+const boardEl = document.getElementById("board"), loopsButton = document.getElementById("loops");
+let boardLoop = null;
+const needLabel = n => n.kind === "property" ? n.property : `${n.type} in ${n.inverse}`;
+function setHash(h) { try { history.replaceState(null, "", "#" + h); } catch (_) {} }
+function closeBoard() {
+  boardLoop = null; boardEl.hidden = true; loopsButton.classList.remove("on");
+  setHash(mode || "layered");
+}
+function showBoard(name) {
+  const report = LOOPS.find(r => r.loop.name === name) || LOOPS[0];
+  if (!report) return;
+  if (selected) select(selected); else if (relationsOpen) showRelations();
+  boardLoop = report.loop.name;
+  loopsButton.classList.add("on");
+  setHash("loop=" + encodeURIComponent(boardLoop));
+  const loop = report.loop, about = dict();
+  for (const s of [...loop.stages, ...loop.exits]) about[s.name] = s;
+  const card = e => `<div class="card${e.unmet.length ? " unmet" : ""}">
+    <div class="title">${esc(e.title)}</div><div class="path">${esc(e.path)}</div>
+    ${e.unmet.length ? `<div class="bad">stage needs: ${e.unmet.map(n => esc(needLabel(n))).join(", ")}</div>` : ""}
+    ${e.next !== null ? `<div class="next">next: ${esc(e.next)} — ${e.missing_next.length ? "needs " + e.missing_next.map(n => esc(needLabel(n))).join(", ") : '<span class="ready">ready</span>'}</div>` : ""}
+  </div>`;
+  const column = (label, entities, kind, stage) => `<div class="col ${kind}">
+    <button title="Show what this stage needs"><span>${esc(label)}</span><span class="n">${entities.length}</span></button>
+    <div class="about-stage" hidden>${stage && stage.needs.length ? "needs: " + stage.needs.map(n => esc(needLabel(n))).join(", ") : "no needs"}${stage && stage.guidance !== null ? `<pre>${esc(stage.guidance)}</pre>` : ""}</div>
+    ${entities.map(card).join("") || '<div class="empty">None</div>'}
+  </div>`;
+  boardEl.innerHTML = `<div class="bar">
+      <select aria-label="Loop">${LOOPS.map(r => `<option value="${esc(r.loop.name)}"${r === report ? " selected" : ""}>${esc(r.loop.name)}</option>`).join("")}</select>
+      <span class="follows">${esc(loop.type)}.${esc(loop.property)}</span>
+      ${loop.description ? `<span class="about">${esc(loop.description)}</span>` : ""}
+    </div>
+    <div class="cols">
+      ${report.stages.map(p => column(p.stage, p.entities, "stage", about[p.stage])).join("")}
+      ${report.exits.map(p => column(p.stage, p.entities, "exit", about[p.stage])).join("")}
+      ${report.unplaced.length ? column("no stage", report.unplaced, "none", null) : ""}
+    </div>`;
+  boardEl.hidden = false;
+  boardEl.querySelector("select").onchange = ev => showBoard(ev.target.value);
+  boardEl.querySelectorAll(".col > button").forEach(b => b.onclick = () => { const d = b.nextElementSibling; d.hidden = !d.hidden; });
+}
+loopsButton.textContent = `Loops (${LOOPS.length})`;
+loopsButton.hidden = !LOOPS.length;
+loopsButton.onclick = () => boardLoop === null ? showBoard(null) : closeBoard();
+
 function showPanel(id) {
   const n = byId[id];
   const out = edges.filter(e => e.s === id);
@@ -560,6 +635,7 @@ function showPanel(id) {
   const groups = referencedBy[id] || [];
   const incRows = groups.map(g => `<tr class="group"><td colspan="2" title="${esc(g.kind)}">${esc(g.label)}</td></tr>` +
     g.references.map(r => row(link(r.type) + "." + esc(r.path), "", r.required)).join("")).join("");
+  const typeLoops = LOOPS.filter(r => r.loop.type === id);
   const head = `<div class="sub">${plural(n.count, "entity", "entities")}${n.kidRequired ? " · kid required" : ""}</div>${n.description ? `<p>${esc(n.description)}</p>` : ""}`;
   panel.innerHTML = `
     <button class="close" aria-label="Close">×</button>
@@ -572,10 +648,16 @@ function showPanel(id) {
     <h3>References out</h3>
     ${out.length ? `<table>${out.map(e => row(esc(e.path) + (e.relation ? ` <span class="rel">(${esc(e.relation)})</span>` : ""), "→ " + link(e.t), e.req)).join("")}</table>` : '<div class="empty">None</div>'}
     <h3>Referenced by</h3>
-    ${groups.length ? `<table>${incRows}</table>` : '<div class="empty">None</div>'}`;
+    ${groups.length ? `<table>${incRows}</table>` : '<div class="empty">None</div>'}
+    ${typeLoops.length ? `<h3>Loops</h3>${typeLoops.map(r => `<div class="relation">
+      <a data-loop="${esc(r.loop.name)}">${esc(r.loop.name)}</a><span class="keys">${esc(r.loop.property)}</span>
+      <div class="stages">${[...r.stages.map(p => `${esc(p.stage)} ${p.entities.length}`), ...(r.exits.length ? ["(" + r.exits.map(p => `${esc(p.stage)} ${p.entities.length}`).join(" · ") + ")"] : [])].join(" → ").replace(" → (", " · (")}</div>
+      <table>${r.loop.stages.filter(s => s.needs.length).map(s => row(esc(s.name), s.needs.map(n => esc(needLabel(n))).join(", "), false)).join("")}</table>
+    </div>`).join("")}` : ""}`;
   panel.classList.add("open");
   panel.querySelector(".close").onclick = () => select(id);
   panel.querySelectorAll("[data-go]").forEach(a => a.onclick = () => { selected = null; select(a.dataset.go); });
+  panel.querySelectorAll("[data-loop]").forEach(a => a.onclick = () => showBoard(a.dataset.loop));
 }
 svg.addEventListener("click", () => { if (selected) select(selected); else if (relationsOpen) showRelations(); });
 
@@ -586,8 +668,10 @@ addEventListener("resize", () => {
   resizeTimer = setTimeout(() => { if (!nodes.length) return; if (mode === "force") fit(false); else arrange(true); }, 120);
 });
 
+const openLoop = location.hash.startsWith("#loop=") ? decodeURIComponent(location.hash.slice(6)) : null;
 if (nodes.length) setMode(initialMode(), true);
 else document.querySelector(".hint").textContent = "No types to show — add concept files to .knott/concepts/";
+if (openLoop !== null && LOOPS.some(r => r.loop.name === openLoop)) showBoard(openLoop);
 </script>
 </body>
 </html>

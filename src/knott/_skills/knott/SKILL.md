@@ -163,6 +163,16 @@ images:
 - Never change an existing `kid`; other files and tools may refer to it.
 - `kid-invalid`: write the canonical form the message gives.
 
+## Loops
+
+A vault can define **loops** in `.knott/loops/`: a process that entities of one type go through, such as producing an episode. A loop follows one `enum` property (often `status`); its value is the entity's stage. Each stage lists what it needs: properties that are set, and entities that point at this one (`transcript in materials`).
+
+- `knott types --verbose` ends with a `loops:` section: each loop's stages, needs, and guidance on what to do at each stage. Read it before working on an entity of that type.
+- `knott loops <name>` lists every entity under its stage, with `next: <stage> — missing …` or `next: <stage> — ready`.
+- **Move an entity forward in this order:** add what the next stage needs, then change the stage property. Set the next stage only when `knott loops` says `ready`.
+- A stage set too early is `loop-stage-unmet` in `knott validate`. Fix it by adding what is missing, or by setting the property back. Never remove a need from a loop file just to make an entity pass.
+- A value the loop does not list as a stage (such as `dropped`) is a side exit: it needs nothing.
+
 ## Obsidian settings
 
 For vaults edited in Obsidian, set Files & links → *New link format* to **Relative path to file** and turn **off** *Use [[Wikilinks]]*. Otherwise Obsidian may rewrite links on rename into forms `knott validate` rejects.
@@ -175,6 +185,7 @@ knott validate [PATH...]         # check concept files + all entities, or only P
 knott validate --format json     # {ok, stats, issues[]} for machine reading
 knott validate --fix [PATH...]   # add a kid to entities that have none, then validate
 knott refs PATH [--format json]  # who references an entity (PATH or kid:<uuid>), by relation
+knott loops [NAME] [--format json]  # entities by stage of a loop, and what each still needs
 knott init [PATH]                # create .knott/ (never overwrites)
 knott view [PATH] [--no-open] [-o FILE]  # write an HTML diagram of types and references
 knott migrate [PATH]             # convert a pre-0.5 .knott/schemas/ into .knott/concepts/

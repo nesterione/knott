@@ -183,7 +183,7 @@ class _ValueChecker:
         thing = "reference" if references else "file" if files else None
         invalid = f"{noun}-invalid-value" if thing else "attribute-type-mismatch"
 
-        if _is_empty(value, shape):
+        if is_empty(value, shape):
             if definition.name is None:
                 what = "list item" if isinstance(path[-1], int) else "map value"
                 self.report(
@@ -386,7 +386,7 @@ def closest_option(value: str, options: tuple[str, ...]) -> str | None:
     return close[0] if close else None
 
 
-def _is_empty(value: Any, shape: Shape) -> bool:
+def is_empty(value: Any, shape: Shape) -> bool:
     """Decision 0005, at every level: null and "" are absent, and so is an empty
     container of the declared kind. An empty container of another kind is a mismatch."""
     if is_absent(value):

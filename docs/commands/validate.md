@@ -10,7 +10,7 @@ concepts:
 ---
 # knott validate
 
-The primary command. It loads every [concept file](../concepts/schema.md) in `.knott/concepts/` every [relation definition](../concepts/relation.md#relation-definitions) in `.knott/relations/` and every [connector](../concepts/file.md#uris-and-connectors) in `.knott/connectors/`, then validates entities. A vault that still has `.knott/schemas/` reports only [`schema-legacy-layout`](../issues/schema-legacy-layout.md); run [`knott migrate`](migrate.md).
+The primary command. It loads every [concept file](../concepts/schema.md) in `.knott/concepts/` every [relation definition](../concepts/relation.md#relation-definitions) in `.knott/relations/` every [connector](../concepts/file.md#uris-and-connectors) in `.knott/connectors/` and every [loop](../concepts/loop.md) in `.knott/loops/`, then validates entities. An entity at a stage of a loop must meet what that stage needs ([`loop-stage-unmet`](../issues/loop-stage-unmet.md)). A vault that still has `.knott/schemas/` reports only [`schema-legacy-layout`](../issues/schema-legacy-layout.md); run [`knott migrate`](migrate.md).
 
 | Invocation | Schemas checked | Entities checked |
 |---|---|---|

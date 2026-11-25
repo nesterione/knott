@@ -426,7 +426,7 @@ properties:
 
 ### Relation definitions
 
-A relation definition says what a link means, once, for every property that uses it: its name read from the target side (`inverse`), whether it goes both ways (`symmetric`), and whether it may loop (`acyclic`). Each is one Markdown file, discovered from `.knott/relations/**/*.md` (subfolders are only for organisation; other file types are ignored):
+A relation definition says what a link means, once, for every property that uses it: its name read from the target side (`inverse`), whether it goes both ways (`symmetric`), and whether it may form a cycle (`acyclic`). Each is one Markdown file, discovered from `.knott/relations/**/*.md` (subfolders are only for organisation; other file types are ignored):
 
 ```markdown
 ---
@@ -488,9 +488,9 @@ A nested field name (`speakers[].role`) never conflicts with an `inverse`, and n
 For each relation with `acyclic: true` (and not `symmetric`) that some property names, knott builds one graph from the whole vault, lazily, once per run:
 
 - Nodes are entities. Edges are references at properties that name the relation, at any depth, in any concept, that pass every check in §11, including the target-type check. Path and `kid:` references count the same. Entities with invalid frontmatter or an unknown type add no edges.
-- Each strongly connected component with more than one entity, or an entity that references itself, is one `relation-cycle` issue. Loops mixing two relations are not reported.
-- The message names the shortest loop from the component's entity with the smallest path (successors tried in path order): "`supersedes` must not form a cycle: decisions/0011.md → decisions/0012.md → decisions/0011.md". It is reported at the first entity on that loop, in path order, that is in the run's scope, at the line of its reference to the next entity (the first in schema order when there are several); `field` is that property's full path.
-- A scoped run reports a cycle when at least one entity of its component is in scope. If none of the named loop's entities is, the loop is taken from the component's smallest in-scope entity and reported there.
+- Each strongly connected component with more than one entity, or an entity that references itself, is one `relation-cycle` issue. Cycles mixing two relations are not reported.
+- The message names the shortest cycle from the component's entity with the smallest path (successors tried in path order): "`supersedes` must not form a cycle: decisions/0011.md → decisions/0012.md → decisions/0011.md". It is reported at the first entity on that cycle, in path order, that is in the run's scope, at the line of its reference to the next entity (the first in schema order when there are several); `field` is that property's full path.
+- A scoped run reports a cycle when at least one entity of its component is in scope. If none of the named cycle's entities is, the cycle is taken from the component's smallest in-scope entity and reported there.
 
 See `docs/specs/0006-relation-definitions.md`.
 
@@ -620,7 +620,7 @@ A `kid` does not detect two entities describing the same concept. See `docs/deci
 
 ## 13. Validation
 
-Validation is the primary feature of v0. A run loads all concept files, then validates entities. If `.knott/schemas/` exists, the run reports only `schema-legacy-layout` (§4).
+Validation is the primary feature of v0. A run loads all concept files, then the relation, connector and loop files, then validates entities. If `.knott/schemas/` exists, the run reports only `schema-legacy-layout` (§4).
 
 ### Schema validation
 
@@ -634,6 +634,7 @@ Validation is the primary feature of v0. A run loads all concept files, then val
 - No top-level property named `type` or `kid`.
 - A `file`'s `accept` is a non-empty list of unique lowercase extensions (§8).
 - Connector files are well-formed, with unique names (`schema-duplicate-connector`; §8).
+- Loop files are well-formed, with unique names and properties (`schema-duplicate-loop`), and name things that exist (`loop-invalid-target`; §27).
 - Relation files are well-formed, with unique names (`schema-duplicate-relation`); every `relation:` names one (`relation-unknown`); the checks on definitions pass (`relation-inverse-conflict`, `relation-symmetric-mismatch`; §9).
 
 ### Entity validation
@@ -643,7 +644,8 @@ Validation is the primary feature of v0. A run loads all concept files, then val
 - Attributes: required ones are present (`attribute-missing`) and values match their type (`attribute-type-mismatch`), at every nesting level. An `enum` value is one of its options (`attribute-unknown-option`). Declared objects have no undeclared keys (`attribute-unknown-field`).
 - References, at every nesting level: checked as in §11. A list or map whose items are references uses the `relation-*` codes.
 - Files, at every nesting level: checked as in §8. A list or map whose items are files uses the `file-*` codes.
-- No relation with `acyclic: true` forms a loop (`relation-cycle`, §9).
+- No relation with `acyclic: true` forms a cycle (`relation-cycle`, §9).
+- An entity at a stage of a loop meets the needs of that stage and of every earlier one (`loop-stage-unmet`, §27).
 - Undeclared top-level keys are allowed and not checked. Strict schemas may come later.
 
 For example, this stays valid even though `some_personal_metadata` is not in the schema:
@@ -676,6 +678,7 @@ knott version
 knott skill install [PATH]
 knott view [PATH]
 knott refs PATH
+knott loops [NAME]
 ```
 
 ### `knott init [PATH]`
@@ -724,6 +727,8 @@ relations:
 
 After the relations, a `connectors:` section lists every connector, sorted by name, in the same format: the name indented by two spaces, then the description and the guidance indented by four. A vault without connectors has no `connectors:` section.
 
+After the connectors, a `loops:` section lists every loop (§27), sorted by name: `<name>  <type>.<property>` indented by two spaces; then, each line indented by four: the description, `stages: a → b → c`, `exits: x | y` when there are side exits, `<stage> needs: <items>` for each stage with needs (a property need is its name, an inverse need is `<type> in <inverse>`), the loop's guidance, and each stage's guidance under a `## <stage>` line. A vault without loops has no `loops:` section.
+
 ### `knott migrate [PATH]`
 
 Converts a pre-0.5 vault. Reads every `.knott/schemas/**/*.yaml` with the safe loader (the parser limits of decision 0007 apply) and writes `.knott/concepts/<same relative path>.md`:
@@ -752,7 +757,30 @@ Prints the installed Knott version.
 
 ### `knott view [PATH] [-o FILE] [--no-open]`
 
-Writes the vault's ontology (types, properties, templates, references, entity counts) as one self-contained static HTML page and opens it in the browser. No server and no network. Each reference is an edge per known target, labelled with its path; it is drawn as required only when every step on its path is required. Targets no concept defines get no edge and are marked `(unknown)` in the type's panel. A reference that names a relation is labelled with the relation's name instead of its path; the type's panel shows the path with the relation in parentheses under "References out", and, under "Referenced by", every reference property (any depth, any type, T included) whose known targets include the type, grouped and labelled as in reverse lookup (§10), each row `<source type>.<property path>`. A "Relations (N defined · M inline)" button in the header, hidden when both counts are 0 (a zero part is left out), opens a panel with two sections. "Defined" lists every relation with its keys, description, guidance (HTML-escaped, folded under "When to use it") and the properties that name it, each `<type>.<property path> → <targets>`. "Inline" lists every reference property that names no relation file, one row per property as `<type>.<property path>`, grouped by its targets, largest group first. The embedded data has `relations`, a `relation` key on each edge, `referenced_by`: a list of `{type, groups}`, each group `{label, kind, relation, references: [{type, path, required}]}`, and `reference_properties`: a list of `{type, path, relation, targets, unknown_targets, required}`, one per reference property, `relation` being `None` for an inline one. A `file` property shows the extensions it accepts in the property table and draws no edge; the embedded data also has `connectors` and, on each attribute, `accept`. An `enum` shows its options under the property; each attribute has `options`, a list of `{value, description}`. Schema errors still produce a page, with a note to run `knott validate`; a vault that still has `.knott/schemas/` prints the `schema-legacy-layout` issue to stderr, writes no page and exits `1`; a vault with no types exits with code `2`. See `docs/commands/view.md`.
+Writes the vault's ontology (types, properties, templates, references, entity counts) as one self-contained static HTML page and opens it in the browser. No server and no network. Each reference is an edge per known target, labelled with its path; it is drawn as required only when every step on its path is required. Targets no concept defines get no edge and are marked `(unknown)` in the type's panel. A reference that names a relation is labelled with the relation's name instead of its path; the type's panel shows the path with the relation in parentheses under "References out", and, under "Referenced by", every reference property (any depth, any type, T included) whose known targets include the type, grouped and labelled as in reverse lookup (§10), each row `<source type>.<property path>`. A "Relations (N defined · M inline)" button in the header, hidden when both counts are 0 (a zero part is left out), opens a panel with two sections. "Defined" lists every relation with its keys, description, guidance (HTML-escaped, folded under "When to use it") and the properties that name it, each `<type>.<property path> → <targets>`. "Inline" lists every reference property that names no relation file, one row per property as `<type>.<property path>`, grouped by its targets, largest group first. The embedded data has `relations`, a `relation` key on each edge, `referenced_by`: a list of `{type, groups}`, each group `{label, kind, relation, references: [{type, path, required}]}`, and `reference_properties`: a list of `{type, path, relation, targets, unknown_targets, required}`, one per reference property, `relation` being `None` for an inline one. A `file` property shows the extensions it accepts in the property table and draws no edge; the embedded data also has `connectors` and, on each attribute, `accept`. An `enum` shows its options under the property; each attribute has `options`, a list of `{value, description}`. A type's panel has a **Loops** section when a loop follows it: the loop's name, the stages with entity counts, and each stage's needs. A "Loops (N)" button in the header, hidden when no loop loaded, opens a board over the diagram, one loop at a time: a dropdown switches, and the URL hash `#loop=<name>` opens one directly. Columns are the stages on the path, then the side exits (dimmed), then `no stage` when it has entities; a column header shows the entity count and, when clicked, the stage's needs and guidance (HTML-escaped). Each entity is a card: its title, its vault-relative path as text, its unmet needs (the card is marked) and its missing for next, or `ready`. The embedded data has `loops`, the loop definitions, and `loop_reports`, the reports of `knott loops --format json`, so the page holds the title and path of every entity whose type has a loop, and nothing else about entities. Cards are not links. Schema errors still produce a page, with a note to run `knott validate`; a vault that still has `.knott/schemas/` prints the `schema-legacy-layout` issue to stderr, writes no page and exits `1`; a vault with no types exits with code `2`. See `docs/commands/view.md`.
+
+### `knott loops [NAME] [--format text|json]`
+
+Read-only (§27). The vault is found from the current directory. Unmet needs and missing items never change the exit code.
+
+Without `NAME`: one line per loop, sorted by name, in three columns padded to their widest value and separated by two spaces: the name, `<type>.<property>`, and the counts, joined by ` · `: `<stage> <N>` for each stage on the path, then the side exits in the enum's order inside one pair of parentheses, then `no stage <N>` when N is not 0.
+
+```
+episode-production  episode.status  idea 0 · planned 1 · recorded 1 · published 1 · (dropped 1) · no stage 1
+```
+
+With `NAME`: each stage on the path that has entities, as a heading line; under it each entity's path indented by two spaces, in path order; under an entity, indented by four, one line `✗ needs …` per unmet need (worded as in `loop-stage-unmet`), then `next: <stage> — missing <items>` or `next: <stage> — ready` (no `next:` line at the last stage). Then each side exit that has entities, then `no stage`, each with its entities' paths.
+
+```
+planned
+  episodes/ep-002/episode.md
+    next: recorded — missing recorded_at, transcript in materials
+published
+  episodes/ep-003/episode.md
+    ✗ needs `recorded_at`
+```
+
+`--format json` prints `{"loops": [LoopReport, …]}` (§21), with or without `NAME`. A vault with no loops prints nothing in text form. `NAME` that no loaded loop has: `error: no loop named <NAME>`, exit `2`. If schema errors exist, it still prints the loops it could load, writes the errors to stderr, and exits `1`, as `types` does.
 
 ### `knott refs PATH [--format text|json]`
 
@@ -907,6 +935,7 @@ relation-target-not-found  relation-target-not-entity relation-target-type-misma
 relation-target-ambiguous  relation-cycle
 file-missing               file-invalid-value         file-unknown-connector
 file-outside-vault         file-not-found             file-extension-mismatch
+schema-duplicate-loop      loop-invalid-target        loop-stage-unmet
 ```
 
 ### Exit codes
@@ -939,10 +968,16 @@ ontology.relations                 # [RelationDefinition(name, description, inve
                                    #   acyclic, guidance, path), …], sorted by name
 ontology.connectors                # [ConnectorDefinition(name, description, guidance, path), …]
 refs = vault.refs("concepts/kid.md")   # or "kid:<uuid>"; Refs(entity, groups), see §10
+ontology.loops                     # [LoopDefinition(name, description, type, property, stages,
+                                   #   exits, guidance, path), …], sorted by name
+vault.loops()                      # list[LoopReport], sorted by loop name; see §27
+vault.loops("episode-production")  # one LoopReport; KnottError when no loop has that name
 vault.migrate()                    # MigrateResult(written, removed, list_fields); see §14
 ```
 
 `OntologyAttribute.relation` is the relation a reference names (`None` when none, or one no relation file defines). `OntologyAttribute.type` may be `file`; `accept` lists its extensions (`[]` when not declared). It may be `enum`; `options` is then a list of `EnumOption(value, description)`. `Refs` has `entity: EntityRef(path, type, kid)` and `groups: list[RefGroup(label, kind, relation, references: list[Ref(path, type, kid, field, line, direction)])]`; `type` is the frontmatter `type` as written. A relative path passed to `refs()` is resolved against the vault root, as in `validate()`.
+
+`LoopDefinition.stages` and `.exits` are `list[LoopStage(name, needs, guidance)]`. `LoopNeed(kind, property, inverse, relation, type, since)`: `kind` is `property` or `inverse`, `since` is the stage that declares it, and an inverse need with several types is one `LoopNeed` per type. `LoopReport(loop, stages, exits, unplaced)`: `stages` and `exits` are `list[LoopPlacement(stage, entities)]`, empty ones included; `unplaced` and `entities` are `list[LoopEntity(path, kid, title, unmet, next, missing_next)]` in path order. `title` is the entity's `title` when its type declares a top-level `string` property of that name and the value is a non-blank string, else the file name. `loops()` does not validate.
 
 `validate()` returns validation problems as data and never raises for them. It raises only for `2`-class conditions (`KnottError` subclasses in `errors.py`).
 
@@ -973,7 +1008,8 @@ tests/fixtures/
 ├── schema-unknown-key/
 ├── relation-definitions/           # .knott/relations/ and relation: on references
 ├── relation-cycles/                # acyclic relations: self-loop, pairs, chains, kid edges
-└── relation-refs/                  # knott refs: every group kind and direction
+├── relation-refs/                  # knott refs: every group kind and direction
+└── loops/                          # a loop with entities at every stage, a side exit and no stage
 ```
 
 At minimum, test: schema discovery and parsing, entity detection, attribute typing, relation parsing and resolution, target type checks, duplicate schema handling, the CLI output format, and exit codes.
@@ -1089,3 +1125,66 @@ These are cheap and fit the agent-first goal, but they add scope:
 - `knott validate --format json`: emits `{ok, stats, issues[]}` using the issue fields from §20. Agents should not have to parse text output.
 - `knott types --verbose`: prints each type's `description`, concept file path, references and properties, so an agent can go straight to the right file.
 - `knott skill`: prints the bundled `SKILL.md`, so agents installed through `uvx` can find it without the repo.
+
+---
+
+## 27. Loops
+
+A loop is a repeated process that entities of one type pass through. It follows one `enum` property of the type, whose value is the entity's **stage**, and lists what each stage **needs**. Knott describes and checks a loop; it never changes a stage and never creates a file. Each loop is one Markdown file, discovered from `.knott/loops/**/*.md`:
+
+```markdown
+---
+name: episode-production
+description: From an episode idea to a published episode.
+type: episode
+property: status
+stages:
+  idea:
+  planned:   { needs: [participants] }
+  recorded:  { needs: [recorded_at, materials: transcript] }
+  published: { needs: [published_at, links, materials: [summary, topics]] }
+---
+Tasks and the topic backlog live in GitHub Issues, not here.
+
+## recorded
+
+Export the transcript into the episode folder, then run the review.
+```
+
+Keys are closed:
+
+| Key | Required | Value |
+|---|---|---|
+| `name` | yes | `^[a-z][a-z0-9_-]*$`. Loop names are a namespace of their own. |
+| `description` | no | string |
+| `type` | yes | the name of one concept |
+| `property` | yes | a top-level property of that concept whose shape is `enum` |
+| `stages` | yes | a non-empty mapping: stage → empty, or a mapping whose only key is `needs` |
+
+- **Stages.** Each key of `stages` is an option of the enum. The written order is the **path**. An option the loop leaves out is a **side exit**: no needs, no next stage.
+- **Needs.** A non-empty list. An item is a string, the name of a top-level property of the type, met when the property is not absent (§8, decision 0005, an empty container of the declared kind included); or a mapping with one key, `<inverse>: <type>` or `<inverse>: [<type>, …]`, where `<inverse>` is the `inverse` of a relation, met when, for each listed type, at least one entity of that type has a reference that names the relation and resolves to this entity (the reference index of §10; the target-type check does not matter).
+- **Needs add up.** An entity at a stage must meet the needs of that stage and of every stage before it on the path. A need that a later stage repeats counts once, at its first stage.
+- A need checks existence only: never a value, a count above one, or a file's content.
+- **Guidance.** The body is stored and never checked. A line `## <name>`, where `<name>` is an option of the enum, starts the guidance of that stage or side exit; the text before the first such line is the loop's own guidance. The body is split by lines only (a heading inside a code fence counts). Each part is kept without the blank lines around it; a blank part is `None`.
+
+### Checks on loop files
+
+Run on every command, after concepts and relations are loaded.
+
+- No frontmatter, or invalid YAML: `schema-invalid-yaml`.
+- A missing or invalid `name`: `schema-invalid-field`, and no loop. An unknown key: `schema-invalid-field` with a suggestion; the loop still loads. An invalid `description` is dropped.
+- A missing `type`, `property` or `stages` (reported at line 1), a `type` or `property` that is not a string, or a malformed `stages` or `needs` (not a mapping or list, empty, a stage key that is not a string, a stage key other than `needs`, a need that is neither a string nor a one-key mapping of strings): `schema-invalid-field`, and the loop is not loaded.
+- `loop-invalid-target`, at the line of the value, and the loop is not loaded: `type` names no concept; `property` is not a top-level `enum` property of the type (a list of enums is not one); a stage is not an option (the message lists the options and suggests one); a property need names no top-level property, or the loop's own `property`; an inverse need names no relation's `inverse`; a type in an inverse need names no concept, or one with no reference property that names the relation and can target the loop's type.
+- Two files with one `name` (`field` `name`), or two loaded loops with the same `type` and `property` (`field` `property`): `schema-duplicate-loop`, at the second file in path order, which defines no loop.
+- Entities are not checked against a loop that is not loaded; `knott loops` and `knott view` leave it out.
+
+### Placement and `loop-stage-unmet`
+
+For each loaded loop, each entity of its type with valid frontmatter is placed by the value of the loop's property: at a stage on the path, at a side exit, or at **no stage** (the value is absent, not a string, or not an option).
+
+- For an entity at a stage on the path, each unmet need of that stage and of every earlier stage is one `loop-stage-unmet` issue: `field` is the loop's property, `line` is that property's line. The message is ``stage `S` of loop `L` needs `prop` `` or ``… needs a `T` in `inv` (`rel` pointing here)``, with `` (needed since `E`)`` added when the need belongs to an earlier stage `E`.
+- The unmet needs of the **next** stage on the path are the entity's *missing for next*. They are never issues.
+- An entity at a side exit or at no stage has neither.
+- In a scoped run (§13) only entities in scope are reported; incoming references are read from the whole vault.
+
+See `docs/specs/0010-loops.md`.
