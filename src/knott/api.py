@@ -15,6 +15,8 @@ from knott.models import (
     ConnectorDefinition,
     EntityRef,
     EnumOption,
+    FilenamePart,
+    FilenamePattern,
     FixedEntity,
     InitResult,
     Issue,
@@ -29,6 +31,7 @@ from knott.models import (
     Stats,
     ValidationResult,
 )
+from knott.schema.filenames import FilenameDef
 from knott.schema.loader import load_definitions, load_ontology, load_schemas
 from knott.schema.migrate import migrate_vault
 from knott.schema.models import (
@@ -160,6 +163,7 @@ class Knott:
                 count=counts.get(s.type, 0),
                 kid_required=s.kid_required,
                 entity_paths=list(s.entity_paths),
+                filename=_filename_pattern(s.filename),
                 properties=[_ontology_attribute(a) for a in s.properties.values()],
                 template=s.template,
             )
@@ -400,6 +404,18 @@ class Knott:
             raise ConfigError(f"malformed {CONFIG_FILE.as_posix()}{where}: {exc.message}") from exc
         if data is not None and not isinstance(data, dict):
             raise ConfigError(f"malformed {CONFIG_FILE.as_posix()}: expected a YAML mapping")
+
+
+def _filename_pattern(definition: FilenameDef | None) -> FilenamePattern | None:
+    if definition is None:
+        return None
+    return FilenamePattern(
+        pattern=definition.pattern,
+        parts=[
+            FilenamePart(name=p.name, match=p.match, description=p.description)
+            for p in definition.parts
+        ],
+    )
 
 
 def _ontology_attribute(a: AttributeDef) -> OntologyAttribute:

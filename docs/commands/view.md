@@ -16,6 +16,7 @@ Draws the vault's ontology as one static HTML page and opens it in the browser. 
 Each type is a box with its name and entity count. Each reference is an arrow labelled with its path (`derived_from`, `speakers[].person`), or with its [relation](../concepts/relation.md) when it names one (`about`), one per target type: solid if required, dashed if optional. A nested reference counts as required only when every step on its path is required. A target that no concept defines gets no arrow. Hover a type to highlight its neighbours. Click it to open a panel with:
 
 - the folders its entities are stored in, when the concept declares `path`
+- the pattern its file names follow and the parts of it, when the concept declares `filename`
 - its description, properties (with the relation a reference names, unknown targets marked `(unknown)`, the extensions a [file](../concepts/file.md) accepts, and the options of an enum) and body template
 - **References out**: each reference's path, with its relation in parentheses
 - **Referenced by**: every reference property, in any type, that can point at this one, grouped and labelled as [`knott refs`](refs.md) groups them (`discussed_in`, `related`, `← guide.concepts[]`). Each row is `<type>.<path>`.

@@ -132,6 +132,7 @@ def test_template_reads_model_fields() -> None:
             "count",
             "kid_required",
             "entity_paths",
+            "filename",
             "properties",
             "template",
         ],

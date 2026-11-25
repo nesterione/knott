@@ -11,6 +11,7 @@ from knott import _yaml
 from knott._values import BOOLEAN_SPELLINGS, kind, show
 from knott.models import Issue
 from knott.schema.connectors import load_connectors
+from knott.schema.filenames import FilenameDef, parse_filename
 from knott.schema.loops import load_loops
 from knott.schema.models import (
     COMPOUND_KINDS,
@@ -39,7 +40,7 @@ from knott.vault.entity import MarkdownFile, markdown_body, parse_markdown
 
 TYPE_NAME = re.compile(r"^[a-z][a-z0-9_-]*$")
 
-_TOP_KEYS = ("name", "description", "kid", "path", "properties")
+_TOP_KEYS = ("name", "description", "kid", "path", "filename", "properties")
 # Top-level keys with a targeted hint instead of the generic "unknown key".
 _TOP_KEY_HINTS = {
     "type": "concept files use `name:`; `type:` belongs to entities",
@@ -306,6 +307,7 @@ class _SchemaParser:
         description = self._optional_str(data, ("description",))
         kid_required = self._kid_required(data)
         entity_paths = self._entity_paths(data)
+        filename = self._filename(data)
         properties = self._parse_properties(data.get("properties"))
         if type_name is None:
             return None
@@ -315,6 +317,7 @@ class _SchemaParser:
             description=description,
             kid_required=kid_required,
             entity_paths=entity_paths,
+            filename=filename,
             properties=properties,
             template=markdown_body(text),
         )
@@ -393,6 +396,32 @@ class _SchemaParser:
                 valid = False
                 self._path_error(key_path, f"`path` pattern {show(item)} {problem}")
         return tuple(patterns) if valid else ()
+
+    def _filename(self, data: dict[str, Any]) -> FilenameDef | None:
+        """The file-name pattern of `filename` (spec 0012); None when anything is invalid."""
+        if data.get("filename") is None:
+            return None
+
+        def report(key_path: _yaml.KeyPath, message: str) -> None:
+            line = next(
+                (
+                    found
+                    for end in range(len(key_path), 0, -1)
+                    if (found := self.line(key_path[:end])) is not None
+                ),
+                None,
+            )
+            self.issues.append(
+                Issue(
+                    code="schema-invalid-field",
+                    path=self.path,
+                    line=line,
+                    field=".".join(str(p) for p in key_path),
+                    message=message,
+                )
+            )
+
+        return parse_filename(data["filename"], report)
 
     def _path_error(self, key_path: _yaml.KeyPath, message: str) -> None:
         line = self.line(key_path) or self.line(("path",))

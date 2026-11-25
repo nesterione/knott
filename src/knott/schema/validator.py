@@ -7,6 +7,7 @@ import difflib
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Any
 
 from knott._values import BOOLEAN_SPELLINGS, kind, show
@@ -80,6 +81,7 @@ def validate_entity(
 
     checker = _ValueChecker(entity, resolve, lookup, resolve_file)
     checker.issues.extend(_check_location(entity, schema))
+    checker.issues.extend(_check_name(entity, schema))
     checker.issues.extend(_check_kid(entity, schema))
     for name, prop in schema.properties.items():
         checker.check(prop, (name,), entity.frontmatter.get(name))
@@ -101,6 +103,25 @@ def _check_location(entity: MarkdownFile, schema: Schema) -> list[Issue]:
             line=entity.key_lines.get("type"),
             message=(
                 f"`{schema.type}` entities are stored in {allowed}, but this file is in `{folder}`"
+            ),
+        )
+    ]
+
+
+def _check_name(entity: MarkdownFile, schema: Schema) -> list[Issue]:
+    """`entity-invalid-name`: the type declares `filename` and the file name does not match."""
+    pattern = schema.filename
+    if pattern is None or pattern.matches(entity.path):
+        return []
+    constraints = f" ({pattern.constraints})" if pattern.constraints else ""
+    return [
+        Issue(
+            code="entity-invalid-name",
+            path=entity.path,
+            line=entity.key_lines.get("type"),
+            message=(
+                f"`{schema.type}` files are named `{pattern.display}`{constraints}, "
+                f"but this one is `{PurePosixPath(entity.path).name}`"
             ),
         )
     ]

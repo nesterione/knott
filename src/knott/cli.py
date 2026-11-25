@@ -20,6 +20,7 @@ from knott.api import Knott, version
 from knott.errors import KnottError
 from knott.models import (
     ConnectorDefinition,
+    FilenamePart,
     Issue,
     LoopDefinition,
     LoopReport,
@@ -92,12 +93,30 @@ def format_type(t: OntologyType) -> str:
     lines.append(f"  template: {'yes' if t.template is not None else 'no'}")
     if t.entity_paths:
         lines.append(f"  path: {' | '.join(t.entity_paths)}")
+    if t.filename is not None:
+        lines.append(f"  filename: {t.filename.pattern}.md")
+        lines += _part_lines(t.filename.parts, "    ")
     paths = [path for path, _ in t.references()]
     lines.append(f"  references: {', '.join(paths) if paths else 'none'}")
     if t.properties:
         lines.append("  properties:")
         lines += _attribute_lines(t.properties, "    ")
     return "\n".join(lines)
+
+
+def _part_lines(parts: list[FilenamePart], indent: str) -> list[str]:
+    """One line per part of a file-name pattern: name, `match`, description, in columns."""
+    if not parts:
+        return []
+    width = max(len(p.name) for p in parts)
+    match_width = max(len(p.match or "") for p in parts)
+    lines: list[str] = []
+    for p in parts:
+        line = f"{indent}{p.name:<{width}}  {p.match or '':<{match_width}}"
+        if p.description:
+            line += f"  {_one_line(p.description)}"
+        lines.append(line.rstrip())
+    return lines
 
 
 def _notation(a: OntologyAttribute) -> str:

@@ -106,7 +106,7 @@ properties:
 
 A property with a fixed set of values is an `enum`: `level: { type: enum, options: [A1, A2, B1] }`. A value outside the set is reported with the allowed options.
 
-A concept can say where its entities are stored: `path: specs`, `path: episodes/*`, or a list of such patterns. An entity in another folder is reported as `entity-misplaced`. Without `path`, entities can live anywhere.
+A concept can say where its entities are stored: `path: specs`, `path: episodes/*`, or a list of such patterns. An entity in another folder is reported as `entity-misplaced`. Without `path`, entities can live anywhere. `filename` does the same for file names: a pattern such as `"{number}-{slug}"`, where each part has a regular expression and a description of how to fill it (`entity-invalid-name`).
 
 The body of a concept file is an optional template for entity bodies: real headings, with a `<!-- -->` comment under each saying what goes there. Knott stores it and never checks entities against it.
 

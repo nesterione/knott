@@ -42,6 +42,6 @@ This very folder mixes both: `README.md` is a plain note, everything under `conc
 
 Each entity has exactly one `type`, which must be the `name` of a concept file ([schema](schema.md)). There is no inheritance and no multiple typing; connections to other concepts are expressed through relations.
 
-Where the file is stored is free, unless the type's concept file declares a [`path`](schema.md#where-entities-live).
+Where the file is stored is free, unless the type's concept file declares a [`path`](schema.md#where-entities-live). The same holds for the file's name and [`filename`](schema.md#file-names).
 
 Top-level keys the schema does not declare are allowed and never checked, so personal metadata (`tags`, `aliases`, …) can live alongside typed fields.

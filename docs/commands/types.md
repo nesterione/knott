@@ -18,6 +18,8 @@ lexeme  (.knott/concepts/lexeme.md)
   kid: required
   template: yes
   path: lexemes/**
+  filename: {lemma}.md
+    lemma  [a-ząčęėįšųūž]+  The dictionary form, lowercase.
   references: senses[].see_also, topic
   properties:
     lemma*   string
@@ -34,6 +36,7 @@ lexeme  (.knott/concepts/lexeme.md)
 - `kid: required` appears when the concept file says so.
 - `template:` is `yes` when the concept file has a body.
 - `path:` appears when the concept file says [where its entities are stored](../concepts/schema.md#where-entities-live); several patterns are joined with ` | `.
+- `filename:` appears when the concept file sets [a pattern for file names](../concepts/schema.md#file-names), followed by one line per part: its name, the expression it must match, and how to fill it.
 - `references:` lists the path of every reference at any depth, or `none`. Paths use `[]` for list items, `.*` for map values and `.field` for object fields.
 - `*` marks a required property. Object fields are indented under their property.
 - A reference shows its targets after `→`. A target that no concept defines is marked `(unknown)`.

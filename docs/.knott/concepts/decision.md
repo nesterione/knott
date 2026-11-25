@@ -1,6 +1,15 @@
 ---
 name: decision
 path: decisions
+filename:
+  pattern: "{number}-{slug}"
+  parts:
+    number:
+      match: "[0-9]{4}"
+      description: The next free number in decisions/, four digits.
+    slug:
+      match: "[a-z0-9]+(-[a-z0-9]+)*"
+      description: The decision in two to six lowercase words joined by hyphens.
 description: >
   An architecture decision record: a choice made where the spec was silent or ambiguous, and why.
 properties:

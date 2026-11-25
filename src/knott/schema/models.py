@@ -6,6 +6,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from knott.schema.filenames import FilenameDef
+
 
 class ScalarType(StrEnum):
     STRING = "string"
@@ -122,6 +124,8 @@ class Schema:
     """Set by `kid: required`: every entity of this type must have a `kid`."""
     entity_paths: tuple[str, ...] = ()
     """Folder patterns from `path` (spec 0011); empty when entities can live anywhere."""
+    filename: FilenameDef | None = None
+    """The file-name pattern from `filename` (spec 0012); None when any name is fine."""
     properties: dict[str, AttributeDef] = field(default_factory=dict)
     """Top-level properties in schema order; references are properties too."""
     template: str | None = None
