@@ -443,6 +443,22 @@ def test_cli_loops_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     assert result.output == "recorded\n  e.md\n    next: published — ready\n"
 
 
+def test_cli_loops_never_ready_with_unmet_needs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `published` needs nothing of its own, but needs add up.
+    _vault(tmp_path, {"p": _loop(GOOD_STAGES)})
+    _write(tmp_path, "e.md", "---\ntype: episode\nstatus: recorded\nrecorded_at: 2026-10-06\n---\n")
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["loops", "production"])
+    assert result.output == (
+        "recorded\n"
+        "  e.md\n"
+        "    ✗ needs a `transcript` in `materials` (`material_for` pointing here)\n"
+        "    next: published — after this stage's needs\n"
+    )
+
+
 def test_cli_loops_json(in_fixture: None) -> None:
     result = runner.invoke(app, ["loops", "--format", "json"])
     assert result.exit_code == 0

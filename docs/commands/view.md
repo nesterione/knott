@@ -32,7 +32,7 @@ A **Loops (N)** button opens a board for the vault's [loops](../concepts/loop.md
 - **Cards** are entities: the title (the `title` property when the type has one, else the file name), the path, and what the next stage still needs, or `ready`.
 - **A red card** is at a stage whose needs it doesn't meet; `knott validate` reports the same as [`loop-stage-unmet`](../issues/loop-stage-unmet.md).
 
-A type's panel also lists the loops that follow it, with entity counts per stage. The button is hidden when the vault has no loops. With loops, the page contains the titles and paths of the entities whose type has a loop; keep that in mind before sharing the file. Cards are not links: the page is static and usually sits in a temp folder.
+A type's panel also lists the loops that follow it, with entity counts per stage. The button is hidden when the vault has no loops. With loops, the page contains the title, path and `kid` of each entity whose type has a loop; keep that in mind before sharing the file. Cards are not links: the page is static and usually sits in a temp folder.
 
 Three layouts sit behind a toggle: **Layered** (default), **Force** and **Radial**. The page remembers the last one, and the URL hash (`#layered`, `#force`, `#radial`) selects one directly.
 

@@ -584,7 +584,7 @@ function showBoard(name) {
   const card = e => `<div class="card${e.unmet.length ? " unmet" : ""}">
     <div class="title">${esc(e.title)}</div><div class="path">${esc(e.path)}</div>
     ${e.unmet.length ? `<div class="bad">stage needs: ${e.unmet.map(n => esc(needLabel(n))).join(", ")}</div>` : ""}
-    ${e.next !== null ? `<div class="next">next: ${esc(e.next)} — ${e.missing_next.length ? "needs " + e.missing_next.map(n => esc(needLabel(n))).join(", ") : '<span class="ready">ready</span>'}</div>` : ""}
+    ${e.next !== null ? `<div class="next">next: ${esc(e.next)} — ${e.missing_next.length ? "needs " + e.missing_next.map(n => esc(needLabel(n))).join(", ") : e.unmet.length ? "after this stage's needs" : '<span class="ready">ready</span>'}</div>` : ""}
   </div>`;
   const column = (label, entities, kind, stage) => `<div class="col ${kind}">
     <button title="Show what this stage needs"><span>${esc(label)}</span><span class="n">${entities.length}</span></button>

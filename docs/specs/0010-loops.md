@@ -63,7 +63,7 @@ The frontmatter is the definition. Keys are closed:
 - **Needs.** `needs` is a list. Each item is one of:
   - a string: the name of a top-level property of the type. It is met when the property is not absent, by the rules of [0005](../decisions/0005-empty-values.md). The value is not looked at otherwise.
   - a mapping with one key, `<inverse>: <type>` or `<inverse>: [<type>, …]`. `<inverse>` is the `inverse` of a relation. It is met when, for **each** listed type, at least one entity of that type has a reference that names the relation and resolves to this entity (reverse lookup, §10 of SPEC.md).
-- **Needs add up.** An entity at a stage must meet the needs of that stage and of every stage before it on the path. A need is written once, at the stage where it first applies.
+- **Needs add up.** An entity at a stage must meet the needs of that stage and of every stage before it on the path. A need is written once, at the stage where it first applies; one that a later stage repeats counts once, at its first stage.
 - A need checks that something exists. It never checks a value, a date, a count above one, or a file's content.
 - **Guidance.** The body is optional guidance, stored verbatim. A line `## <name>`, where `<name>` is an option of the enum, starts the guidance for that stage or side exit; it runs to the next such line. The text before the first such line is the loop's general guidance. Each part is kept as written, without the blank lines around it; a blank part is no guidance. A `##` line with any other text is part of the section it is in. The body is never checked against anything.
 
@@ -72,7 +72,7 @@ The frontmatter is the definition. Keys are closed:
 Run on every command, after all concept and relation files are read.
 
 - A file with no frontmatter, or invalid YAML, is `schema-invalid-yaml`.
-- A missing or invalid `name` is `schema-invalid-field` and defines no loop. A missing `type`, `property` or `stages` is `schema-invalid-field`, reported at line 1, and the loop is not loaded. An unknown key is `schema-invalid-field` with a "did you mean" suggestion. An invalid `description` is `schema-invalid-field` and the loop still loads without it.
+- A missing or invalid `name` is `schema-invalid-field` and defines no loop. A missing `type`, `property` or `stages` is `schema-invalid-field`, reported at line 1, and the loop is not loaded. So is a `type` or `property` that is not a string, at its own line. An unknown key is `schema-invalid-field` with a "did you mean" suggestion. An invalid `description` is `schema-invalid-field` and the loop still loads without it.
 - Two files with one `name`, or with the same `type` and `property`, are `schema-duplicate-loop`, reported at the second file in path order and naming both. The second defines no loop.
 - A malformed `stages` or `needs` (not a mapping, empty, a key that is not a string, a key other than `needs`, a need that is neither a string nor a one-key mapping) is `schema-invalid-field` at that line. A stage key that YAML reads as a boolean, number or date gets the hint to quote it.
 - Each of these is `loop-invalid-target`, at the line of the value:
@@ -141,7 +141,7 @@ episode-production  episode.status  idea 0 · planned 1 · recorded 1 · publish
 idea-review         idea.status     open 3 · trying 1 · adopted 2 · (dropped 1)
 ```
 
-With `NAME`, each stage on the path that has entities, then each side exit that has entities, then `no stage`. Entities are sorted by path. Under each entity, indented, one line per unmet need (`✗ needs …`), then one line `next: <stage> — missing <items>`, or `next: <stage> — ready` when nothing is missing. The last stage has no `next:` line.
+With `NAME`, each stage on the path that has entities, then each side exit that has entities, then `no stage`. Entities are sorted by path. Under each entity, indented, one line per unmet need (`✗ needs …`), then one line `next: <stage> — missing <items>`, or `next: <stage> — ready` when nothing is missing, or `next: <stage> — after this stage's needs` when nothing is missing there but the entity has unmet needs: needs add up, so it is not ready. The last stage has no `next:` line.
 
 ```
 $ knott loops episode-production
@@ -167,7 +167,7 @@ After the connectors, a `loops:` section lists every loop, sorted by name: the n
 - A **Loops (N)** button in the header, hidden when the vault has no loaded loop, opens a board. One loop is shown at a time; a dropdown switches, and the URL hash `#loop=<name>` opens one directly.
 - Columns are the stages on the path, in order, then the side exits, dimmed, then `no stage` when it has entities. Each column header shows the entity count; clicking it shows the stage's needs and guidance (HTML-escaped).
 - Each entity is a card: its `title` when the type has a top-level string property of that name and the entity sets it, otherwise the file name; its vault-relative path, as text; and its missing for next. A card with unmet needs is marked and lists them.
-- The embedded data gains `loops`, the loop definitions, and `loop_reports`, the same data as `knott loops --format json`. The page now holds the titles and paths of entities whose type has a loop; nothing else about entities is embedded.
+- The embedded data gains `loops`, the loop definitions, and `loop_reports`, the same data as `knott loops --format json`. The page now holds the title, path and `kid` of each entity whose type has a loop; nothing else about entities is embedded.
 - The page stays static: no server, no network, no editing. Cards are not links.
 
 ### Python API
@@ -196,6 +196,7 @@ The bundled skill says: before changing a property that a loop follows, read the
 | `status: published`, `published_at` empty | `loop-stage-unmet` |
 | `status: published`, `recorded_at` empty (a need of `recorded`) | `loop-stage-unmet`, "needed since `recorded`" |
 | `status: recorded`, nothing for `published` yet | valid; shown as missing for next |
+| `status: recorded` without `recorded_at`, and `published` needs nothing more | `loop-stage-unmet`; `next: published — after this stage's needs`, not `ready` |
 | `status: dropped` (a side exit), nothing else set | valid; no loop issues |
 | `status:` absent | no stage; `attribute-missing` only if the property is required |
 | `status: publshed` | `attribute-unknown-option`; no stage; no loop issues |

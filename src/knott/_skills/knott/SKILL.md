@@ -16,6 +16,7 @@ A Knott vault is an ordinary directory of Markdown files with a `.knott/` direct
 - **Relation file**: `.knott/relations/**/*.md`, one file per relation, naming what a link means. Frontmatter: `name`, `description`, and optionally `inverse` (its name read from the target side), `symmetric: true` (goes both ways) or `acyclic: true` (must not loop). Its body says when to use it. A reference property opts in with `relation: <name>`.
 - **File**: a property with `type: file`; its value names a file that is not an entity (audio, PDF, image, JSON), by a relative path in the vault or by a URI for a file kept elsewhere (`s3://bucket/key`, `gdrive:<id>`).
 - **Connector file**: `.knott/connectors/**/*.md`, one file per URI scheme the vault allows. Frontmatter: `name` (the scheme) and `description`. Its body says how to open or move such files.
+- **Loop file**: `.knott/loops/**/*.md`, one file per repeated process. It follows one `enum` property of a type (the entity's stage) and lists what each stage needs. See Loops below.
 - **Kid**: a knott-managed identity, `kid: <lowercase uuid>`. Never invent or edit one; `knott validate --fix` adds it.
 
 ## Workflow

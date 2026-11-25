@@ -17,7 +17,7 @@ The primary command. It loads every [concept file](../concepts/schema.md) in `.k
 | `knott validate` | all | all |
 | `knott validate a.md notes/` | all (entity checks depend on them) | only `a.md` and entities under `notes/` |
 
-Relation targets outside the given paths are still read to check their type. A loop of an `acyclic` relation ([`relation-cycle`](../issues/relation-cycle.md)) is reported when any entity on it is in scope. [File](../concepts/file.md) values are resolved only for the entities in scope. A given file that isn't an entity is reported as `not-an-entity`.
+Relation targets outside the given paths are still read to check their type. A cycle of an `acyclic` relation ([`relation-cycle`](../issues/relation-cycle.md)) is reported when any entity on it is in scope. [File](../concepts/file.md) values are resolved only for the entities in scope. A given file that isn't an entity is reported as `not-an-entity`.
 
 ## Output
 

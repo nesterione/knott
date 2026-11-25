@@ -29,9 +29,10 @@ from knott.models import (
     Refs,
     RelationDefinition,
     ValidationResult,
+    need_label,
+    need_text,
 )
 from knott.skills import InstallResult, InstallStatus, SkillTarget, install_skill
-from knott.vault.loops import need_label, need_text
 from knott.view import render_ontology
 
 app = typer.Typer(
@@ -243,7 +244,9 @@ def format_loop(report: LoopReport) -> str:
             lines += [f"    ✗ needs {need_text(need)}" for need in entity.unmet]
             if entity.next is not None:
                 missing = ", ".join(need_label(need) for need in entity.missing_next)
-                state = f"missing {missing}" if missing else "ready"
+                # Needs add up: an entity that fails its own stage is never ready.
+                blocked = "after this stage's needs" if entity.unmet else "ready"
+                state = f"missing {missing}" if missing else blocked
                 lines.append(f"    next: {entity.next} — {state}")
         blocks.append("\n".join(lines))
     groups = [(p.stage, p.entities) for p in report.exits] + [(NO_STAGE, report.unplaced)]

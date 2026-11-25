@@ -38,7 +38,7 @@ no stage
   episodes/ep-005/episode.md
 ```
 
-- **`next:`** names the following stage and what it still misses, or `ready` when nothing is missing. The last stage has no `next:` line.
+- **`next:`** names the following stage and what it still misses, or `ready` when nothing is missing. An entity that fails its own stage is never ready: it shows `after this stage's needs`. The last stage has no `next:` line.
 - **`✗ needs`** marks a need of the entity's own stage, or an earlier one, that is not met. `knott validate` reports each as [`loop-stage-unmet`](../issues/loop-stage-unmet.md).
 - **Stages with no entities** are left out. Side exits and `no stage` come last.
 

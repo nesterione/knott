@@ -79,18 +79,20 @@ It doesn't validate, and raises `PathNotFoundError`, `PathOutsideVaultError` or 
 
 ```
 src/knott/
-  api.py        Knott class: open / init / migrate / validate / types / schemas / schema_issues / ontology / refs
+  api.py        Knott class: open / init / migrate / validate / types / schemas / schema_issues / ontology / refs / loops
   cli.py        thin Typer adapter
   view.py       render_ontology(): Ontology → self-contained HTML (template in _view/)
   models.py     Issue, Stats, ValidationResult, SchemaInfo, InitResult, MigrateResult,
                 Ontology, OntologyType, OntologyAttribute, RelationDefinition,
                 ConnectorDefinition, EnumOption,
-                Refs, EntityRef, RefGroup, Ref
+                Refs, EntityRef, RefGroup, Ref,
+                LoopDefinition, LoopStage, LoopNeed, LoopReport, LoopPlacement, LoopEntity
   errors.py     KnottError hierarchy
   schema/       loader (concept files), relations (relation files and their checks),
-                connectors (connector files),
+                connectors (connector files), loops (loop files and their checks),
                 validator (entities vs schemas), migrate (.knott/schemas/ → concepts)
   vault/        discovery, entity (frontmatter), links (resolve_reference),
                 files (resolve_file), index (the vault's
-                references, built once per run), cycles (relation-cycle), refs (reverse lookup)
+                references, built once per run), cycles (relation-cycle), refs (reverse lookup),
+                loops (placement by stage, loop-stage-unmet)
 ```

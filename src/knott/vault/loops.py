@@ -13,6 +13,7 @@ from knott.models import (
     LoopPlacement,
     LoopReport,
     LoopStage,
+    need_text,
 )
 from knott.schema.models import LoopDef, LoopNeedDef, LoopStageDef, ScalarType, Schema
 from knott.schema.validator import is_empty
@@ -138,20 +139,6 @@ def _title(entity: MarkdownFile, schema: Schema) -> str:
     ):
         return value
     return PurePosixPath(entity.path).name
-
-
-def need_label(need: LoopNeed) -> str:
-    """Short form of a need: ``recorded_at``, or ``transcript in materials``."""
-    if need.kind == "property":
-        return str(need.property)
-    return f"{need.type} in {need.inverse}"
-
-
-def need_text(need: LoopNeed) -> str:
-    """A need as the tail of "stage … needs …"."""
-    if need.kind == "property":
-        return f"`{need.property}`"
-    return f"a `{need.type}` in `{need.inverse}` (`{need.relation}` pointing here)"
 
 
 def unmet_issues(

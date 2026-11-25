@@ -150,7 +150,7 @@ def check_definitions(
                     field="acyclic",
                     message=(
                         f"relation `{relation.name}` is symmetric and acyclic, but every "
-                        "symmetric link is a two-step loop; remove `acyclic` or `symmetric`"
+                        "symmetric link is a two-step cycle; remove `acyclic` or `symmetric`"
                     ),
                 )
             )
