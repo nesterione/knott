@@ -404,7 +404,7 @@ def test_symmetric_with_acyclic(tmp_path: Path) -> None:
     assert _brief(issues) == [
         (".knott/relations/a.md", 4, "acyclic", "relation-symmetric-mismatch")
     ]
-    assert "every symmetric link is a two-step loop" in issues[0].message
+    assert "every symmetric link is a two-step cycle" in issues[0].message
 
 
 def test_symmetric_relation_must_be_able_to_point_back(tmp_path: Path) -> None:

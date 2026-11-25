@@ -11,7 +11,7 @@ A symmetric relation reads the same both ways, so some combinations don't fit it
 | Found | Reported at |
 |---|---|
 | `symmetric: true` with an `inverse` | the relation file's `inverse:` line |
-| `symmetric: true` with `acyclic: true` (every symmetric link is a two-step loop) | the relation file's `acyclic:` line |
+| `symmetric: true` with `acyclic: true` (every symmetric link is a two-step cycle) | the relation file's `acyclic:` line |
 | a property names a symmetric relation, but its targets don't include the property's own concept | the concept file's `relation:` line |
 
 ## Example

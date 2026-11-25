@@ -1,4 +1,4 @@
-"""`relation-cycle`: loops of an acyclic relation (spec 0006).
+"""`relation-cycle`: cycles of an acyclic relation (spec 0006).
 
 One graph per acyclic relation, built from the vault's reference index: nodes are
 entities, edges are references at properties naming the relation that pass the
@@ -42,10 +42,10 @@ def cycle_issues(
 ) -> list[Issue]:
     """One `relation-cycle` issue per strongly connected component of ``relation``.
 
-    The issue names the shortest loop from the component's smallest path and is
+    The issue names the shortest cycle from the component's smallest path and is
     reported at the first entity on it, in path order, that is in scope. In a scoped
-    run where no entity on that loop is in scope but another of the component's
-    entities is, the loop is taken from the smallest in-scope entity instead.
+    run where no entity on that cycle is in scope but another of the component's
+    entities is, the cycle is taken from the smallest in-scope entity instead.
     Without ``in_scope``, everything is in scope.
     """
     edges: dict[str, dict[str, IndexedReference]] = {}

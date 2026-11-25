@@ -9,7 +9,7 @@ concepts:
 ---
 # knott types
 
-Prints discovered type names, one per line, sorted. `--verbose` adds each type's concept file, description, whether it has a body template, its references, and its properties, then the vault's relations and connectors, so an agent knows what to write before opening the file:
+Prints discovered type names, one per line, sorted. `--verbose` adds each type's concept file, description, whether it has a body template, its references, and its properties, then the vault's relations, connectors and loops, so an agent knows what to write before opening the file:
 
 ```
 $ knott types --verbose
@@ -76,3 +76,17 @@ connectors:
 ```
 
 If some concept files have errors, it still prints the types it could load, writes the errors to stderr, and exits `1`. A vault that still has `.knott/schemas/` prints no types and reports [`schema-legacy-layout`](../issues/schema-legacy-layout.md).
+
+A vault with [loops](../concepts/loop.md) gets a `loops:` section after that, sorted by name: the loop and the property it follows, its description, the path, the side exits, what each stage needs, and the guidance.
+
+```
+loops:
+  episode-production  episode.status
+    From an episode idea to a published episode.
+    stages: idea → planned → recorded → published
+    exits: dropped
+    planned needs: participants
+    recorded needs: recorded_at, transcript in materials
+    ## recorded
+    Export the transcript into the episode folder.
+```

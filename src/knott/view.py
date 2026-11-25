@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from importlib.resources import files
 from typing import Any
 
-from knott.models import Ontology, iter_reference_paths
+from knott.models import LoopReport, Ontology, iter_reference_paths
 from knott.vault.refs import GroupKey, group_key, group_order
 
 PLACEHOLDER = "/*__DATA__*/"
@@ -90,8 +91,12 @@ def reference_properties(ontology: Ontology) -> list[dict[str, Any]]:
     ]
 
 
-def render_ontology(ontology: Ontology) -> str:
-    """Return the ontology viewer page with `ontology` embedded as JSON."""
+def render_ontology(ontology: Ontology, loops: Sequence[LoopReport] = ()) -> str:
+    """Return the ontology viewer page with `ontology` embedded as JSON.
+
+    ``loops`` are the vault's loop reports (spec 0010): the page shows each as a board,
+    so it embeds the title and path of every entity whose type has a loop.
+    """
     template = _template()
     if PLACEHOLDER not in template:
         raise RuntimeError(f"ontology template must contain {PLACEHOLDER}")
@@ -100,6 +105,7 @@ def render_ontology(ontology: Ontology) -> str:
         "edges": ontology_edges(ontology),
         "referenced_by": referenced_by(ontology),
         "reference_properties": reference_properties(ontology),
+        "loop_reports": [report.model_dump() for report in loops],
     }
     data = json.dumps(payload, ensure_ascii=False)
     # Lone surrogates (a YAML "\ud800" escape, an undecodable file name) cannot be

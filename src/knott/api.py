@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _dist_version
 from pathlib import Path
+from typing import overload
 
 from knott import _yaml
 from knott.errors import ConfigError, KnottError, PathNotFoundError, PathOutsideVaultError
@@ -17,6 +18,7 @@ from knott.models import (
     FixedEntity,
     InitResult,
     Issue,
+    LoopReport,
     MigrateResult,
     Ontology,
     OntologyAttribute,
@@ -53,6 +55,7 @@ from knott.vault.kid import (
     new_kid,
 )
 from knott.vault.links import KID_PREFIX, LinkError
+from knott.vault.loops import loop_definition, loop_report, unmet_issues
 from knott.vault.refs import entity_kid, reverse_lookup, type_name
 
 CONFIG_FILE = Path(KNOTT_DIR) / "config.yaml"
@@ -185,6 +188,7 @@ class Knott:
             schema_issues=len(issues),
             relations=relations,
             connectors=connectors,
+            loops=[loop_definition(loop) for _, loop in sorted(loaded.loops.items())],
         )
 
     def validate(
@@ -227,6 +231,25 @@ class Knott:
             ),
             groups=reverse_lookup(session, relations, target),
         )
+
+    @overload
+    def loops(self) -> list[LoopReport]: ...
+    @overload
+    def loops(self, name: str) -> LoopReport: ...
+    def loops(self, name: str | None = None) -> list[LoopReport] | LoopReport:
+        """Where every entity stands in each loop, sorted by loop name (spec 0010).
+
+        With ``name``, that one loop; raises ``KnottError`` when no loaded loop has
+        the name. Does not validate: it works with the definitions that load.
+        """
+        loaded = load_definitions(self.root)
+        session = VaultSession(self.root, loaded.schemas)
+        if name is None:
+            return [loop_report(session, loop) for _, loop in sorted(loaded.loops.items())]
+        loop = loaded.loops.get(name)
+        if loop is None:
+            raise KnottError(f"no loop named {name}")
+        return loop_report(session, loop)
 
     def _entity_path(self, given: str | Path, session: VaultSession) -> str:
         """The vault-relative path of the entity file ``given``."""
@@ -304,6 +327,9 @@ class Knott:
         scope = None if paths is None else set(in_scope)
         for name in checked_relations(schemas, relation_defs):
             issues.extend(cycle_issues(session.references(), name, scope))
+
+        for _, loop in sorted(loaded.loops.items()):
+            issues.extend(unmet_issues(session, loop_report(session, loop), scope))
 
         stats = Stats(schemas=len(schemas), entities=entities, relations=relations)
         return ValidationResult(issues=_sorted(issues), stats=stats)

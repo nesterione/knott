@@ -100,7 +100,7 @@ properties:
 - **Shared.** Many properties may name one relation, in one concept or across concepts, under any key names. `knott refs` groups them together under the `inverse` (here `superseded_by`, `discussed_in`).
 - **`inverse` is a read-side label.** `superseded_by` names the link when `knott refs` reads it from the target. It is not a property and not a second relation, and it is never written on the target.
 - **Symmetric links need one side.** For `related` (`symmetric: true`), `knott refs` shows the link from both sides; storing it on both is valid but adds nothing. The property's targets must include its own concept, so the link can point back.
-- **Acyclic relations are checked for loops** across the whole vault, every property that names the relation counting as one graph: [`relation-cycle`](../issues/relation-cycle.md).
+- **Acyclic relations are checked for cycles** across the whole vault, every property that names the relation counting as one graph: [`relation-cycle`](../issues/relation-cycle.md).
 - **Unknown names still work.** A `relation:` no file defines is [`relation-unknown`](../issues/relation-unknown.md), and the reference stays a plain one.
 
 Problems with the definitions themselves: [`schema-duplicate-relation`](../issues/schema-duplicate-relation.md), [`relation-inverse-conflict`](../issues/relation-inverse-conflict.md), [`relation-symmetric-mismatch`](../issues/relation-symmetric-mismatch.md). `transitive` is reserved and not supported yet. See [spec 0006](../specs/0006-relation-definitions.md).

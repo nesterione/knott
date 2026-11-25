@@ -78,6 +78,7 @@ $ knott validate
 | `knott validate [PATH...]` | Check all schemas, plus all entities or those under `PATH` (`--format json` for agents, `--fix` to add missing `kid`s) |
 | `knott types [--verbose]` | List discovered types (`--verbose`: properties, nested shapes, references, whether a template exists, and the relations) |
 | `knott refs PATH` | List who references an entity, grouped by relation (`PATH` or `kid:<uuid>`; `--format json`) |
+| `knott loops [NAME]` | Show where entities stand in the vault's loops and what each still needs (`--format json`) |
 | `knott migrate [PATH]` | Convert a pre-0.5 `.knott/schemas/` folder into concept files, then validate |
 | `knott view [PATH]` | Draw the ontology as an HTML page and open it (`-o FILE`, `--no-open`) |
 | `knott version` | Print the installed version |
@@ -219,6 +220,7 @@ result.ok, result.issues, result.stats
 vault.types()                        # ["script", "transcript"]
 vault.ontology()                     # Ontology(vault, types, schema_issues, relations)
 vault.refs("concepts/kid.md")        # Refs(entity, groups): who references it, grouped by relation
+vault.loops()                        # [LoopReport, …]: entities by stage, and what each still needs
 for t in vault.ontology().types:
     t.properties, t.template, t.references()   # references(): [("speakers[].person", …), …]
 ```

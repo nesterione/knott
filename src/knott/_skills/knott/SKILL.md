@@ -16,6 +16,7 @@ A Knott vault is an ordinary directory of Markdown files with a `.knott/` direct
 - **Relation file**: `.knott/relations/**/*.md`, one file per relation, naming what a link means. Frontmatter: `name`, `description`, and optionally `inverse` (its name read from the target side), `symmetric: true` (goes both ways) or `acyclic: true` (must not loop). Its body says when to use it. A reference property opts in with `relation: <name>`.
 - **File**: a property with `type: file`; its value names a file that is not an entity (audio, PDF, image, JSON), by a relative path in the vault or by a URI for a file kept elsewhere (`s3://bucket/key`, `gdrive:<id>`).
 - **Connector file**: `.knott/connectors/**/*.md`, one file per URI scheme the vault allows. Frontmatter: `name` (the scheme) and `description`. Its body says how to open or move such files.
+- **Loop file**: `.knott/loops/**/*.md`, one file per repeated process. It follows one `enum` property of a type (the entity's stage) and lists what each stage needs. See Loops below.
 - **Kid**: a knott-managed identity, `kid: <lowercase uuid>`. Never invent or edit one; `knott validate --fix` adds it.
 
 ## Workflow
@@ -163,6 +164,16 @@ images:
 - Never change an existing `kid`; other files and tools may refer to it.
 - `kid-invalid`: write the canonical form the message gives.
 
+## Loops
+
+A vault can define **loops** in `.knott/loops/`: a process that entities of one type go through, such as producing an episode. A loop follows one `enum` property (often `status`); its value is the entity's stage. Each stage lists what it needs: properties that are set, and entities that point at this one (`transcript in materials`).
+
+- `knott types --verbose` ends with a `loops:` section: each loop's stages, needs, and guidance on what to do at each stage. Read it before working on an entity of that type.
+- `knott loops <name>` lists every entity under its stage, with `next: <stage> — missing …` or `next: <stage> — ready`.
+- **Move an entity forward in this order:** add what the next stage needs, then change the stage property. Set the next stage only when `knott loops` says `ready`.
+- A stage set too early is `loop-stage-unmet` in `knott validate`. Fix it by adding what is missing, or by setting the property back. Never remove a need from a loop file just to make an entity pass.
+- A value the loop does not list as a stage (such as `dropped`) is a side exit: it needs nothing.
+
 ## Obsidian settings
 
 For vaults edited in Obsidian, set Files & links → *New link format* to **Relative path to file** and turn **off** *Use [[Wikilinks]]*. Otherwise Obsidian may rewrite links on rename into forms `knott validate` rejects.
@@ -175,6 +186,7 @@ knott validate [PATH...]         # check concept files + all entities, or only P
 knott validate --format json     # {ok, stats, issues[]} for machine reading
 knott validate --fix [PATH...]   # add a kid to entities that have none, then validate
 knott refs PATH [--format json]  # who references an entity (PATH or kid:<uuid>), by relation
+knott loops [NAME] [--format json]  # entities by stage of a loop, and what each still needs
 knott init [PATH]                # create .knott/ (never overwrites)
 knott view [PATH] [--no-open] [-o FILE]  # write an HTML diagram of types and references
 knott migrate [PATH]             # convert a pre-0.5 .knott/schemas/ into .knott/concepts/

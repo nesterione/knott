@@ -11,17 +11,44 @@
             "id": "2336cfa56b43f97d",
             "type": "leaf",
             "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
+            }
+          },
+          {
+            "id": "e37cbbc41cebb4fe",
+            "type": "leaf",
+            "state": {
+              "type": "unhide:documentation",
+              "state": {
+                "unhide:documentation": {
+                  "data": "# Unhide for Obsidian [![release](https://img.shields.io/github/v/release/polyipseity/obsidian-unhide)][latest release] [![Obsidian downloads](https://img.shields.io/badge/dynamic/json?logo=Obsidian&color=%238b6cef&label=downloads&query=$[\"unhide\"].downloads&url=https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/community-plugin-stats.json)][community plugin]\n\n(formerly Show Hidden Files) Unhide hidden files, like dotfiles.\n\n[![Buy Me a Coffee/embed][Buy Me a Coffee/embed]][Buy Me a Coffee]\n\n__[Repository][repository] · [Changelog][changelog] · [Community plugin][community plugin] · [Related][related] · [Features](#features) · [Installation](#installation) · [Usage](#usage) · [Contributing](#contributing) · [Security](#security)__\n\n> __For Obsidian Sync users__\n>\n> Using this plugin in a vault with Obsidian Sync can permanently delete hidden files on all your synced devices. The \"Protect Obsidian Sync\" setting (on by default) prevents this by skipping hiding while Sync is active, but it may not catch every case. Do not disable it in synced vaults, and keep independent backups. Do not use this plugin if your data is very important.\n\n![Trailer][trailer]\n\nFor first time users, read the [installation](#installation) section first!\n\nThis file is automatically opened on first install. You can reopen it in settings or command palette.\n\n## Features\n\n- Show files that are forcefully hidden in vanilla Obsidian.\n- Toggle visibility of hidden files.\n- Interact with hidden files normally like normal files.\n\n## Installation\n\n1. Install plugin.\n    - Community plugins\n        1. Install the [plugin][community plugin] from community plugins directly.\n    - Manual\n        1. Create directory `unhide` under `.obsidian/plugins` of your vault.\n        2. Place `manifest.json`, `main.js`, and `styles.css` from the [latest release] into the directory.\n    - Building (rolling)\n        1. Clone this repository, including its submodules.\n        2. Install `bun`. See <https://bun.sh> for installation.\n        3. Run `bun install` in the root directory.\n        4. Run `bun run obsidian:install <vault directory>` in the root directory.\n    - [Obsidian42 - BRAT](https://obsidian.md/plugins?id=obsidian42-brat) (rolling)\n        - See [their readme](https://github.com/TfTHacker/obsidian42-brat#readme).\n2. Enable plugin. _Before you enable, please check [§ Usage](#usage)._\n3. (optional) Configure plugin settings.\n\n## Usage\n\n- Before enabling the plugin, check if your vault contains dot folders with a lot of files \\(e.g. 100+ files\\). If yes, Obsidian will likely freeze \\(for a long time\\) when you enable the plugin, as Obsidian scans all files in the dot folders.\n\n    By default, the plugin excludes folders and files named `.git` or `.venv` at any level of the vault file tree. If your dot folders are excluded by the defaults, you can simply enable the plugin without freezing Obsidian. The defaults can be edited in plugin settings.\n\n    If not, you should manually create `.obsidian/plugins/unhide/data.json`, with the following contents as an example \\(excluding the comments\\):\n\n    ```JSON5\n    {\n        \"showingRules\": [\n            \"+/\", // Needed to include all hidden files and folders.\n            // Add dot folders with a lot of files, e.g.:\n            \"-/\\\\.git(?:\\\\/|$)/u\",\n            \"-/\\\\.venv(?:\\\\/|$)/u\",\n            \"-/\\\\.aDotFolderWithManyFiles(?:\\\\/|$)/u\",\n        ]\n    }\n    ```\n\n    The example excludes folders and files named `.git`, `.venv`, or `.aDotFolderWithManyFiles` at any level of the vault file tree. You can instead use `\"-.aDotFolderWithManyFiles/\"` to exclude a folder or file named `.aDotFolderWithManyFiles` at the vault root only.\n\n- Enable the plugin.\n- Please also enable `Files & links > Detect all file extensions` for the plugin to work properly.\n- Other plugins will treat visible hidden files as normal files. This may cause issues such as treating plugin JavaScript files as user scripts. To resolve such issues, exclude those hidden files in the other plugins' settings or hide those hidden files in this plugin's settings.\n\n### Use cases\n\n- The plugin reveals dot-directories such as Obsidian's `.assets` and Nextcloud Notes' `.attachments*` by default (only `.git` and `.venv` are excluded). When the vault base is synced with Nextcloud, this lets embedded images display in both Obsidian and Nextcloud Notes. Keep `Files & links > Detect all file extensions` enabled (see above) for this to work.\n\n## Contributing\n\nContributions are welcome!\n\n### Changesets\n\nThis project uses [`changesets`](https://github.com/changesets/changesets) to manage the changelog. When creating a pull request, please [add a changeset](https://github.com/changesets/changesets/blob/main/docs/intro-to-using-changesets.md#adding-changesets) describing the changes. Add multiple changesets if your pull request changes several things. End each changeset with `([PR number](PR link) by [author username](author link))`. For example, the newly created file under the directory `.changeset` should look like:\n\n```Markdown\n---\n\"example\": patch\n---\n\nThis is an example change. ([GH#1](https://github.com/ghost/example/pull/1) by [@ghost](https://github.com/ghost))\n```\n\n### Linting, Commit, and Hooks\n\nThis project uses the following tools to ensure code and commit quality:\n\n- __ESLint__: Linting for TypeScript/JavaScript. Run with `bun run check` (lint only) or `bun run fix` (auto-fix lint issues).\n- __Prettier__: Code formatting. Run with `bun run format` (format all files) or `bun run format:check` (check formatting only).\n- __markdownlint__: Lints Markdown files. Run with `bun run markdownlint` or auto-fix with `bun run markdownlint:fix`.\n- __commitlint__: Enforces conventional commit messages. Used automatically on commit via Husky.\n- __husky__: Manages Git hooks. Pre-commit runs `lint-staged` and pre-push runs commitlint.\n- __lint-staged__: Runs linters on staged files. Markdown files are auto-fixed before commit.\n\n> __Lint-staged note:__ The lint-staged configuration (`.lintstagedrc.mjs`) invokes formatter/linter binaries directly (for example `prettier --write`, `eslint --cache --fix`, `markdownlint-cli2 --fix`) so that the list of staged files is passed through to the tool. Invoking these via `bun run` would prevent lint-staged from forwarding filenames and cause the tool to operate on its default glob (or the entire repo). Use `bun run format` to format the entire repository when needed.\n\nTo set up locally:\n\n1. Run `bun install` to install dependencies and set up hooks.\n2. On commit, staged Markdown files will be linted and auto-fixed.\n3. Commit messages are checked for conventional format.\n\nYou can manually run:\n\n- `bun run check` — lint all code (no formatting)\n- `bun run fix` — auto-fix lint issues (no formatting)\n- `bun run format` — format all code with Prettier\n- `bun run format:check` — check formatting with Prettier\n- `bun run markdownlint` — check all Markdown files\n- `bun run markdownlint:fix` — auto-fix Markdown files\n- `bun run commitlint` — check commit messages in range\n\nConfiguration files:\n\n- `.eslintrc.*` or `eslint.config.mjs` — ESLint rules\n- `.prettierrc` — Prettier rules\n- `.prettierignore` — Prettier ignore patterns\n- `.markdownlint.jsonc` — markdownlint rules\n- `.commitlintrc.js` — commitlint config\n- `.husky/` — Git hooks\n\n### Testing\n\nThis repository uses __Vitest__ for fast unit tests. Tests live under `tests/` and should be named `*.spec.ts` or `*.spec.js`.\n\n- Run locally (non-interactive, coverage): `bun run test` (runs `vitest run --coverage`).\n- Run locally (interactive / watch): `bun run test:watch`.\n- Git hooks: The pre-push hook runs `bun run test` (see `.husky/pre-push`) and will block pushes if tests fail.\n\nSee `vitest.config.mts` for minimal config and further instructions.\n\n### Todos\n\nThe todos here, ordered alphabetically, are things planned for the plugin. There are no guarantees that they will be completed. However, we are likely to accept contributions for them.\n\n- (none)\n\n### Translating\n\nSee [`assets/locales/README.md`](assets/locales/README.md).\n\n## Security\n\nWe hope that there will never be any security vulnerabilities, but unfortunately it does happen. Please [report](#reporting-a-vulnerability) them!\n\n### Supported versions\n\n| Version  | Supported |\n| -------- | --------- |\n| rolling  | ✅        |\n| latest   | ✅        |\n| outdated | ❌        |\n\n### Reporting a vulnerability\n\nPlease report a vulnerability by opening a [private vulnerability report][new security advisory]. We will get back to you as soon as possible.\n\n[Buy Me a Coffee]: https://buymeacoffee.com/polyipseity\n[Buy Me a Coffee/embed]: https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=&slug=polyipseity&button_colour=40DCA5&font_colour=ffffff&font_family=Lato&outline_colour=000000&coffee_colour=FFDD00\n[changelog]: https://github.com/polyipseity/obsidian-unhide/blob/main/CHANGELOG.md\n[community plugin]: https://obsidian.md/plugins?id=unhide\n[latest release]: https://github.com/polyipseity/obsidian-unhide/releases/latest\n[new security advisory]: https://github.com/polyipseity/obsidian-unhide/security/advisories/new\n[related]: https://github.com/polyipseity/obsidian-monorepo\n[repository]: https://github.com/polyipseity/obsidian-unhide\n[trailer]: https://raw.githubusercontent.com/polyipseity/obsidian-unhide/main/assets/trailer.png\n",
+                  "displayTextI18nKey": "translation:generic.documentations.readme",
+                  "iconI18nKey": "asset:generic.documentations.readme-icon"
+                }
+              },
+              "icon": "file-question",
+              "title": "Readme"
+            }
+          },
+          {
+            "id": "12f8f74c81669a50",
+            "type": "leaf",
+            "state": {
               "type": "markdown",
               "state": {
-                "file": "decisions/0005-empty-values.md",
+                "file": "issues/relation-target-not-found.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "0005-empty-values"
+              "title": "relation-target-not-found"
             }
           }
-        ]
+        ],
+        "currentTab": 2
       }
     ],
     "direction": "vertical"
@@ -99,7 +126,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "decisions/0005-empty-values.md",
+                "file": "guides/agent-workflow.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -118,7 +145,7 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "decisions/0005-empty-values.md",
+                "file": "guides/agent-workflow.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
@@ -161,7 +188,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "decisions/0005-empty-values.md",
+                "file": "guides/agent-workflow.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -188,21 +215,43 @@
       "bases:Create new base": false
     }
   },
-  "active": "2336cfa56b43f97d",
+  "active": "12f8f74c81669a50",
   "lastOpenFiles": [
-    "decisions/0004-strict-typing.md",
-    "decisions/0003-source-side-relations.md",
-    "decisions/0002-relative-paths-not-ids.md",
-    "decisions/0001-markdown-is-source-of-truth.md",
-    "concepts/ontology.md",
-    "concepts/issue.md",
-    "concepts/frontmatter.md",
-    "concepts/entity.md",
-    "concepts/attribute.md",
-    "concepts/relation.md",
-    "concepts/schema.md",
-    "concepts/vault.md",
-    "commands/init.md",
-    "commands/types.md"
+    ".knott/loops/spec.md",
+    ".knott/loops",
+    "issues/schema-duplicate-loop.md",
+    "issues/loop-invalid-target.md",
+    "issues/loop-stage-unmet.md",
+    "commands/loops.md",
+    "concepts/loop.md",
+    "specs/0010-loops.md",
+    "intents/loops.md",
+    "specs/0009-enum-properties.md",
+    "issues/attribute-unknown-option.md",
+    "intents/enumerated-values.md",
+    "specs/0008-file-properties.md",
+    "issues/schema-duplicate-connector.md",
+    "issues/file-unknown-connector.md",
+    "issues/file-outside-vault.md",
+    "issues/file-not-found.md",
+    "issues/file-missing.md",
+    "issues/file-invalid-value.md",
+    "issues/file-extension-mismatch.md",
+    "intents/remote-sources.md",
+    "intents/file-properties.md",
+    "decisions/0012-files-are-property-values.md",
+    "concepts/file.md",
+    "specs/0007-view-inline-relations.md",
+    "specs/0007-relation-type-sigil.md",
+    "specs/0006-relation-definitions.md",
+    "specs",
+    "intents",
+    ".knott/relations",
+    "plans/completed",
+    "plans",
+    ".obsidian/community-plugins.json",
+    ".obsidian/plugins/unhide/styles.css",
+    ".obsidian/plugins/unhide/manifest.json",
+    ".obsidian/plugins/unhide/main.js"
   ]
 }

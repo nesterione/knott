@@ -17,7 +17,8 @@ my-vault/
 │   ├── config.yaml        # knott_version, written once by `knott init`
 │   ├── concepts/          # one Markdown concept file per entity type
 │   ├── relations/         # optional: one Markdown file per relation definition
-│   └── connectors/        # optional: one Markdown file per store of files kept elsewhere
+│   ├── connectors/        # optional: one Markdown file per store of files kept elsewhere
+│   └── loops/             # optional: one Markdown file per loop
 └── … your Markdown, organized however you like
 ```
 

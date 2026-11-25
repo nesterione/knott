@@ -14,6 +14,8 @@ RELATIONS_DIR = f"{KNOTT_DIR}/relations"
 """Relation files: one Markdown file per relation (spec 0006)."""
 CONNECTORS_DIR = f"{KNOTT_DIR}/connectors"
 """Connector files: one Markdown file per URI scheme (spec 0008)."""
+LOOPS_DIR = f"{KNOTT_DIR}/loops"
+"""Loop files: one Markdown file per loop (spec 0010)."""
 LEGACY_SCHEMAS_DIR = f"{KNOTT_DIR}/schemas"
 """The pre-0.5 schema folder; `knott migrate` converts it."""
 

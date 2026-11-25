@@ -27,6 +27,7 @@ vault.schemas()                     # [SchemaInfo(type, description, path), …]
 vault.schema_issues()               # problems from schema loading only
 vault.ontology()                    # Ontology(vault, types, schema_issues, relations)
 vault.refs("concepts/kid.md")       # Refs(entity, groups): who references it; also "kid:<uuid>"
+vault.loops()                       # [LoopReport(loop, stages, exits, unplaced), …]; loops("name") for one
 vault.migrate()                     # convert .knott/schemas/; MigrateResult(written, removed, list_fields)
 vault.validate(fix=True)            # add missing kids first; result.fixed: [FixedEntity(path, kid)]
 Knott.init("new-vault")             # InitResult(root, created)
@@ -39,7 +40,7 @@ Knott.init("new-vault")             # InitResult(root, created)
 - It raises only for exit-code-2 conditions, all subclasses of `KnottError`: `VaultNotFoundError`, `ConfigError`, `PathNotFoundError`, `PathOutsideVaultError`, and `MigrateError` from `migrate()`.
 - Relative paths passed to `validate()` and `refs()` are resolved against the vault root (the CLI resolves them against the current directory first).
 
-`ontology()` returns `Ontology(vault, types, schema_issues, relations, connectors)`. Each `OntologyType` has `type`, `description`, `path` (its concept file), `count` (entities of that type; files with invalid frontmatter are not counted), `kid_required`, `properties` (in concept-file order) and `template` (the concept file's body, `None` when blank).
+`ontology()` returns `Ontology(vault, types, schema_issues, relations, connectors, loops)`. Each `OntologyType` has `type`, `description`, `path` (its concept file), `count` (entities of that type; files with invalid frontmatter are not counted), `kid_required`, `properties` (in concept-file order) and `template` (the concept file's body, `None` when blank).
 
 An `OntologyAttribute` mirrors its definition: `name`, `type` (a scalar name, or `list`, `object`, `map`, `reference`, `file` or `enum`), `required` and `description`. A `list` has its item definition in `items`, a `map` its value definition in `values`, and an `object` its fields in `fields`, recursively; the `items` / `values` nodes have `name=None`. A `reference` has `targets`, the types some concept defines, `unknown_targets`, the ones none does (shown, never enforced), and `relation`, the relation it names (`None` when it names none, or one no relation file defines). An `enum` has `options`, a list of `EnumOption(value, description)` in concept order. A `file` has `accept`, the extensions a vault file may have (`[]` when any). `attribute.notation` gives the compact form, e.g. `list of object` or `reference → episode | meeting`.
 
@@ -53,7 +54,9 @@ t = next(t for t in vault.ontology().types if t.type == "transcript")
 
 `knott types --verbose` prints the same paths, and `knott view` draws one edge per known target.
 
-`Ontology.relations` lists every relation file, sorted by name, as `RelationDefinition(name, description, inverse, symmetric, acyclic, guidance, path)`; it is `[]` for a vault without relation files. `Ontology.connectors` lists every [connector file](../concepts/file.md#uris-and-connectors) the same way, as `ConnectorDefinition(name, description, guidance, path)`.
+`Ontology.relations` lists every relation file, sorted by name, as `RelationDefinition(name, description, inverse, symmetric, acyclic, guidance, path)`; it is `[]` for a vault without relation files. `Ontology.connectors` lists every [connector file](../concepts/file.md#uris-and-connectors) the same way, as `ConnectorDefinition(name, description, guidance, path)`. `Ontology.loops` lists every [loop](../concepts/loop.md) as `LoopDefinition(name, description, type, property, stages, exits, guidance, path)`.
+
+`loops()` returns what [`knott loops`](../commands/loops.md) prints: per loop, a `LoopReport` whose `stages` and `exits` are `LoopPlacement(stage, entities)` and whose `unplaced` holds entities with no stage. Each `LoopEntity(path, kid, title, unmet, next, missing_next)` lists its unmet needs and what the next stage still misses as `LoopNeed(kind, property, inverse, relation, type, since)`.
 
 ## Reverse lookup
 
@@ -76,18 +79,20 @@ It doesn't validate, and raises `PathNotFoundError`, `PathOutsideVaultError` or 
 
 ```
 src/knott/
-  api.py        Knott class: open / init / migrate / validate / types / schemas / schema_issues / ontology / refs
+  api.py        Knott class: open / init / migrate / validate / types / schemas / schema_issues / ontology / refs / loops
   cli.py        thin Typer adapter
   view.py       render_ontology(): Ontology → self-contained HTML (template in _view/)
   models.py     Issue, Stats, ValidationResult, SchemaInfo, InitResult, MigrateResult,
                 Ontology, OntologyType, OntologyAttribute, RelationDefinition,
                 ConnectorDefinition, EnumOption,
-                Refs, EntityRef, RefGroup, Ref
+                Refs, EntityRef, RefGroup, Ref,
+                LoopDefinition, LoopStage, LoopNeed, LoopReport, LoopPlacement, LoopEntity
   errors.py     KnottError hierarchy
   schema/       loader (concept files), relations (relation files and their checks),
-                connectors (connector files),
+                connectors (connector files), loops (loop files and their checks),
                 validator (entities vs schemas), migrate (.knott/schemas/ → concepts)
   vault/        discovery, entity (frontmatter), links (resolve_reference),
                 files (resolve_file), index (the vault's
-                references, built once per run), cycles (relation-cycle), refs (reverse lookup)
+                references, built once per run), cycles (relation-cycle), refs (reverse lookup),
+                loops (placement by stage, loop-stage-unmet)
 ```

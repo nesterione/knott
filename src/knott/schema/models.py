@@ -159,6 +159,46 @@ class ConnectorDef:
     """1-based line of each top-level key of the connector file."""
 
 
+@dataclass(frozen=True)
+class LoopNeedDef:
+    """One thing a loop stage needs (spec 0010): a property that is set, or an entity
+    of ``type`` that points here through ``relation``."""
+
+    kind: str
+    """``property`` or ``inverse``."""
+    property: str | None = None
+    inverse: str | None = None
+    """The relation's inverse, as written in the loop file."""
+    relation: str | None = None
+    type: str | None = None
+
+
+@dataclass(frozen=True)
+class LoopStageDef:
+    name: str
+    needs: tuple[LoopNeedDef, ...] = ()
+    guidance: str | None = None
+
+
+@dataclass(frozen=True)
+class LoopDef:
+    """A loop file in ``.knott/loops/`` (spec 0010)."""
+
+    name: str
+    description: str | None
+    type: str
+    property: str
+    """A top-level enum property of ``type``; its value is the entity's stage."""
+    stages: tuple[LoopStageDef, ...]
+    """The path, in the loop's order."""
+    exits: tuple[LoopStageDef, ...]
+    """Options of the enum the loop leaves out, in the enum's order."""
+    guidance: str | None
+    """The body before the first stage heading; None when blank."""
+    path: str
+    lines: dict[str, int | None] = field(default_factory=dict, compare=False)
+
+
 SchemaPath = tuple[str, ...]
 """Key path inside ``properties``, e.g. ``("speakers", "items", "fields", "person")``."""
 

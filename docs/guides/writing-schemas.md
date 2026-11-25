@@ -156,7 +156,7 @@ A property names it with `relation:`, as in the `decision` example above.
 - **A plain reference is an inline relation**: unnamed, known only as `<type>.<property path>`. Give it a relation file when a second property means the same thing or it needs `inverse`, `symmetric` or `acyclic`.
 - **Name the `inverse` from the target's side**: `superseded_by`, `discussed_in`. It is a label for [`knott refs`](../commands/refs.md), never a property, so it must not equal a top-level property of a concept the relation can point at.
 - **`symmetric: true` for peers**, such as `related`. Store the link on one side; `knott refs` shows it from both. A symmetric relation has no `inverse` and isn't `acyclic`.
-- **`acyclic: true` for anything that replaces or derives from something else.** A loop is reported as `relation-cycle`.
+- **`acyclic: true` for anything that replaces or derives from something else.** A cycle is reported as `relation-cycle`.
 - **Write the body as guidance**: when to use this relation and which one to use instead. Agents read it in `knott types --verbose` before choosing a property.
 
 See [Relation](../concepts/relation.md#relation-definitions) for the full rules.
@@ -189,3 +189,24 @@ knott validate          # did existing entities break?
 ```
 
 Concept files have no version field; Git holds their history.
+
+## Loops
+
+When entities of a type go through the same steps every time, say so in a [loop](../concepts/loop.md) file, `.knott/loops/<name>.md`, not in prose:
+
+```yaml
+name: episode-production
+type: episode
+property: status          # an enum; its options are the stages
+stages:
+  idea:
+  recorded:  { needs: [recorded_at, materials: transcript] }
+  published: { needs: [published_at, materials: summary] }
+```
+
+- **Make the status an `enum` first.** A loop's stages are its options.
+- **List only the main path.** Leave out options such as `dropped`; they become side exits with no needs.
+- **Write each need once**, at the stage where it first applies. Later stages inherit it.
+- **Need only what every entity will have.** Needs have no exceptions, so one old entity without a transcript makes "a transcript" too strict for that vault.
+- **Give the link an inverse.** `materials: transcript` works because the relation `material_for` declares `inverse: materials`.
+- **Put the how-to in the body**, under `## <stage>` headings. Agents read it from `knott types --verbose`.
