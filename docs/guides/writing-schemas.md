@@ -58,7 +58,15 @@ This is a shortened copy of this folder's `.knott/concepts/decision.md`.
 - **Choose the reference's direction carefully.** It lives on the source and is never duplicated on the target. Put it on the side that is created later or knows about the other.
 - **Self-reference is fine**: `supersedes: {type: reference, target: decision}`.
 - **One or several?** `type: reference` holds exactly one. If an entity can point at several, declare a `list` of references from the start; a single value is then written as a one-item list.
-- **Several possible types?** Use `target: [episode, meeting]` rather than two properties.
+- **Use `extends` for a real "is a"**: the child is a kind of the parent, shares its properties, and should be accepted wherever the parent is. If you would not say "a tool is a concept", it is not a subtype. See [Inheritance](../concepts/schema.md#inheritance).
+- **Use a `kind` enum instead** when the kinds have the same properties and no reference needs "only this kind".
+- **Don't add a parent only to thin the diagram.** A parent with no shared properties and no reference that targets it is noise.
+- **Make the parent `abstract`** when nothing is "just a concept". Leave it concrete when such entities exist.
+- **Name a group of types with an abstract parent.** `page` extended by `concept`, `source` and `synthesis` is declared once, and `target: page` replaces the list on every property.
+- **Target the narrowest type that is true**: `made_by → organization`, not `→ concept`. Target the parent only when any kind is right.
+- **Put a property on the highest type where every subtype has it**, and nowhere else. A property that half the children leave empty belongs on those children.
+- **Keep the tree shallow.** Two levels cover most vaults; a child cannot change what it inherits.
+- **List targets (`[episode, meeting]`) for types that share nothing**, rather than inventing a parent for them.
 - **Prefer a reference over a string** when the value names another entity. You get existence and type checks for free.
 - **Say where a type lives when the folder matters**: `path: specs` at the top level, or `episodes/*`, `notes/**`, a list. An entity stored elsewhere then fails validation, and an agent reads the folder from `knott types --verbose`. Leave it out when any folder is fine.
 - **Set a file-name pattern when names carry meaning**: `filename` with a `pattern` such as `"{number}-{slug}"` and, per part, a `match` and a `description`. Write the description as an instruction to the agent that names the file. See [File names](../concepts/schema.md#file-names).

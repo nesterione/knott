@@ -33,6 +33,7 @@ lexeme  (.knott/concepts/lexeme.md)
     topic*   reference → topic | lesson (unknown)
 ```
 
+- `extends: <parent>`, `abstract: yes` and `subtypes:` (the direct children) appear for a type in a [hierarchy](../concepts/schema.md#inheritance). An inherited template, `path`, `filename` or `kid` ends with `(from <type>)`, and inherited properties come first, in a `properties (from <type>):` block per ancestor.
 - `kid: required` appears when the concept file says so.
 - `template:` is `yes` when the concept file has a body.
 - `path:` appears when the concept file says [where its entities are stored](../concepts/schema.md#where-entities-live); several patterns are joined with ` | `.

@@ -26,6 +26,8 @@ stages:
   recorded:  { needs: [recorded_at, materials: transcript] }
   published: { needs: [published_at, links, materials: [summary, topics]] }
 ---
+
+A loop on a type follows its [subtypes](schema.md#inheritance) too: an entity of a subtype is placed and checked like any other, and a need `<inverse>: <type>` is met by an entity of a subtype of that type. Two loops on the same property, one on a type and one on its subtype, are [`schema-duplicate-loop`](../issues/schema-duplicate-loop.md).
 ## recorded
 
 Export the transcript into the episode folder, then run the review.

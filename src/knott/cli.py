@@ -88,19 +88,37 @@ def format_type(t: OntologyType) -> str:
     lines = [f"{t.type}  ({t.path})"]
     if t.description:
         lines += [f"  {line}" for line in t.description.strip().splitlines()]
+
+    def origin(key: str) -> str:
+        """`` (from <type>)`` for a setting an ancestor declares (spec 0013)."""
+        return f" (from {t.inherited[key]})" if key in t.inherited else ""
+
+    if t.extends is not None:
+        lines.append(f"  extends: {t.extends}")
+    if t.abstract:
+        lines.append("  abstract: yes")
+    if t.subtypes:
+        lines.append(f"  subtypes: {', '.join(t.subtypes)}")
     if t.kid_required:
-        lines.append("  kid: required")
-    lines.append(f"  template: {'yes' if t.template is not None else 'no'}")
+        lines.append(f"  kid: required{origin('kid')}")
+    lines.append(f"  template: {'yes' if t.template is not None else 'no'}{origin('template')}")
     if t.entity_paths:
-        lines.append(f"  path: {' | '.join(t.entity_paths)}")
+        lines.append(f"  path: {' | '.join(t.entity_paths)}{origin('path')}")
     if t.filename is not None:
-        lines.append(f"  filename: {t.filename.pattern}.md")
+        lines.append(f"  filename: {t.filename.pattern}.md{origin('filename')}")
         lines += _part_lines(t.filename.parts, "    ")
     paths = [path for path, _ in t.references()]
     lines.append(f"  references: {', '.join(paths) if paths else 'none'}")
-    if t.properties:
+    # One block per ancestor that declares properties, root first, then the type's own.
+    for ancestor in reversed(t.ancestors):
+        inherited = [a for a in t.properties if a.inherited_from == ancestor]
+        if inherited:
+            lines.append(f"  properties (from {ancestor}):")
+            lines += _attribute_lines(inherited, "    ")
+    own = [a for a in t.properties if a.inherited_from is None]
+    if own:
         lines.append("  properties:")
-        lines += _attribute_lines(t.properties, "    ")
+        lines += _attribute_lines(own, "    ")
     return "\n".join(lines)
 
 

@@ -25,6 +25,7 @@ from knott.schema.models import (
     Schema,
     Shape,
     notation,
+    subtypes_of,
 )
 from knott.schema.paths import entity_folder, folder_matches
 from knott.vault.entity import MarkdownFile
@@ -80,12 +81,50 @@ def validate_entity(
         return EntityReport([issue], 0)
 
     checker = _ValueChecker(entity, resolve, lookup, resolve_file)
+    checker.issues.extend(_check_abstract(entity, schema, schemas))
     checker.issues.extend(_check_location(entity, schema))
     checker.issues.extend(_check_name(entity, schema))
     checker.issues.extend(_check_kid(entity, schema))
     for name, prop in schema.properties.items():
+        before = len(checker.issues)
         checker.check(prop, (name,), entity.frontmatter.get(name))
+        owner = schema.declared_in.get(name)
+        if owner is not None and len(checker.issues) > before:
+            # An issue on an inherited property names the file that declares it (spec 0013).
+            between = schema.ancestors[: schema.ancestors.index(owner)]
+            through = f" through `{between[0]}`" if between else ""
+            note = (
+                f"\ndeclared in {schemas[owner].path} (`{schema.type}` extends `{owner}`{through})"
+            )
+            checker.issues[before:] = [
+                issue.model_copy(update={"message": issue.message + note})
+                for issue in checker.issues[before:]
+            ]
     return EntityReport(checker.issues, checker.relations)
+
+
+def _check_abstract(
+    entity: MarkdownFile, schema: Schema, schemas: dict[str, Schema]
+) -> list[Issue]:
+    """`entity-abstract-type`: no entity may have an abstract concept as its type."""
+    if not schema.abstract:
+        return []
+    concrete = [name for name in subtypes_of(schemas, schema.type) if not schemas[name].abstract]
+    quoted = [f"`{name}`" for name in concrete]
+    use = ""
+    if len(quoted) == 1:
+        use = f"; use {quoted[0]}"
+    elif quoted:
+        use = f"; use {', '.join(quoted[:-1])} or {quoted[-1]}"
+    return [
+        Issue(
+            code="entity-abstract-type",
+            path=entity.path,
+            line=entity.key_lines.get("type"),
+            field="type",
+            message=f"`{schema.type}` is abstract and cannot be an entity's type{use}",
+        )
+    ]
 
 
 def _check_location(entity: MarkdownFile, schema: Schema) -> list[Issue]:
@@ -407,7 +446,7 @@ class _ValueChecker:
                 path,
             )
             return
-        if shape.targets and target.type not in shape.targets:
+        if not shape.accepts_type(target.type):
             expected = " or ".join(f"`{t}`" for t in shape.targets)
             self.report(
                 "relation-target-type-mismatch",

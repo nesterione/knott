@@ -1,8 +1,9 @@
 ---
 type: spec
 title: "0013: Concept inheritance"
-status: draft
+status: implemented
 created_on: 2026-11-25
+released_in: "0.12.0"
 realizes:
   - "[Concept inheritance](../intents/concept-inheritance.md)"
 decisions:
@@ -20,6 +21,7 @@ amends:
   - "[0007](0007-view-inline-relations.md)"
   - "[0010](0010-loops.md)"
   - "[0011](0011-entity-location.md)"
+  - "[0012](0012-entity-file-names.md)"
 ---
 # 0013: Concept inheritance
 
@@ -76,7 +78,7 @@ The `filename` key of [0012](0012-entity-file-names.md) follows the rule of `pat
 
 ### Checks on `extends` and `abstract`
 
-- A value of `extends` that is not a string, or of `abstract` that is not a boolean, is `schema-invalid-field`. The concept loads without the key.
+- A value of `extends` that is not a string, or of `abstract` that is not a boolean, is `schema-invalid-field`. The concept loads without the key. An empty `extends:` or `abstract:` is the same as no key.
 - `extends` names no concept: `schema-unknown-parent`. The concept loads without a parent.
 - `extends` forms a cycle, a concept that extends itself included: `schema-extends-cycle`, one issue per concept in the cycle. Each of them loads without a parent. A concept below a cycle keeps its chain up to the first concept in it.
 - A parent whose file has errors and did not load counts as unknown.
@@ -104,9 +106,11 @@ An issue on an inherited property is reported on the entity as before. Its messa
   declared in .knott/concepts/concept.md (`tool` extends `concept`)
 ```
 
+For a farther ancestor the line names the parent in between: ``(`cli` extends `concept` through `tool`)``.
+
 ### Relation checks ([0006](0006-relation-definitions.md))
 
-- `relation-inverse-conflict`: the `inverse` must not equal a top-level property, own or inherited, of any concept the naming property can target, subtypes included. It is reported once per conflicting concept that *declares* the property.
+- `relation-inverse-conflict`: the `inverse` must not equal a top-level property, own or inherited, of any concept the naming property can target, subtypes included. It is reported once per conflicting concept that *declares* the property; when that concept is not itself a target, the message says the property is inherited by one.
 - `relation-symmetric-mismatch`: the property's own concept is-a at least one of its targets, or the issue is reported. An inherited property is checked once, at the concept that declares it.
 - `relation-cycle` and reverse lookup work on resolved references and do not change. `knott refs` is unchanged.
 
@@ -131,10 +135,10 @@ An issue on an inherited property is reported on the entity as before. Its messa
 
 ```
 ✗ concepts/zettelkasten.md:2
-  `concept` is abstract and cannot be an entity's type; use `tool`, `person` or `organization`
+  `concept` is abstract and cannot be an entity's type; use `organization`, `person` or `tool`
 ```
 
-With no concrete subtype the message ends after "type".
+The message lists the concrete subtypes at any depth, sorted by name. With none, it ends after "type".
 
 ## CLI and API
 
@@ -165,7 +169,7 @@ tool  (.knott/concepts/tool.md)
     made_by   reference → organization
 ```
 
-- `abstract: yes` and `extends: <parent>` come first, after the description; the existing lines keep their order. `subtypes:` lists the direct children, sorted; it is left out when there are none.
+- `extends: <parent>`, then `abstract: yes`, then `subtypes:` come first, after the description; the existing lines keep their order. `subtypes:` lists the direct children, sorted; it is left out when there are none.
 - `(from <type>)` marks an inherited template, `path` or `kid: required`, naming the type that declares it.
 - One `properties (from <type>):` block per ancestor that declares properties, root first, then `properties:` for the type's own. `references:` lists inherited and own references, in that order.
 
@@ -183,7 +187,7 @@ tool  (.knott/concepts/tool.md)
   - edges that then share source, target and label are drawn once, required if any of them is;
   - an edge that would now start and end at the folded type is drawn as a self-reference.
 
-  A header button, `Fold subtypes` / `Unfold subtypes`, applies to every family. It is hidden when no type has a parent. The page starts unfolded and remembers the folded types, as it remembers the layout.
+  A header button, `Fold subtypes` / `Unfold subtypes`, applies to every family. It reads `Unfold subtypes` when no type on screen still shows its subtypes. It is hidden when no type has a parent. `N` in the mark counts subtypes at any depth. The page starts unfolded and remembers the folded types per vault, in the browser, as it remembers the layout.
 
 **In a type's panel**
 
@@ -196,7 +200,7 @@ tool  (.knott/concepts/tool.md)
 
 **Embedded data**
 
-- Each type gains `extends` (name or `None`), `abstract`, `ancestors` (parent first), `subtypes` (direct children) and `count_with_subtypes`.
+- Each type gains `extends` (name or `None`), `abstract`, `ancestors` (parent first), `subtypes` (direct children), `inherited` and `count_with_subtypes`.
 - Each top-level attribute gains `inherited_from` (type name or `None`).
 - `edges` holds each reference once, at its declaring type. A new list `inheritance` holds `{child, parent}`.
 - `reference_properties` holds each property once, at its declaring type. A `referenced_by` row gains `via` (ancestor name or `None`).
@@ -205,7 +209,8 @@ tool  (.knott/concepts/tool.md)
 
 - `OntologyType.extends: str | None`, `abstract: bool`, `ancestors: list[str]`, `subtypes: list[str]`.
 - `OntologyType.properties` is the effective list. `OntologyAttribute.inherited_from: str | None` is set on inherited top-level properties.
-- `OntologyType.template`, `entity_paths` and `kid_required` are the effective values. `count` is the type's own entities.
+- `OntologyType.template`, `entity_paths`, `filename` and `kid_required` are the effective values. `count` is the type's own entities.
+- `OntologyType.inherited: dict[str, str]` says which ancestor an inherited setting comes from, by key: `template`, `path`, `filename`, `kid`. A key is absent when the type declares the setting itself or has none. `knott types --verbose` prints `(from <type>)` from it, on the `filename:` line too.
 
 ### Agent skill and guide
 
@@ -264,4 +269,4 @@ To add to *Writing schemas*, replacing the "Several possible types?" item (the s
 
 ## Compatibility
 
-Additive. `extends` and `abstract` were `schema-invalid-field` before. A vault without them validates and draws exactly as today. Adding `extends` to an existing concept can make its entities invalid (inherited required properties, `path`, `kid: required`); `knott validate` lists them. Ontology API and view data additions only. Minor version.
+Additive. `extends` and `abstract` were `schema-invalid-field` before. A vault without them validates and draws exactly as today. Adding `extends` to an existing concept can make its entities invalid (inherited required properties, `path`, `kid: required`); `knott validate` lists them. Ontology API and view data additions only. The message of `schema-duplicate-loop` has a second form, for two loops on a type and its subtype. Version 0.12.0.

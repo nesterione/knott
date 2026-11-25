@@ -10,7 +10,7 @@ from typing import Any
 
 from knott._values import BOOLEAN_SPELLINGS, kind, show
 from knott.models import Issue
-from knott.schema.models import RelationDef, Schema, SchemaPath, iter_references
+from knott.schema.models import RelationDef, Schema, SchemaPath, iter_own_references
 from knott.vault.discovery import RELATIONS_DIR
 from knott.vault.entity import MarkdownFile, markdown_body, parse_markdown
 
@@ -69,12 +69,17 @@ def check_definitions(
     """
     targets: dict[str, set[str]] = {}
     for schema in schemas.values():
-        for path, shape in iter_references(schema):
+        # Own properties only: an inherited one is checked once, where it is declared.
+        for path, shape in iter_own_references(schema):
             if shape.relation is None:
                 continue
-            targets.setdefault(shape.relation, set()).update(shape.targets)
+            targets.setdefault(shape.relation, set()).update(shape.accepts or shape.targets)
             relation = relations[shape.relation]
-            if relation.symmetric and shape.targets and schema.type not in shape.targets:
+            if (
+                relation.symmetric
+                and shape.targets
+                and not any(schema.is_a(target) for target in shape.targets)
+            ):
                 field = ".".join(("properties", *path, "relation"))
                 issues.append(
                     Issue(
@@ -121,12 +126,23 @@ def check_definitions(
                     f"inverse `{inverse}` of relation `{relation.name}` is also the name of "
                     f"relation `{inverse}` (`{relations[inverse].path}`); choose another name"
                 )
-            for target in sorted(targets.get(relation.name, ())):
-                if inverse in schemas[target].properties:
+            # A property a target inherits is reported once, at the concept that declares it.
+            declaring = {
+                schemas[target].declared_in.get(inverse, target)
+                for target in targets.get(relation.name, ())
+                if inverse in schemas[target].properties
+            }
+            for target in sorted(declaring):
+                if True:
                     conflict(
                         f"inverse `{inverse}` of relation `{relation.name}` is also a property "
-                        f"of concept `{target}` (`{schemas[target].path}`), which this relation "
-                        "can point at; reading the link from the target side would be ambiguous"
+                        f"of concept `{target}` (`{schemas[target].path}`), "
+                        + (
+                            "which this relation can point at"
+                            if target in targets.get(relation.name, ())
+                            else "inherited by a concept this relation can point at"
+                        )
+                        + "; reading the link from the target side would be ambiguous"
                     )
             if relation.symmetric:
                 issues.append(

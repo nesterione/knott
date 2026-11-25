@@ -59,23 +59,26 @@ def _need(need: LoopNeedDef, since: str) -> LoopNeed:
 def loop_report(session: VaultSession, loop: LoopDef) -> LoopReport:
     """Place every entity of the loop's type by its stage property."""
     definition = loop_definition(loop)
-    schema = session.schemas[loop.type]
     stage_index = {stage.name: i for i, stage in enumerate(definition.stages)}
     on_path: dict[str, list[LoopEntity]] = {stage.name: [] for stage in definition.stages}
     exits: dict[str, list[LoopEntity]] = {stage.name: [] for stage in definition.exits}
     unplaced: list[LoopEntity] = []
     for rel_path in session.all_markdown:
         entity = session.lookup(rel_path)
-        if entity.error is not None or not entity.is_entity or entity.type != loop.type:
+        if entity.error is not None or not entity.is_entity:
+            continue
+        # The loop follows its type and every subtype (spec 0013).
+        schema = session.schemas.get(entity.type) if isinstance(entity.type, str) else None
+        if schema is None or not schema.is_a(loop.type):
             continue
         assert entity.frontmatter is not None
         value = entity.frontmatter.get(loop.property)
         kid = entity_kid(session, rel_path)
         title = _title(entity, schema)
         if not isinstance(value, str) or (value not in on_path and value not in exits):
-            unplaced.append(LoopEntity(path=rel_path, kid=kid, title=title))
+            unplaced.append(LoopEntity(path=rel_path, kid=kid, title=title, type=schema.type))
         elif value in exits:
-            exits[value].append(LoopEntity(path=rel_path, kid=kid, title=title))
+            exits[value].append(LoopEntity(path=rel_path, kid=kid, title=title, type=schema.type))
         else:
             index = stage_index[value]
             reached = definition.stages[: index + 1]
@@ -85,6 +88,7 @@ def loop_report(session: VaultSession, loop: LoopDef) -> LoopReport:
                     path=rel_path,
                     kid=kid,
                     title=title,
+                    type=schema.type,
                     unmet=_first_of_each(
                         need
                         for stage in reached
@@ -121,10 +125,16 @@ def _met(session: VaultSession, schema: Schema, entity: MarkdownFile, need: Loop
         assert need.property is not None
         definition = schema.properties[need.property]
         return not is_empty(entity.frontmatter.get(need.property), definition.shape)
+    assert need.type is not None
     return any(
-        ref.relation == need.relation and ref.source_type == need.type
+        ref.relation == need.relation and _is_a(session, ref.source_type, need.type)
         for ref in session.references().to(entity.path)
     )
+
+
+def _is_a(session: VaultSession, type_name: str, wanted: str) -> bool:
+    schema = session.schemas.get(type_name)
+    return schema is not None and schema.is_a(wanted)
 
 
 def _title(entity: MarkdownFile, schema: Schema) -> str:

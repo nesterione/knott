@@ -8,7 +8,13 @@ from collections.abc import Sequence
 from importlib.resources import files
 from typing import Any
 
-from knott.models import LoopReport, Ontology, iter_reference_paths
+from knott.models import (
+    LoopReport,
+    Ontology,
+    OntologyAttribute,
+    OntologyType,
+    iter_reference_paths,
+)
 from knott.vault.refs import GroupKey, group_key, group_order
 
 PLACEHOLDER = "/*__DATA__*/"
@@ -19,11 +25,23 @@ def _template() -> str:
     return files("knott").joinpath("_view", "ontology.html").read_text(encoding="utf-8")
 
 
+def _own(t: OntologyType) -> list[OntologyAttribute]:
+    """The properties ``t`` declares itself: an inherited reference is drawn and listed
+    once, at the type that declares it (spec 0013)."""
+    return [a for a in t.properties if a.inherited_from is None]
+
+
+def inheritance(ontology: Ontology) -> list[dict[str, str]]:
+    """One ``{child, parent}`` per type that extends another, by child."""
+    return [{"child": t.type, "parent": t.extends} for t in ontology.types if t.extends]
+
+
 def ontology_edges(ontology: Ontology) -> list[dict[str, Any]]:
     """One edge per known target of every reference, with its property path and the
     relation it names (the page labels an edge with the relation, else the path).
 
-    Targets no concept defines get no edge; the side panel still shows them.
+    A reference is an edge once, from the type that declares it to each declared
+    target. Targets no concept defines get no edge; the side panel still shows them.
     """
     return [
         {
@@ -34,7 +52,7 @@ def ontology_edges(ontology: Ontology) -> list[dict[str, Any]]:
             "required": required,
         }
         for t in ontology.types
-        for path, node, required in iter_reference_paths(t.properties)
+        for path, node, required in iter_reference_paths(_own(t))
         for target in node.targets
     ]
 
@@ -45,18 +63,29 @@ def referenced_by(ontology: Ontology) -> list[dict[str, Any]]:
 
     One ``{type, groups}`` per type something references, sorted by type (a list, so
     type names never become object keys in the page). Each group has ``label``,
-    ``kind``, ``relation`` and ``references``: one ``{type, path, required}`` per
-    property, by source type, then schema order.
+    ``kind``, ``relation`` and ``references``: one ``{type, path, required, via}`` per
+    property, by source type, then schema order. A property that targets an ancestor of
+    the type also reaches the type; ``via`` is that ancestor, None for a declared target.
     """
     relations = {r.name: r for r in ontology.relations}
+    below: dict[str, list[str]] = {}
+    for t in ontology.types:
+        for ancestor in t.ancestors:
+            below.setdefault(ancestor, []).append(t.type)
     per_type: dict[str, dict[GroupKey, list[dict[str, Any]]]] = {}
     for t in ontology.types:
-        for path, node, required in iter_reference_paths(t.properties):
+        for path, node, required in iter_reference_paths(_own(t)):
             key = group_key(relations, node.relation, t.type, path)
+            reached: dict[str, str | None] = {}
             for target in node.targets:
+                reached[target] = None
+            for target in node.targets:
+                for subtype in below.get(target, []):
+                    reached.setdefault(subtype, target)
+            for target, via in reached.items():
                 groups = per_type.setdefault(target, {})
                 groups.setdefault(key, []).append(
-                    {"type": t.type, "path": path, "required": required}
+                    {"type": t.type, "path": path, "required": required, "via": via}
                 )
     return [
         {
@@ -87,7 +116,7 @@ def reference_properties(ontology: Ontology) -> list[dict[str, Any]]:
             "required": required,
         }
         for t in ontology.types
-        for path, node, required in iter_reference_paths(t.properties)
+        for path, node, required in iter_reference_paths(_own(t))
     ]
 
 
@@ -100,9 +129,16 @@ def render_ontology(ontology: Ontology, loops: Sequence[LoopReport] = ()) -> str
     template = _template()
     if PLACEHOLDER not in template:
         raise RuntimeError(f"ontology template must contain {PLACEHOLDER}")
+    payload = ontology.model_dump()
+    counts = {t.type: t.count for t in ontology.types}
+    for dumped, t in zip(payload["types"], ontology.types, strict=True):
+        dumped["count_with_subtypes"] = t.count + sum(
+            counts[other.type] for other in ontology.types if t.type in other.ancestors
+        )
     payload = {
-        **ontology.model_dump(),
+        **payload,
         "edges": ontology_edges(ontology),
+        "inheritance": inheritance(ontology),
         "referenced_by": referenced_by(ontology),
         "reference_properties": reference_properties(ontology),
         "loop_reports": [report.model_dump() for report in loops],

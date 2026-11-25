@@ -46,6 +46,13 @@ class ReferenceShape:
     relation: str | None = None
     """The relation this reference names (spec 0006); None when it names none or an
     undefined one."""
+    accepts: frozenset[str] = field(default=frozenset(), compare=False)
+    """``targets`` and every subtype of one (spec 0013): the types an entity may have."""
+
+    def accepts_type(self, type_name: object) -> bool:
+        """Whether an entity of ``type_name`` passes the type check. With no known
+        target there is nothing to check."""
+        return not self.targets or type_name in (self.accepts or self.targets)
 
 
 @dataclass(frozen=True)
@@ -129,6 +136,26 @@ class Schema:
     properties: dict[str, AttributeDef] = field(default_factory=dict)
     """Top-level properties in schema order; references are properties too."""
     template: str | None = None
+    extends: str | None = None
+    """The parent concept (spec 0013); None for a root, or when `extends` did not load."""
+    abstract: bool = False
+    """Set by `abstract: true`: no entity may have this type. Not inherited."""
+    ancestors: tuple[str, ...] = ()
+    """The parent, its parent, and so on, nearest first."""
+    own_properties: dict[str, AttributeDef] = field(default_factory=dict)
+    """The properties this concept file declares itself, in schema order."""
+    declared_in: dict[str, str] = field(default_factory=dict)
+    """For each inherited property, the ancestor that declares it."""
+    template_from: str | None = None
+    """The ancestor whose template this type uses; None when the template is its own."""
+    entity_paths_from: str | None = None
+    filename_from: str | None = None
+    kid_required_from: str | None = None
+
+    def is_a(self, type_name: str) -> bool:
+        """Whether this type is ``type_name`` or has it as an ancestor."""
+        return type_name == self.type or type_name in self.ancestors
+
     """The concept file's body, verbatim; None when it is blank."""
 
 
@@ -210,9 +237,22 @@ SchemaPath = tuple[str, ...]
 
 
 def iter_references(schema: Schema) -> Iterator[tuple[SchemaPath, ReferenceShape]]:
-    """Every reference shape in ``schema``, at any depth, in schema order."""
+    """Every reference shape in ``schema``, inherited ones included, at any depth, in
+    schema order."""
     for name, definition in schema.properties.items():
         yield from _references(definition, (name,))
+
+
+def iter_own_references(schema: Schema) -> Iterator[tuple[SchemaPath, ReferenceShape]]:
+    """The reference shapes ``schema`` declares itself (spec 0013): each property is
+    seen once in the vault, at the concept that declares it."""
+    for name, definition in schema.own_properties.items():
+        yield from _references(definition, (name,))
+
+
+def subtypes_of(schemas: dict[str, Schema], type_name: str) -> list[str]:
+    """Every type that has ``type_name`` as an ancestor, sorted."""
+    return sorted(s.type for s in schemas.values() if type_name in s.ancestors)
 
 
 def _references(

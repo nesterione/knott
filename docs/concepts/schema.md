@@ -44,6 +44,8 @@ Concept files use `name:`, not `type:`. Entities keep `type: transcript`, so a c
 |---|---|---|---|
 | top | `name` | yes | `^[a-z][a-z0-9_-]*$` |
 | top | `description` | no | string |
+| top | `extends` | no | the name of one other concept, this type's parent, see [Inheritance](#inheritance) |
+| top | `abstract` | no | `true`: no entity may have this type |
 | top | `kid` | no | `required`: every entity needs a [kid](kid.md) |
 | top | `path` | no | the folders entities of this type are stored in: `path: specs`, or a list, see [Where entities live](#where-entities-live) |
 | top | `filename` | no | how entity files of this type are named, see [File names](#file-names) |
@@ -60,6 +62,39 @@ Concept files use `name:`, not `type:`. Entities keep `type: transcript`, so a c
 Unknown keys are **errors** in concept files (Knott owns these files, so `propertes:` must not pass silently), unlike in entities. A top-level property can't be named `type` or `kid`; both belong to knott.
 
 A property whose shape is `reference` is a [relation](relation.md). Every other property is an [attribute](attribute.md). Both live in the one `properties` map.
+
+## Inheritance
+
+A concept can extend one other concept. The child is a kind of the parent: it has the parent's properties, and a reference that targets the parent accepts it.
+
+```yaml
+# .knott/concepts/concept.md
+name: concept
+abstract: true
+properties:
+  title: { type: string, required: true }
+  related:
+    type: list
+    items: { type: reference, target: concept }
+```
+
+```yaml
+# .knott/concepts/tool.md
+name: tool
+extends: concept
+properties:
+  homepage: { type: string }
+  made_by:  { type: reference, target: organization }
+```
+
+- **One parent**, any depth. An entity writes its own type (`type: tool`) and never names the parent.
+- **Inherited**: every property, with all its keys, root ancestor first; the body template when the child's body is empty; `path` and `filename` when the child declares none; `kid: required`, which a child cannot turn off. `description` and `abstract` are not inherited.
+- **A child only adds properties.** Repeating one an ancestor declares is [`schema-property-redefined`](../issues/schema-property-redefined.md), and the inherited definition stands. If a child needs a property different, it belongs on the children.
+- **`abstract: true`** marks a type that exists to share properties and to be a target. An entity with that type is [`entity-abstract-type`](../issues/entity-abstract-type.md). An abstract parent is also how you name a group of types: `target: page` accepts every subtype of `page`.
+- **A reference accepts subtypes**: `target: concept` takes a `tool`; `target: tool` does not take a plain `concept`.
+- **Errors**: a parent no concept defines is [`schema-unknown-parent`](../issues/schema-unknown-parent.md), a loop of parents is [`schema-extends-cycle`](../issues/schema-extends-cycle.md). The concept then loads as a root type.
+
+An issue on an inherited property ends with the file that declares it: ``declared in .knott/concepts/concept.md (`tool` extends `concept`)``. `knott types --verbose` shows inherited properties in their own `properties (from concept):` block and marks an inherited template, `path`, `filename` or `kid` with `(from concept)`.
 
 ## Where entities live
 
