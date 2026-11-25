@@ -1,6 +1,15 @@
 ---
 name: spec
 path: specs
+filename:
+  pattern: "{number}-{slug}"
+  parts:
+    number:
+      match: "[0-9]{4}"
+      description: The next free number in specs/, four digits.
+    slug:
+      match: "[a-z0-9]+(-[a-z0-9]+)*"
+      description: What the change does, in two to five lowercase words joined by hyphens.
 description: >
   A change specification: the exact behaviour one change adds or alters (formats, rules, issue codes, CLI and API output, edge cases). Editable while draft or accepted, frozen once implemented. A later change writes a new spec that amends or supersedes it. SPEC.md holds the current state.
 properties:

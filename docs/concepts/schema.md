@@ -46,6 +46,7 @@ Concept files use `name:`, not `type:`. Entities keep `type: transcript`, so a c
 | top | `description` | no | string |
 | top | `kid` | no | `required`: every entity needs a [kid](kid.md) |
 | top | `path` | no | the folders entities of this type are stored in: `path: specs`, or a list, see [Where entities live](#where-entities-live) |
+| top | `filename` | no | how entity files of this type are named, see [File names](#file-names) |
 | top | `properties` | no | property name → definition, in the order you want them shown |
 | property | `type` | yes | a scalar type, `enum`, `list`, `object`, `map`, `reference` or `file` |
 | property | `required` | no | `true`/`false`, default `false` |
@@ -80,6 +81,32 @@ A pattern is matched against the entity's folder, relative to the vault root; th
 | `.` | the vault root |
 
 Nothing else is special: no `?`, `[…]` or regular expressions. Quote a pattern that starts with `*` (`path: "**/specs"`), or YAML reads it as an alias. `path` says where a type lives, not what a folder holds, so other types and plain notes can share the folder. Knott never moves a file: references are relative paths, so a move changes the links around it.
+
+## File names
+
+Without `filename`, an entity file can have any name. With it, a name that does not fit is [`entity-invalid-name`](../issues/entity-invalid-name.md):
+
+```yaml
+name: spec
+filename:
+  pattern: "{number}-{slug}"
+  parts:
+    number:
+      match: "[0-9]{4}"
+      description: The next free number in specs/.
+    slug:
+      match: "[a-z0-9]+(-[a-z0-9]+)*"
+      description: What the change does, in two to five lowercase words.
+```
+
+- **`pattern`** is the file name without `.md`: literal text and `{part}` placeholders. Literal text is matched exactly, so `.` and `(` need no escaping. A part is used once; a pattern with no parts is a fixed name.
+- **`parts`** defines every part of the pattern. Both keys are optional, and a part can be left empty (`slug:`).
+- **`match`** is a regular expression (Python `re` syntax) the part must match in full. Without it, the part is any non-empty text.
+- **`description`** tells whoever names the file how to fill the part: where the value comes from, how long, in what form. Knott shows it in `knott types --verbose` and never interprets it. For an agent it works as the prompt for that part.
+
+Quote `pattern` and `match`: YAML reads an unquoted leading `{` as a mapping and `[` as a list.
+
+Knott checks that the whole name can be split into the literal text and the parts. It does not extract the parts, compare them with properties, or pick a name itself. Matching regards case. Renaming a file changes the links that point at it, so run [`knott refs`](../commands/refs.md) first.
 
 ## The template
 

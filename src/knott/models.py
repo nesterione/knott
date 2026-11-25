@@ -80,6 +80,25 @@ class EnumOption(_Frozen):
     description: str | None = None
 
 
+class FilenamePart(_Frozen):
+    """One `{part}` of a concept's file-name pattern (spec 0012)."""
+
+    name: str
+    match: str | None = None
+    """The regular expression the part must match in full; None for any non-empty text."""
+    description: str | None = None
+    """How to fill the part, for whoever names the file."""
+
+
+class FilenamePattern(_Frozen):
+    """The pattern a concept's `filename` sets for its entity files (spec 0012)."""
+
+    pattern: str
+    """Literal text and `{part}` placeholders, without `.md`."""
+    parts: list[FilenamePart] = []
+    """In the order the pattern uses them."""
+
+
 class OntologyAttribute(_Frozen):
     """An attribute declared by a type's schema, or a nested part of one."""
 
@@ -130,6 +149,8 @@ class OntologyType(_Frozen):
     """The schema says `kid: required`."""
     entity_paths: list[str] = []
     """Folder patterns the concept's `path` allows; `[]` when entities can live anywhere."""
+    filename: FilenamePattern | None = None
+    """The file-name pattern the concept's `filename` sets; None when any name is fine."""
     properties: list[OntologyAttribute]
     """Top-level properties in schema order; references are properties too."""
     template: str | None = None

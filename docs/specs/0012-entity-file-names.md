@@ -1,8 +1,9 @@
 ---
 type: spec
 title: "0012: Entity file names"
-status: draft
+status: implemented
 created_on: 2026-11-25
+released_in: "0.11.0"
 realizes:
   - "[Entity file names](../intents/entity-file-names.md)"
 decisions:
@@ -50,9 +51,10 @@ filename:
 - The pattern describes the file name **without** `.md`. The folder is never part of the match.
 - **Literal text** is matched exactly. `.`, `-`, `(` and the like have no special meaning there, so nothing is escaped. A literal `{` or `}` cannot be written.
 - **A part** is `{name}`, with `name` matching `^[a-z][a-z0-9_]*$`. A part may be used once. Every part in `pattern` is defined in `parts`, and every key of `parts` is used in `pattern`.
-- **`match`** is a regular expression in Python `re` syntax that the part must match in full. Without it the part is any non-empty text. Knott joins the parts into one expression, so a `match` has no named groups, no backreferences and no inline flags (`(?i)`); plain groups are fine.
+- **`match`** is a regular expression in Python `re` syntax that the part must match in full. Without it the part is any non-empty text. Each part is matched on its own, so groups, flags and anchors in one `match` do not reach another.
 - **`description`** is a string for the reader who names the file, human or agent: where the value comes from and how to form it. Knott shows it and never interprets it.
 - A pattern with no parts is a fixed name (`pattern: index`).
+- Quote `pattern` and `match` (`pattern: "{slug}"`, `match: "[0-9]{4}"`): YAML reads an unquoted leading `{` as a mapping and `[` as a list, so the value is `schema-invalid-field` or the file is `schema-invalid-yaml`. A part name YAML reads as a boolean (`no`, `on`, `y`) is quoted under `parts` too.
 
 ### Matching
 
@@ -61,12 +63,12 @@ filename:
 
 ### Checks on `filename`
 
-Each of these is `schema-invalid-field` at its line. The concept still loads, without `filename`:
+Each of these is `schema-invalid-field` at its line, with the key path as `field` (`filename.parts.slug.match`). An empty `filename:` is the same as no key. The concept still loads, without `filename`:
 
 - a value that is not a mapping, an unknown key (with a "did you mean" suggestion), a missing or empty `pattern`;
 - a `/` or `\` in the literal text; an unclosed, empty or invalid `{…}`; the same part twice;
 - a part in `pattern` that `parts` does not define, or a key of `parts` that `pattern` does not use;
-- a `match` that is not a string, does not compile, can match the empty string, or uses a named group, a backreference or an inline flag;
+- a `match` that is not a string, does not compile, or can match the empty string;
 - a `description` that is not a string.
 
 ## Issue codes
@@ -107,6 +109,10 @@ Each of these is `schema-invalid-field` at its line. The concept still loads, wi
 | `specs/0011-.md` | `entity-invalid-name`: a part is never empty |
 | `pattern: "{a}-{b}"`, no `match`, file `x-y-z.md` | valid: some split exists |
 | `pattern: "{slug}.md"` | valid, but it requires a file named `….md.md` |
+| `match: "^[0-9]{4}$"` or `(?i)[a-z]+` | valid; anchors and flags stay inside the part |
+| `pattern: {slug}`, unquoted | `schema-invalid-field`: YAML read a mapping; the message says to quote it |
+| `match: [0-9]{4}`, unquoted | `schema-invalid-yaml`; quote it |
+| `knott validate specs/0012-X.md`, the file on disk is `0012-x.md` | `entity-invalid-name`: a path argument is taken as written; pass it as it is on disk |
 | `match: "[0-9]*"` | `schema-invalid-field`: it can match the empty string |
 | Renaming a file to fix the issue | links to it in other files break and are reported as `relation-target-not-found` |
 
@@ -121,4 +127,4 @@ Each of these is `schema-invalid-field` at its line. The concept still loads, wi
 
 ## Compatibility
 
-Additive. A concept with a `filename` key got `schema-invalid-field` before. Adding `filename` to a concept makes entities with other names invalid; `knott validate` lists them. Ontology API additions only. Minor version bump.
+Additive. A concept with a `filename` key got `schema-invalid-field` before. Adding `filename` to a concept makes entities with other names invalid; `knott validate` lists them. Ontology API additions only. Version 0.11.0.
