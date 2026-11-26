@@ -1,7 +1,7 @@
 ---
 type: command
 title: knott types
-synopsis: knott types [--verbose]
+synopsis: knott types [--verbose] [--tree]
 writes_files: false
 concepts:
   - "[Schema](../concepts/schema.md)"
@@ -96,3 +96,42 @@ loops:
     ## recorded
     Export the transcript into the episode folder.
 ```
+
+## Tree
+
+`--tree` (`-t`) prints the types as a tree: each type's subtypes are indented under it, with its entity count and the folder its entities live in. Use it to see a vault's taxonomy on one screen.
+
+```
+$ knott types --tree
+concept            12  concepts
+note                3
+record (abstract)
+├─ decision        12  decisions
+└─ spec            14  specs
+```
+
+- **Order**: types with no parent first, sorted by name, each followed by its direct subtypes, sorted. A vault without [inheritance](../concepts/schema.md#inheritance) prints a flat list.
+- **Count**: entities whose `type` is exactly that type. Subtypes are not added in. An abstract type has no count.
+- **Folder**: the type's `path` patterns, its own or inherited, joined with ` | `. Left out when it has none.
+- `--tree` reads every Markdown file in the vault to count entities; plain `knott types` reads concept files only.
+
+`--tree --verbose` adds, under each type, its description on one line and `adds:` with the properties it declares itself (`*` marks a required one). Inherited properties are listed at the type that declares them.
+
+```
+$ knott types --tree --verbose
+concept            12  concepts
+   A core idea in Knott's model. Read concepts first to understand what the other documents refer to.
+   adds: title*, summary*, spec_section, related
+note                3
+record (abstract)
+│  Anything with a title and a date.
+│  adds: title*, created_on*
+├─ decision        12  decisions
+│     Why a choice was made.
+│     adds: status*, supersedes
+└─ spec            14  specs
+      The exact behaviour one change adds or alters.
+      adds: status*, realizes, decisions, concepts
+```
+
+The tree leaves out the relations, connectors and loops sections, and the shapes, targets and options of properties. Those are in `knott types --verbose`.

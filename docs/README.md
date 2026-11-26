@@ -77,6 +77,7 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 12. [Entity file names](specs/0012-entity-file-names.md)
 13. [Concept inheritance](specs/0013-concept-inheritance.md)
 14. [Open reference targets](specs/0014-open-reference-targets.md)
+15. [Type tree](specs/0015-type-tree.md)
 
 ### Intents
 
@@ -89,3 +90,4 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 - [Entity file names](intents/entity-file-names.md)
 - [Concept inheritance](intents/concept-inheritance.md)
 - [Open reference targets](intents/open-reference-targets.md)
+- [Type tree](intents/type-tree.md)
