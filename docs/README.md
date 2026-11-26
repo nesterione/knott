@@ -82,6 +82,7 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 16. [List and show entities](specs/0016-list-and-show-entities.md)
 17. [Show the details of one type](specs/0017-types-for-one-type.md)
 18. [Move a file and rewrite the links to it](specs/0018-move-entities.md)
+19. [Included folders](specs/0019-included-folders.md)
 
 ### Intents
 
@@ -97,3 +98,4 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 - [Type tree](intents/type-tree.md)
 - [Read the vault as data](intents/read-the-vault-as-data.md)
 - [Move a file without breaking links](intents/move-without-breaking-links.md)
+- [Included folders](intents/included-folders.md)
