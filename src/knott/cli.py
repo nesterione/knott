@@ -28,6 +28,7 @@ from knott.models import (
     LoopDefinition,
     LoopReport,
     MigrateResult,
+    Ontology,
     OntologyAttribute,
     OntologyType,
     RefGroup,
@@ -124,6 +125,40 @@ def format_type(t: OntologyType) -> str:
         lines.append("  properties:")
         lines += _attribute_lines(own, "    ")
     return "\n".join(lines)
+
+
+def format_selected_types(ontology: Ontology, names: list[str]) -> str:
+    """Everything needed to write an entity of each named type (spec 0017): its
+    `--verbose` block and body template, then only the relations, connectors and loops
+    those types use. ``names`` are loaded types, without repeats."""
+    by_name = {t.type: t for t in ontology.types}
+    chosen = [by_name[name] for name in names]
+    sections: list[str] = []
+    for t in chosen:
+        lines = [format_type(t)]
+        if t.template is not None:
+            lines.append("  template body:")
+            lines += [f"    {line}" if line else "" for line in t.template.rstrip("\n").split("\n")]
+        sections.append("\n".join(lines))
+    # Relations named by a reference of a selected type, own or inherited, at any depth.
+    named = {a.relation for t in chosen for _, a in t.references() if a.relation is not None}
+    relations = [r for r in ontology.relations if r.name in named]
+    if relations:
+        sections.append(format_relations(relations))
+    # A file property accepts any declared connector, so they are all listed.
+    if ontology.connectors and any(_has_file(a) for t in chosen for a in t.properties):
+        sections.append(format_connectors(ontology.connectors))
+    followed = {name for t in chosen for name in (t.type, *t.ancestors)}
+    loops = [loop for loop in ontology.loops if loop.type in followed]
+    if loops:
+        sections.append(format_loop_definitions(loops))
+    return "\n\n".join(sections)
+
+
+def _has_file(a: OntologyAttribute) -> bool:
+    """Whether the attribute is a `file`, or holds one at any depth."""
+    inner = [node for node in (a.items, a.values) if node is not None] + a.fields
+    return a.type == "file" or any(_has_file(node) for node in inner)
 
 
 def format_tree(types: list[OntologyType], *, verbose: bool = False) -> str:
@@ -455,6 +490,16 @@ def validate(
 
 @app.command()
 def types(
+    names: Annotated[
+        list[str] | None,
+        typer.Argument(
+            metavar="[NAME]...",
+            help=(
+                "Types to show in full: the --verbose block, the body template, and the "
+                "relations, connectors and loops they use (default: list every type)."
+            ),
+        ),
+    ] = None,
     verbose: Annotated[
         bool,
         typer.Option(
@@ -483,7 +528,18 @@ def types(
         vault = Knott.open(".")
     except KnottError as error:
         raise _fail(error) from None
-    if tree:
+    if names and tree:
+        raise _fail(KnottError("a type name cannot be combined with --tree"))
+    if names:
+        _fail_on_legacy(vault)
+        ontology = vault.ontology()
+        known = [t.type for t in ontology.types]
+        for name in names:
+            if name not in known:
+                listed = ", ".join(f"`{t}`" for t in known) or "none"
+                raise _fail(KnottError(f"no type named `{name}` (known types: {listed})"))
+        typer.echo(format_selected_types(ontology, list(dict.fromkeys(names))))
+    elif tree:
         output = format_tree(vault.ontology().types, verbose=verbose)
         if output:
             typer.echo(output)

@@ -76,7 +76,7 @@ $ knott validate
 |---|---|
 | `knott init [PATH]` | Create `.knott/concepts/` and `.knott/config.yaml` |
 | `knott validate [PATH...]` | Check all schemas, plus all entities or those under `PATH` (`--format json` for agents, `--fix` to add missing `kid`s) |
-| `knott types [--verbose] [--tree]` | List discovered types (`--verbose`: properties, nested shapes, references, whether a template exists, and the relations; `--tree`: subtypes under their parent, with entity counts and folders) |
+| `knott types [NAME...] [--verbose] [--tree]` | List discovered types (`NAME`: one type in full, with its body template and the relations, connectors and loops it uses; `--verbose`: properties, nested shapes, references, whether a template exists, and the relations; `--tree`: subtypes under their parent, with entity counts and folders) |
 | `knott refs PATH` | List who references an entity, grouped by relation (`PATH` or `kid:<uuid>`; `--format json`) |
 | `knott list [TYPE]` | List entities of a type and its subtypes, filtered by property values (`--where KEY=VALUE`, `--fields a,b`, `--format json`) |
 | `knott show PATH` | Show one entity: its properties, its outgoing references resolved, and who references it (`--body`, `--format json`) |

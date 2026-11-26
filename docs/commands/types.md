@@ -1,7 +1,7 @@
 ---
 type: command
 title: knott types
-synopsis: knott types [--verbose] [--tree]
+synopsis: knott types [NAME...] [--verbose] [--tree]
 writes_files: false
 concepts:
   - "[Schema](../concepts/schema.md)"
@@ -135,3 +135,48 @@ record (abstract)
 ```
 
 The tree leaves out the relations, connectors and loops sections, and the shapes, targets and options of properties. Those are in `knott types --verbose`.
+
+## One type
+
+`knott types NAME` prints everything needed to write one entity of that type, so the concept file need not be opened:
+
+```
+$ knott types intent
+intent  (.knott/concepts/intent.md)
+  Something we want knott to do but have not specified yet: …
+  template: yes
+  path: intents
+  references: concepts[]
+  properties:
+    title*        string
+    status*       string                       open or dropped. …
+    raised_on*    date
+    github_issue  integer                      The GitHub issue where it is discussed, if any.
+    concepts      list of reference → concept  Concepts the intent would change.
+  template body:
+    # <!-- The intent as a short phrase, the same text as `title`. -->
+
+    ## Need
+
+    <!-- Who needs what, and what they do today without it. No solution yet. -->
+    …
+```
+
+- **The block** is the one `--verbose` prints for the type.
+- **`template body:`** follows when the type has a body template, its own or inherited: the template verbatim, each line indented by four spaces.
+- **`relations:`** lists only the relations a reference property of the type names, own or inherited. A relation that only points at the type is left out: it is not something to write on this entity.
+- **`connectors:`** lists every connector when the type has a [file](../concepts/file.md) property, and is left out otherwise.
+- **`loops:`** lists the loops that follow the type or one of its ancestors.
+
+`intent` names no relation, has no file property and no loop follows it, so nothing comes after its block. `knott types spec` ends with `amends` and `supersedes` under `relations:` and the `spec` loop under `loops:`.
+
+Several names print each type in the order given, then one set of sections for all of them. An abstract type is allowed; its subtypes are not expanded. `--verbose` changes nothing here, and a name cannot be combined with `--tree`.
+
+A name no concept defines is an error, and nothing is printed for the other names:
+
+```
+$ knott types intnet
+error: no type named `intnet` (known types: `command`, `concept`, `decision`, `guide`, `intent`, `issue_code`, `spec`)
+```
+
+Exit codes are those of `knott types`, plus `2` for an unknown name or a name with `--tree`.
