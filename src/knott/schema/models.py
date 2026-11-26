@@ -46,6 +46,8 @@ class ReferenceShape:
     relation: str | None = None
     """The relation this reference names (spec 0006); None when it names none or an
     undefined one."""
+    open: bool = False
+    """Set by ``target: any`` (spec 0014): any entity passes, and ``targets`` is empty."""
     accepts: frozenset[str] = field(default=frozenset(), compare=False)
     """``targets`` and every subtype of one (spec 0013): the types an entity may have."""
 
@@ -79,6 +81,8 @@ Shape = ScalarType | ListShape | ObjectShape | MapShape | ReferenceShape | FileS
 
 COMPOUND_KINDS = ("list", "object", "map")
 REFERENCE_KIND = "reference"
+ANY_TARGET = "any"
+"""The target of an open reference, and so never a type name (spec 0014)."""
 FILE_KIND = "file"
 ENUM_KIND = "enum"
 
@@ -106,6 +110,8 @@ def notation(shape: Shape) -> str:
         return f"list of {notation(shape.items.shape)}"
     if isinstance(shape, MapShape):
         return f"map of {notation(shape.values.shape)}"
+    if isinstance(shape, ReferenceShape) and shape.open:
+        return f"{REFERENCE_KIND} → {ANY_TARGET}"
     if isinstance(shape, ReferenceShape) and shape.targets:
         return f"{REFERENCE_KIND} → {' | '.join(shape.targets)}"
     return shape_kind(shape)

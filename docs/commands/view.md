@@ -22,6 +22,8 @@ Each type is a box with its name and entity count. Each reference is an arrow la
 - **References out**: each reference's path, with its relation in parentheses
 - **Referenced by**: every reference property, in any type, that can point at this one, grouped and labelled as [`knott refs`](refs.md) groups them (`discussed_in`, `related`, `← guide.concepts[]`). Each row is `<type>.<path>`.
 
+An [open reference](../concepts/relation.md#open-references) (`target: any`) has no arrow. The type that declares it carries a `→ any` mark, with `×N` for several, and **Open references (N)** in the header highlights every such type. Every type's panel lists the vault's open references under "from anywhere".
+
 With [inheritance](../concepts/schema.md#inheritance), a reference is drawn once, at the type that declares it, and "is a" is its own edge: thin, with a hollow triangle at the parent. An abstract type has a dashed border and its name in italics. A type with subtypes carries a `▾ N` mark; click it to fold the subtypes into the parent, and the edges of the hidden types are drawn at the parent. **Fold subtypes** in the header does it for every family. Hovering a type also highlights the references it inherits.
 
 A **Relations (N defined · M inline)** button in the header lists every link in the vault, in two sections:

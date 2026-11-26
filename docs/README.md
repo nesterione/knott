@@ -76,7 +76,7 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 11. [Entity location](specs/0011-entity-location.md)
 12. [Entity file names](specs/0012-entity-file-names.md)
 13. [Concept inheritance](specs/0013-concept-inheritance.md)
-14. [Open reference targets](specs/0014-open-reference-targets.md) (draft)
+14. [Open reference targets](specs/0014-open-reference-targets.md)
 
 ### Intents
 

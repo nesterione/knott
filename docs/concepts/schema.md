@@ -54,14 +54,14 @@ Concept files use `name:`, not `type:`. Entities keep `type: transcript`, so a c
 | property | `required` | no | `true`/`false`, default `false` |
 | property | `description` | no | string |
 | property | `items` / `fields` / `values` | with `list` / `object` / `map` | see [Attribute](attribute.md) |
-| property | `target` | with `reference` | a type name, or a list of type names: `target: [episode, meeting]` |
+| property | `target` | with `reference` | a type name, a list of type names (`target: [episode, meeting]`), or `any` for an [open reference](relation.md#open-references) |
 | property | `options` | with `enum` | the allowed values: `options: [m, f]`, or option → description, see [Attribute](attribute.md#enums) |
 | property | `accept` | no, `file` only | the extensions a vault file may have: `accept: [mp3, wav]`, see [File](file.md) |
 | property | `relation` | no, `reference` only | a relation defined in `.knott/relations/`, see [relation definitions](relation.md#relation-definitions) |
 
 Unknown keys are **errors** in concept files (Knott owns these files, so `propertes:` must not pass silently), unlike in entities. A top-level property can't be named `type` or `kid`; both belong to knott.
 
-A property whose shape is `reference` is a [relation](relation.md). Every other property is an [attribute](attribute.md). Both live in the one `properties` map.
+A property whose shape is `reference` is a [relation](relation.md). Every other property is an [attribute](attribute.md). Both live in the one `properties` map. A concept cannot be named `any`: the word is reserved for `target: any`.
 
 ## Inheritance
 

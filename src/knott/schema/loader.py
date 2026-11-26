@@ -15,6 +15,7 @@ from knott.schema.connectors import load_connectors
 from knott.schema.filenames import FilenameDef, parse_filename
 from knott.schema.loops import load_loops
 from knott.schema.models import (
+    ANY_TARGET,
     COMPOUND_KINDS,
     ENUM_KIND,
     FILE_KIND,
@@ -301,7 +302,7 @@ def _resolve_targets(
         accepts = frozenset(
             s.type for s in registry.values() if any(s.is_a(target) for target in known)
         )
-        new_shape = ReferenceShape(known, unknown, relation, accepts)
+        new_shape = ReferenceShape(known, unknown, relation, shape.open, accepts)
     elif isinstance(shape, ListShape):
         new_shape = ListShape(
             _resolve_targets(shape.items, (*path, "items"), registry, relations, parser)
@@ -488,6 +489,14 @@ class _SchemaParser:
                 "schema-invalid-field",
                 ("name",),
                 f"concept name must match ^[a-z][a-z0-9_-]*$, got {show(value)}",
+            )
+            return None
+        if value == ANY_TARGET:
+            self.error(
+                "schema-invalid-field",
+                ("name",),
+                f"a concept cannot be named `{ANY_TARGET}`; it is reserved for "
+                f"`target: {ANY_TARGET}`, a reference to any entity",
             )
             return None
         return value
@@ -911,7 +920,7 @@ class _SchemaParser:
             relation = self._relation_name(definition, base)
             if reference is None or relation is None:
                 return reference
-            return ReferenceShape(reference.targets, relation=relation)
+            return ReferenceShape(reference.targets, relation=relation, open=reference.open)
         if kind_name == "object":
             return self._parse_object(inner, (*base, key))
         if not isinstance(inner, dict):
@@ -941,12 +950,24 @@ class _SchemaParser:
     def _parse_reference(self, value: Any, base: _yaml.KeyPath) -> ReferenceShape | None:
         """Parse `target`: one type name, or a non-empty list of unique type names."""
         lines: dict[str, int | None] = {}
+        if value == ANY_TARGET:
+            # An open reference (spec 0014): any entity, so there is no type to resolve.
+            self.target_lines[tuple(str(p) for p in base[1:-1])] = lines
+            return ReferenceShape((), open=True)
         if isinstance(value, str) and value:
             lines[value] = self.line(base)
         elif isinstance(value, list) and value:
             ok = True
             for index, item in enumerate(value):
-                if not isinstance(item, str) or not item:
+                if item == ANY_TARGET:
+                    # Reported, and the names beside it are kept and enforced.
+                    self.error(
+                        "schema-invalid-field",
+                        base,
+                        f"`{ANY_TARGET}` cannot be listed with other targets; write "
+                        f"`target: {ANY_TARGET}` to accept every entity, or list only the types",
+                    )
+                elif not isinstance(item, str) or not item:
                     self.error(
                         "schema-invalid-field",
                         (*base, index),

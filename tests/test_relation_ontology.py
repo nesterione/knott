@@ -387,6 +387,7 @@ def test_view_undefined_relation_name_is_inline(tmp_path: Path) -> None:
             "relation": None,
             "targets": ["note"],
             "unknown_targets": [],
+            "open": False,
             "required": False,
         }
     ]

@@ -453,6 +453,7 @@ def _ontology_attribute(a: AttributeDef) -> OntologyAttribute:
         ),
         targets=list(shape.targets) if isinstance(shape, ReferenceShape) else [],
         unknown_targets=list(shape.unknown) if isinstance(shape, ReferenceShape) else [],
+        open=isinstance(shape, ReferenceShape) and shape.open,
         relation=shape.relation if isinstance(shape, ReferenceShape) else None,
         accept=list(shape.accept) if isinstance(shape, FileShape) else [],
         options=(

@@ -36,4 +36,4 @@ In the relation file, remove `inverse` or `acyclic`, or remove `symmetric`. On t
 
 ## Notes
 
-Only known targets count. A property on `tool` with `target: concept` is valid when `tool` extends `concept`; an inherited property is checked once, at the concept that declares it. A property whose targets are `[concept, guide]`, on `concept`, is valid. A symmetric relation that is also `acyclic` is not checked for cycles.
+Only known targets count. A property declared `target: any` can point back at anything, so it is never reported. A property on `tool` with `target: concept` is valid when `tool` extends `concept`; an inherited property is checked once, at the concept that declares it. A property whose targets are `[concept, guide]`, on `concept`, is valid. A symmetric relation that is also `acyclic` is not checked for cycles.

@@ -113,6 +113,7 @@ def reference_properties(ontology: Ontology) -> list[dict[str, Any]]:
             "relation": node.relation,
             "targets": list(node.targets),
             "unknown_targets": list(node.unknown_targets),
+            "open": node.open,
             "required": required,
         }
         for t in ontology.types

@@ -34,7 +34,24 @@ properties:
 
 - **Anywhere a shape can go**: top-level, list `items`, map `values`, or an object field. Problems name the full path, e.g. `speakers[1].person`.
 - **One or several targets.** With `target: [episode, meeting]`, an entity of either type passes.
+- **Or any entity.** `target: any` makes the reference [open](#open-references): the type is not checked.
 - **Only declared keys are relations.** An undeclared key that happens to look like a path is ordinary metadata, even when its name matches a relation definition.
+
+## Open references
+
+Some links are open by nature: "see also", "promoted to", "created by". Declare them with `target: any`:
+
+```yaml
+properties:
+  related:
+    type: list
+    items: { type: reference, relation: related, target: any }
+```
+
+- **Any entity passes**, of any type. The value must still resolve to an entity in the vault: a plain note, a missing file or a URL is an error as for every reference. Only [`relation-target-type-mismatch`](../issues/relation-target-type-mismatch.md) is never reported.
+- **`any` stands alone.** `target: [any, episode]` is `schema-invalid-field`. `target` is still required; leaving it out does not mean `any`.
+- **In `knott view`** an open reference has no edge. The type that declares it carries a `→ any` mark, and every type's panel lists the vault's open references under "from anywhere".
+- **Prefer a parent when the set is a family.** `target: page`, with `page` an [abstract parent](schema.md#inheritance), checks the type and draws one edge.
 
 ## Cardinality
 

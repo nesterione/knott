@@ -428,7 +428,7 @@ class _LoopParser:
 
 def _can_point(source: Schema, relation: str, target: str) -> bool:
     return any(
-        shape.relation == relation and target in (shape.accepts or shape.targets)
+        shape.relation == relation and (shape.open or target in (shape.accepts or shape.targets))
         for _, shape in iter_references(source)
     )
 

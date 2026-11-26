@@ -108,7 +108,7 @@ A property with a fixed set of values is an `enum`: `level: { type: enum, option
 
 A concept can say where its entities are stored: `path: specs`, `path: episodes/*`, or a list of such patterns. An entity in another folder is reported as `entity-misplaced`. Without `path`, entities can live anywhere. `filename` does the same for file names: a pattern such as `"{number}-{slug}"`, where each part has a regular expression and a description of how to fill it (`entity-invalid-name`).
 
-A concept can extend another with `extends: concept`: the child inherits the parent's properties, template, `path` and `kid: required`, and a reference that targets the parent accepts it. `abstract: true` marks a parent no entity can have as its type.
+A concept can extend another with `extends: concept`: the child inherits the parent's properties, template, `path` and `kid: required`, and a reference that targets the parent accepts it. `abstract: true` marks a parent no entity can have as its type. A link that is open by nature can be declared `target: any`: any entity passes, and only the type check is skipped.
 
 The body of a concept file is an optional template for entity bodies: real headings, with a `<!-- -->` comment under each saying what goes there. Knott stores it and never checks entities against it.
 
