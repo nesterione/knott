@@ -56,6 +56,7 @@ This README has no frontmatter, so Knott treats it as an ordinary note.
 10. [Concepts are Markdown files, and references are properties](decisions/0010-concept-files-and-reference-properties.md)
 11. [Changes are specified in frozen specs, wanted ones start as intents](decisions/0011-specs-intents-and-frozen-history.md)
 12. [Files are values of a `file` property, and a URI names files kept elsewhere](decisions/0012-files-are-property-values.md)
+13. [A command may edit files when the edit adds no knowledge](decisions/0013-commands-may-make-mechanical-edits.md)
 
 ## How changes are made
 
@@ -78,6 +79,9 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 13. [Concept inheritance](specs/0013-concept-inheritance.md)
 14. [Open reference targets](specs/0014-open-reference-targets.md)
 15. [Type tree](specs/0015-type-tree.md)
+16. [List and show entities](specs/0016-list-and-show-entities.md)
+17. [Show the details of one type](specs/0017-types-for-one-type.md)
+18. [Move a file and rewrite the links to it](specs/0018-move-entities.md)
 
 ### Intents
 
@@ -91,3 +95,5 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 - [Concept inheritance](intents/concept-inheritance.md)
 - [Open reference targets](intents/open-reference-targets.md)
 - [Type tree](intents/type-tree.md)
+- [Read the vault as data](intents/read-the-vault-as-data.md)
+- [Move a file without breaking links](intents/move-without-breaking-links.md)
