@@ -12,6 +12,7 @@ commands:
   - "[knott refs](../commands/refs.md)"
   - "[knott list](../commands/list.md)"
   - "[knott show](../commands/show.md)"
+  - "[knott mv](../commands/mv.md)"
 ---
 # Agent workflow
 
@@ -28,7 +29,9 @@ When starting a new entity from a copy of another file, delete the copied `kid:`
 
 To find entities, ask knott rather than `grep`: [`knott list`](../commands/list.md) `spec --where status=draft --fields title` knows subtypes, reads values by their declared type and matches a reference by its target. To read one entity's connections without its body, use [`knott show`](../commands/show.md) `<file>`.
 
-Before renaming, deleting or replacing an entity, run `knott refs <file>` to see who links to it, and update those files too.
+To rename or move a file, run [`knott mv`](../commands/mv.md) `OLD NEW`: it rewrites every link to the file, in frontmatter and in bodies, and the file's own links when its folder changes. Never use `mv` or `git mv` and fix links by hand. Run `knott validate` afterwards and read the `unchanged` lines.
+
+Before deleting or replacing an entity, run `knott refs <file>` to see who links to it, and update those files too.
 
 Before changing a property that a [loop](../concepts/loop.md) follows (often `status`), run `knott loops <name>`: it lists what each entity's next stage still needs. Add those first, then change the property. Setting a stage whose needs are not met is [`loop-stage-unmet`](../issues/loop-stage-unmet.md).
 

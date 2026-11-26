@@ -37,6 +37,9 @@ class MarkdownFile:
     """1-based file line of every frontmatter value, by key path, e.g. ``("senses", 1, "ru")``."""
     raws: dict[_yaml.KeyPath, str] = field(default_factory=dict)
     """Source text of every scalar frontmatter value, by key path."""
+    scalars: dict[_yaml.KeyPath, _yaml.Loc] = field(default_factory=dict, compare=False)
+    """Where every frontmatter value sits in the frontmatter's YAML text (the lines
+    between the two ``---``, joined by ``\n``), by key path."""
     error: str | None = None
     error_line: int | None = None
 
@@ -133,4 +136,5 @@ def parse_markdown(text: str, rel_path: str) -> MarkdownFile:
         raw=raw,
         lines=value_lines,
         raws=raws,
+        scalars=doc.locs,
     )

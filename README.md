@@ -80,6 +80,7 @@ $ knott validate
 | `knott refs PATH` | List who references an entity, grouped by relation (`PATH` or `kid:<uuid>`; `--format json`) |
 | `knott list [TYPE]` | List entities of a type and its subtypes, filtered by property values (`--where KEY=VALUE`, `--fields a,b`, `--format json`) |
 | `knott show PATH` | Show one entity: its properties, its outgoing references resolved, and who references it (`--body`, `--format json`) |
+| `knott mv SOURCE DEST` | Move or rename a file and rewrite the links to it, in frontmatter and in bodies, and its own links when its folder changes (`--dry-run`, `--format json`) |
 | `knott loops [NAME]` | Show where entities stand in the vault's loops and what each still needs (`--format json`) |
 | `knott migrate [PATH]` | Convert a pre-0.5 `.knott/schemas/` folder into concept files, then validate |
 | `knott view [PATH]` | Draw the ontology as an HTML page and open it (`-o FILE`, `--no-open`) |
@@ -228,6 +229,7 @@ vault.ontology()                     # Ontology(vault, types, schema_issues, rel
 vault.refs("concepts/kid.md")        # Refs(entity, groups): who references it, grouped by relation
 vault.entities("spec", where={"status": "draft"}, fields=["title"])  # [EntityRecord, …]
 vault.show("concepts/kid.md")        # EntityDetail(entity, references, referenced_by, body)
+vault.move("specs/a.md", "archive/a.md", dry_run=True)  # MoveResult: what the move rewrites
 vault.loops()                        # [LoopReport, …]: entities by stage, and what each still needs
 for t in vault.ontology().types:
     t.properties, t.template, t.references()   # references(): [("speakers[].person", …), …]

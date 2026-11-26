@@ -55,7 +55,7 @@ derived_from: "[Episode 42 script](../scripts/episode-42.md)"
 ---
 # Episode 42
 
-Body: any Markdown. Knott does not read it.
+Body: any Markdown. Knott does not check it.
 ```
 
 Typing is strict, with no coercion:
@@ -135,7 +135,8 @@ relations:
 
 - **Pick the property by its relation's guidance.** When two fit (`supersedes` vs `amends`), the guidance says which one.
 - **Never write the inverse.** `superseded_by` is not a property; it is how `knott refs` labels incoming `supersedes` links. Store a `symmetric` link on one side only.
-- **Find who links to an entity** with `knott refs <file>` before renaming, deleting or replacing it:
+- **Rename or move a file with `knott mv OLD NEW`.** It rewrites every link to the file, in frontmatter and in bodies, and the file's own links when its folder changes. Never move an entity with `mv` or `git mv` and fix links by hand. Try `--dry-run` first when unsure. Afterwards run `knott validate`, and read any `unchanged` lines (links of the moved file that name no existing file) and `skipped` lines (files it could not search).
+- **Find who links to an entity** with `knott refs <file>` before deleting or replacing it:
 
   ```
   $ knott refs specs/0005-concept-files.md
@@ -226,6 +227,7 @@ knott validate --fix [PATH...]   # add a kid to entities that have none, then va
 knott refs PATH [--format json]  # who references an entity (PATH or kid:<uuid>), by relation
 knott list [TYPE] [--where KEY=VALUE] [--fields a,b] [--format json]  # entities of a type, filtered
 knott show PATH [--body] [--format json]  # one entity: properties, links out (resolved) and in
+knott mv SOURCE DEST [--dry-run]  # move or rename a file and rewrite the links to it
 knott loops [NAME] [--format json]  # entities by stage of a loop, and what each still needs
 knott init [PATH]                # create .knott/ (never overwrites)
 knott view [PATH] [--no-open] [-o FILE]  # write an HTML diagram of types and references

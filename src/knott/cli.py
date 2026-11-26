@@ -28,6 +28,7 @@ from knott.models import (
     LoopDefinition,
     LoopReport,
     MigrateResult,
+    MoveResult,
     Ontology,
     OntologyAttribute,
     OntologyType,
@@ -778,6 +779,72 @@ def show(
         typer.echo(_dump(data))
     else:
         typer.echo(format_entity(detail, vault._reference_keys(detail.entity.type)))
+
+
+def format_move(result: MoveResult) -> str:
+    """What moved, then the rewritten links, then what was left alone (spec 0018)."""
+    would = "would " if result.dry_run else ""
+    moved = f"{would}move" if result.dry_run else "moved"
+    blocks = [f"{moved} {result.from_} → {result.to}"]
+    if result.updated:
+        files = len({link.path for link in result.updated})
+        head = (
+            f"{would}update{'' if result.dry_run else 'd'} "
+            f"{_plural(len(result.updated), 'link', 'links')} in {_plural(files, 'file', 'files')}"
+        )
+        rows = [[_at(u.path, u.line), u.field or "body"] for u in result.updated]
+        blocks.append("\n".join([head, *_columns(rows, "  ")]))
+    else:
+        blocks.append("no links to update")
+    if result.unchanged:
+        rows = [[_at(u.path, u.line), u.field or "body", u.reason] for u in result.unchanged]
+        head = f"unchanged {_plural(len(result.unchanged), 'link', 'links')}"
+        blocks.append("\n".join([head, *_columns(rows, "  ")]))
+    if result.skipped:
+        rows = [[s.path, s.reason] for s in result.skipped]
+        head = f"skipped {_plural(len(result.skipped), 'file', 'files')}"
+        blocks.append("\n".join([head, *_columns(rows, "  ")]))
+    return "\n\n".join(blocks)
+
+
+def _at(path: str, line: int | None) -> str:
+    return path if line is None else f"{path}:{line}"
+
+
+@app.command()
+def mv(
+    source: Annotated[
+        str, typer.Argument(help="A Markdown file in the vault, or kid:<uuid>.", metavar="SOURCE")
+    ],
+    dest: Annotated[
+        Path, typer.Argument(help="The new path, or an existing folder.", metavar="DEST")
+    ],
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Show what would change; write nothing.")
+    ] = False,
+    output: Annotated[
+        OutputFormat, typer.Option("--format", help="Output format.")
+    ] = OutputFormat.TEXT,
+) -> None:
+    """Move or rename a file and rewrite the links to it."""
+    is_kid = source.strip().startswith("kid:")
+    try:
+        vault = Knott.open("." if is_kid else source)
+    except KnottError as error:
+        raise _fail(error) from None
+    _fail_on_legacy(vault)
+    try:
+        result = vault.move(
+            source if is_kid else Path(source).absolute(), dest.absolute(), dry_run=dry_run
+        )
+    except KnottError as error:
+        raise _fail(error) from None
+    if output is OutputFormat.JSON:
+        typer.echo(_dump(result.model_dump(mode="json", by_alias=True)))
+    else:
+        typer.echo(format_move(result))
+    if result.issues:
+        typer.echo("\n\n".join(format_issue(issue) for issue in result.issues), err=True)
 
 
 @app.command()

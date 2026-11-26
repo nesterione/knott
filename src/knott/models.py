@@ -6,7 +6,7 @@ import datetime as dt
 from collections.abc import Iterator
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
 class _Frozen(BaseModel):
@@ -463,3 +463,51 @@ class EntityDetail(_Frozen):
     """The groups of `Knott.refs()` for this entity."""
     body: str | None = None
     """The body, verbatim, when asked for; None when blank or not asked for."""
+
+
+class UpdatedLink(_Frozen):
+    """One link `Knott.move()` rewrote (spec 0018)."""
+
+    path: str
+    """Vault-relative path of the file that holds it; the new path for the moved file."""
+    line: int | None
+    field: str | None
+    """The property path of a frontmatter value; None for a link in the body."""
+    old: str
+    """The whole value for a frontmatter value; the destination for a body link."""
+    new: str
+
+
+class UnchangedLink(_Frozen):
+    """A link of the moved file that was left as written, because it names no existing
+    file in the vault."""
+
+    path: str
+    line: int | None
+    field: str | None
+    value: str
+    reason: str
+
+
+class SkippedFile(_Frozen):
+    """A file that could not be searched for links."""
+
+    path: str
+    reason: str
+
+
+class MoveResult(_Frozen):
+    """What `Knott.move()` did, or with ``dry_run`` would do (spec 0018)."""
+
+    from_: str = Field(serialization_alias="from")
+    """The old vault-relative path; ``from`` in JSON."""
+    to: str
+    kid: str | None
+    """The moved entity's `kid`, when it has a valid one."""
+    dry_run: bool
+    updated: list[UpdatedLink]
+    """Rewritten links, by path, then line."""
+    unchanged: list[UnchangedLink]
+    skipped: list[SkippedFile]
+    issues: list[Issue]
+    """`entity-misplaced` and `entity-invalid-name` for the entity at its new path: warnings."""

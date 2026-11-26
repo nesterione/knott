@@ -24,6 +24,7 @@ from knott.models import (
     Issue,
     LoopReport,
     MigrateResult,
+    MoveResult,
     Ontology,
     OntologyAttribute,
     OntologyType,
@@ -62,6 +63,7 @@ from knott.vault.kid import (
 )
 from knott.vault.links import KID_PREFIX, LinkError
 from knott.vault.loops import loop_definition, loop_report, unmet_issues
+from knott.vault.move import move_file
 from knott.vault.query import (
     Filter,
     check_fields,
@@ -376,6 +378,30 @@ class Knott:
             referenced_by=reverse_lookup(session, relations, target),
             body=None if text is None else markdown_body(text),
         )
+
+    def move(self, source: str | Path, dest: str | Path, *, dry_run: bool = False) -> MoveResult:
+        """Move or rename one Markdown file and rewrite the links the move would
+        break (spec 0018): references and file values that name it in other entities'
+        frontmatter, Markdown links to it in bodies, and its own relative links when
+        its folder changes. ``dry_run=True`` prepares and checks everything and writes
+        nothing.
+
+        ``source`` is a file knott sees, or ``kid:<uuid>``; ``dest`` is the new path,
+        or an existing folder. Relative paths are resolved against the vault root.
+        Raises ``PathNotFoundError``, ``PathOutsideVaultError`` or ``KnottError``
+        before anything is written, and ``MoveError`` (with ``written``) for an I/O
+        error after the first write.
+        """
+        loaded = load_definitions(self.root)
+        session = VaultSession(self.root, loaded.schemas, loaded.connectors)
+        if isinstance(source, str) and source.strip().startswith(KID_PREFIX):
+            source_path = self._resolve_entity(source, session)
+        else:
+            source_path = self._vault_relative(source)
+        target = Path(dest)
+        if not target.is_absolute():
+            target = self.root / target
+        return move_file(session, source_path, target, dry_run=dry_run)
 
     @overload
     def loops(self) -> list[LoopReport]: ...
