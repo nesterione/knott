@@ -10,6 +10,8 @@ commands:
   - "[knott types](../commands/types.md)"
   - "[knott validate](../commands/validate.md)"
   - "[knott refs](../commands/refs.md)"
+  - "[knott list](../commands/list.md)"
+  - "[knott show](../commands/show.md)"
 ---
 # Agent workflow
 
@@ -23,6 +25,8 @@ Knott is built for agents that persist knowledge as files. The full instructions
 6. Fix every issue and re-validate until `ok` is `true`.
 
 When starting a new entity from a copy of another file, delete the copied `kid:` line first, or both files claim the same `kid`.
+
+To find entities, ask knott rather than `grep`: [`knott list`](../commands/list.md) `spec --where status=draft --fields title` knows subtypes, reads values by their declared type and matches a reference by its target. To read one entity's connections without its body, use [`knott show`](../commands/show.md) `<file>`.
 
 Before renaming, deleting or replacing an entity, run `knott refs <file>` to see who links to it, and update those files too.
 

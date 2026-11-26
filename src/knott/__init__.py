@@ -11,6 +11,8 @@ from knott.errors import (
 )
 from knott.models import (
     ConnectorDefinition,
+    EntityDetail,
+    EntityRecord,
     EntityRef,
     EnumOption,
     FilenamePart,
@@ -28,6 +30,7 @@ from knott.models import (
     Ontology,
     OntologyAttribute,
     OntologyType,
+    OutgoingRef,
     Ref,
     RefGroup,
     Refs,
@@ -40,6 +43,8 @@ from knott.models import (
 __all__ = [
     "ConfigError",
     "ConnectorDefinition",
+    "EntityDetail",
+    "EntityRecord",
     "EntityRef",
     "EnumOption",
     "FilenamePart",
@@ -60,6 +65,7 @@ __all__ = [
     "Ontology",
     "OntologyAttribute",
     "OntologyType",
+    "OutgoingRef",
     "PathNotFoundError",
     "PathOutsideVaultError",
     "Ref",

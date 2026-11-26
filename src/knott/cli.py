@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 import stat
@@ -10,7 +11,7 @@ import tempfile
 import webbrowser
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import questionary
 import typer
@@ -20,6 +21,8 @@ from knott.api import Knott, version
 from knott.errors import KnottError
 from knott.models import (
     ConnectorDefinition,
+    EntityDetail,
+    EntityRecord,
     FilenamePart,
     Issue,
     LoopDefinition,
@@ -27,6 +30,7 @@ from knott.models import (
     MigrateResult,
     OntologyAttribute,
     OntologyType,
+    RefGroup,
     Refs,
     RelationDefinition,
     ValidationResult,
@@ -514,7 +518,13 @@ def format_refs(refs: Refs) -> str:
     blocks = [f"{refs.entity.path}  {refs.entity.type}"]
     if not refs.groups:
         blocks.append("no references")
-    for group in refs.groups:
+    return "\n\n".join(blocks + _group_blocks(refs.groups))
+
+
+def _group_blocks(groups: list[RefGroup]) -> list[str]:
+    """One block per reverse-lookup group: its label, then its references in columns."""
+    blocks: list[str] = []
+    for group in groups:
         rows = [
             [r.path, r.type, r.field]
             + ([_DIRECTION_MARKS[r.direction]] if group.kind == "symmetric" else [])
@@ -526,7 +536,192 @@ def format_refs(refs: Refs) -> str:
             cells = [f"{cell:<{width}}" for cell, width in zip(row, widths, strict=False)]
             lines.append("  " + "  ".join([*cells, row[-1]]))
         blocks.append("\n".join(lines))
+    return blocks
+
+
+def _columns(rows: list[list[str]], indent: str = "") -> list[str]:
+    """Rows as lines, in columns padded to their widest value plus two spaces. A row's
+    last cell is not padded, rows may differ in length, and no line ends in spaces."""
+    widths: dict[int, int] = {}
+    for row in rows:
+        for i, cell in enumerate(row):
+            widths[i] = max(widths.get(i, 0), len(cell))
+    lines: list[str] = []
+    for row in rows:
+        cells = [f"{cell:<{widths[i]}}" for i, cell in enumerate(row[:-1])]
+        lines.append((indent + "  ".join([*cells, row[-1]])).rstrip())
+    return lines
+
+
+def _cell(value: Any) -> str:
+    """A frontmatter value on one line (spec 0016): a string as is, a number, boolean
+    or date in its JSON form without quotes, a list or mapping as JSON, null as ``-``."""
+    if value is None:
+        return "-"
+    if isinstance(value, str):
+        return " ".join(value.splitlines())
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, dt.date):
+        return value.isoformat()
+    if isinstance(value, list | dict):
+        return json.dumps(value, ensure_ascii=False, default=_json_default)
+    return str(value)
+
+
+def _json_default(value: Any) -> str:
+    if isinstance(value, dt.date):
+        return value.isoformat()
+    raise TypeError(f"cannot write {type(value).__name__} as JSON")
+
+
+def _dump(data: Any) -> str:
+    """JSON output: dates in ISO 8601 form."""
+    return json.dumps(data, indent=2, ensure_ascii=False, default=_json_default, allow_nan=False)
+
+
+def _record_data(record: EntityRecord) -> dict[str, Any]:
+    """A record for JSON output: `properties` is left out when it was not asked for."""
+    data: dict[str, Any] = {"path": record.path, "type": record.type, "kid": record.kid}
+    if record.properties is not None:
+        data["properties"] = record.properties
+    return data
+
+
+def format_entities(records: list[EntityRecord]) -> str:
+    """One line per entity: path, type, then each chosen field."""
+    if not records:
+        return "no entities"
+    rows = [
+        [r.path, r.type, *(_cell(value) for value in (r.properties or {}).values())]
+        for r in records
+    ]
+    return "\n".join(_columns(rows))
+
+
+def format_entity(detail: EntityDetail, reference_keys: frozenset[str] = frozenset()) -> str:
+    """The header line, then `properties`, `references`, `referenced by` and `body`,
+    each left out when it has nothing. ``reference_keys`` are the top-level properties
+    that hold only references: they are listed under `references`, not `properties`."""
+    entity = detail.entity
+    header = f"{entity.path}  {entity.type}" + (f"  kid:{entity.kid}" if entity.kid else "")
+    blocks = [header]
+    properties = [
+        [name, _cell(value)]
+        for name, value in (entity.properties or {}).items()
+        if name not in reference_keys
+    ]
+    if properties:
+        blocks.append("\n".join(["properties", *_columns(properties, "  ")]))
+    rows: list[list[str]] = []
+    for ref in detail.references:
+        # An unresolved value shows as written, with the error where the type would be.
+        row = [ref.field, ref.path if ref.path is not None else _cell(ref.value)]
+        row.append(ref.type if ref.type is not None else ref.error or "")
+        tail = [f"({ref.relation})"] if ref.relation is not None else []
+        if ref.type is not None and ref.error is not None:
+            tail.append(ref.error)
+        rows.append(row + (["  ".join(tail)] if tail else []))
+    if rows:
+        blocks.append("\n".join(["references", *_columns(rows, "  ")]))
+    if detail.referenced_by:
+        groups = "\n\n".join(_group_blocks(detail.referenced_by))
+        indented = [f"  {line}" if line else "" for line in groups.split("\n")]
+        blocks.append("\n".join(["referenced by", *indented]))
+    if detail.body is not None:
+        blocks.append(f"body\n{detail.body}")
     return "\n\n".join(blocks)
+
+
+def _fail_on_legacy(vault: Knott) -> None:
+    """Exit 1 with the `schema-legacy-layout` issue when the vault has the legacy layout."""
+    legacy = [i for i in vault.schema_issues() if i.code == "schema-legacy-layout"]
+    if legacy:
+        typer.echo("\n\n".join(format_issue(issue) for issue in legacy), err=True)
+        raise typer.Exit(EXIT_INVALID)
+
+
+@app.command("list")
+def list_command(
+    type_name: Annotated[
+        str | None,
+        typer.Argument(
+            help="A type; its subtypes are included (default: every entity).", metavar="[TYPE]"
+        ),
+    ] = None,
+    where: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--where",
+            metavar="KEY=VALUE",
+            help=(
+                "Keep entities whose property KEY equals VALUE; repeat to combine. On a list, "
+                "any item may match; for a reference, VALUE is an entity path or kid:<uuid>; "
+                "an empty VALUE means the property is absent. Needs TYPE."
+            ),
+        ),
+    ] = None,
+    fields: Annotated[
+        str | None,
+        typer.Option(
+            "--fields", metavar="KEY,...", help="Frontmatter keys to add to the output, in order."
+        ),
+    ] = None,
+    output: Annotated[
+        OutputFormat, typer.Option("--format", help="Output format.")
+    ] = OutputFormat.TEXT,
+) -> None:
+    """List entities of a type, filtered by property values."""
+    try:
+        vault = Knott.open(".")
+    except KnottError as error:
+        raise _fail(error) from None
+    _fail_on_legacy(vault)
+    try:
+        records = vault._entities_from_text(
+            type_name,
+            where or [],
+            None if fields is None else [name.strip() for name in fields.split(",")],
+            Path.cwd(),
+        )
+    except KnottError as error:
+        raise _fail(error) from None
+    if output is OutputFormat.JSON:
+        typer.echo(_dump({"entities": [_record_data(r) for r in records]}))
+    else:
+        typer.echo(format_entities(records))
+
+
+@app.command()
+def show(
+    path: Annotated[str, typer.Argument(help="An entity file, or kid:<uuid>.", metavar="PATH")],
+    body: Annotated[bool, typer.Option("--body", help="Also print the body.")] = False,
+    output: Annotated[
+        OutputFormat, typer.Option("--format", help="Output format.")
+    ] = OutputFormat.TEXT,
+) -> None:
+    """Show one entity: its properties, what it references and who references it."""
+    is_kid = path.strip().startswith("kid:")
+    try:
+        vault = Knott.open("." if is_kid else path)
+    except KnottError as error:
+        raise _fail(error) from None
+    _fail_on_legacy(vault)
+    try:
+        detail = vault.show(path if is_kid else Path(path).absolute(), body=body)
+    except KnottError as error:
+        raise _fail(error) from None
+    if output is OutputFormat.JSON:
+        data: dict[str, Any] = {
+            "entity": _record_data(detail.entity),
+            "references": [ref.model_dump() for ref in detail.references],
+            "referenced_by": [group.model_dump() for group in detail.referenced_by],
+        }
+        if body:
+            data["body"] = detail.body
+        typer.echo(_dump(data))
+    else:
+        typer.echo(format_entity(detail, vault._reference_keys(detail.entity.type)))
 
 
 @app.command()
@@ -542,10 +737,7 @@ def refs(
         vault = Knott.open("." if is_kid else path)
     except KnottError as error:
         raise _fail(error) from None
-    legacy = [i for i in vault.schema_issues() if i.code == "schema-legacy-layout"]
-    if legacy:
-        typer.echo("\n\n".join(format_issue(issue) for issue in legacy), err=True)
-        raise typer.Exit(EXIT_INVALID)
+    _fail_on_legacy(vault)
     try:
         result = vault.refs(path if is_kid else Path(path).absolute())
     except KnottError as error:
