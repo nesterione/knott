@@ -408,7 +408,7 @@ def test_view_and_types_report_legacy_layout(
     assert "run `knott migrate`" in result.stderr
     assert not out.exists()
     monkeypatch.chdir(vault)
-    for args in (["types"], ["types", "--verbose"]):
+    for args in (["types"], ["types", "--verbose"], ["types", "--tree"]):
         result = runner.invoke(app, args)
         assert result.exit_code == 1
         assert result.stdout == ""

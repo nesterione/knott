@@ -76,7 +76,7 @@ $ knott validate
 |---|---|
 | `knott init [PATH]` | Create `.knott/concepts/` and `.knott/config.yaml` |
 | `knott validate [PATH...]` | Check all schemas, plus all entities or those under `PATH` (`--format json` for agents, `--fix` to add missing `kid`s) |
-| `knott types [--verbose]` | List discovered types (`--verbose`: properties, nested shapes, references, whether a template exists, and the relations) |
+| `knott types [--verbose] [--tree]` | List discovered types (`--verbose`: properties, nested shapes, references, whether a template exists, and the relations; `--tree`: subtypes under their parent, with entity counts and folders) |
 | `knott refs PATH` | List who references an entity, grouped by relation (`PATH` or `kid:<uuid>`; `--format json`) |
 | `knott loops [NAME]` | Show where entities stand in the vault's loops and what each still needs (`--format json`) |
 | `knott migrate [PATH]` | Convert a pre-0.5 `.knott/schemas/` folder into concept files, then validate |

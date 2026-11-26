@@ -122,6 +122,50 @@ def format_type(t: OntologyType) -> str:
     return "\n".join(lines)
 
 
+def format_tree(types: list[OntologyType], *, verbose: bool = False) -> str:
+    """The types as a tree, subtypes under their parent, with counts and folders (spec 0015).
+
+    ``verbose`` adds each type's description and the properties it declares itself.
+    """
+    by_name = {t.type: t for t in types}
+    children: dict[str | None, list[OntologyType]] = {}
+    for t in sorted(types, key=lambda t: t.type):
+        # a parent that did not load leaves the type a root
+        children.setdefault(t.extends if t.extends in by_name else None, []).append(t)
+
+    # (label, type, prefix of its detail lines), in print order
+    rows: list[tuple[str, OntologyType, str]] = []
+
+    def walk(parent: str | None, stem: str) -> None:
+        siblings = children.get(parent, [])
+        for i, t in enumerate(siblings):
+            last = i == len(siblings) - 1
+            name = t.type + (" (abstract)" if t.abstract else "")
+            below = "" if parent is None else stem + ("   " if last else "│  ")
+            connector = "" if parent is None else stem + ("└─ " if last else "├─ ")
+            rows.append((connector + name, t, below + ("│  " if t.type in children else "   ")))
+            walk(t.type, below)
+
+    walk(None, "")
+    label_width = max((len(label) for label, _, _ in rows), default=0)
+    count_width = max((len(str(t.count)) for _, t, _ in rows if not t.abstract), default=0)
+    lines: list[str] = []
+    for label, t, detail in rows:
+        count = "" if t.abstract else str(t.count)
+        columns = [label.ljust(label_width), " | ".join(t.entity_paths)]
+        if count_width:  # no count column when every type is abstract
+            columns.insert(1, count.rjust(count_width))
+        lines.append("  ".join(columns).rstrip())
+        if not verbose:
+            continue
+        if t.description and t.description.strip():
+            lines.append(detail + _one_line(t.description))
+        own = [_label(a.name or "", a.required) for a in t.properties if a.inherited_from is None]
+        if own:
+            lines.append(f"{detail}adds: {', '.join(own)}")
+    return "\n".join(lines)
+
+
 def _part_lines(parts: list[FilenamePart], indent: str) -> list[str]:
     """One line per part of a file-name pattern: name, `match`, description, in columns."""
     if not parts:
@@ -418,13 +462,28 @@ def types(
             ),
         ),
     ] = False,
+    tree: Annotated[
+        bool,
+        typer.Option(
+            "--tree",
+            "-t",
+            help=(
+                "Show the types as a tree, subtypes under their parent, with entity counts "
+                "and folders. With --verbose: each type's description and the properties it adds."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """List discovered entity types."""
     try:
         vault = Knott.open(".")
     except KnottError as error:
         raise _fail(error) from None
-    if verbose:
+    if tree:
+        output = format_tree(vault.ontology().types, verbose=verbose)
+        if output:
+            typer.echo(output)
+    elif verbose:
         ontology = vault.ontology()
         sections = [format_type(t) for t in ontology.types]
         if ontology.relations:

@@ -26,6 +26,12 @@ An [open reference](../concepts/relation.md#open-references) (`target: any`) has
 
 With [inheritance](../concepts/schema.md#inheritance), a reference is drawn once, at the type that declares it, and "is a" is its own edge: thin, with a hollow triangle at the parent. An abstract type has a dashed border and its name in italics. A type with subtypes carries a `▾ N` mark; click it to fold the subtypes into the parent, and the edges of the hidden types are drawn at the parent. **Fold subtypes** in the header does it for every family. Hovering a type also highlights the references it inherits.
 
+An **Outline** button in the header opens a panel on the left with the types as a tree, the same one [`knott types --tree`](types.md#tree) prints: subtypes indented under their parent, each with its entity count. An abstract type is in italics and has no count. A row's tooltip is the type's description.
+
+- **Hover a row** to highlight the type in the diagram. Hovering a box marks its row.
+- **Click a row** to select the type and open its panel. If the type is hidden because an ancestor is folded, the ancestor unfolds first.
+- The outline is always fully expanded; folding subtypes in the diagram does not change it. The page remembers whether it is open.
+
 A **Relations (N defined · M inline)** button in the header lists every link in the vault, in two sections:
 
 - **Defined**: each [relation file](../concepts/relation.md#relation-definitions) with its keys and description, its guidance folded under "When to use it", and the properties that name it.
