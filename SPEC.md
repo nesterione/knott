@@ -770,7 +770,7 @@ Keep the CLI deliberately small:
 ```
 knott init [PATH]
 knott validate [PATH...] [--fix]
-knott types [--verbose] [--tree]
+knott types [NAME...] [--verbose] [--tree]
 knott migrate [PATH]
 knott version
 knott skill install [PATH]
@@ -859,6 +859,30 @@ record (abstract)
 └─ spec            14  specs
       The exact behaviour one change adds or alters.
       adds: status*, realizes, decisions, concepts
+```
+
+`knott types NAME...` prints, for each named type in the order given (a repeated name once), the block `--verbose` prints for it, then, when the type has a template, own or inherited, a line `  template body:` and the template verbatim, each line indented by four spaces and blank lines left empty. Types are separated by a blank line. An abstract type is allowed; subtypes are not expanded. After the types come the sections of `--verbose`, each entry formatted and ordered as there and a section with no entry left out, limited to what the named types use: `relations:` holds the relations named by a reference property of a named type, own or inherited, at any depth; `connectors:` holds every connector when a named type has a `file` property at any depth, else none; `loops:` holds the loops whose `type` is a named type or one of its ancestors. `--verbose` changes nothing. A name with `--tree` is a usage error. A name no concept defines is a usage error that lists the known types, and nothing is printed: ``error: no type named `intnet` (known types: `command`, `concept`, …)``. Exit codes are those of `types`; the legacy layout is reported before the names are checked.
+
+```
+$ knott types intent
+intent  (.knott/concepts/intent.md)
+  Something we want knott to do but have not specified yet: …
+  template: yes
+  path: intents
+  references: concepts[]
+  properties:
+    title*        string
+    status*       string                       open or dropped. …
+    raised_on*    date
+    github_issue  integer                      The GitHub issue where it is discussed, if any.
+    concepts      list of reference → concept  Concepts the intent would change.
+  template body:
+    # <!-- The intent as a short phrase, the same text as `title`. -->
+
+    ## Need
+
+    <!-- Who needs what, and what they do today without it. No solution yet. -->
+    …
 ```
 
 ### `knott migrate [PATH]`
@@ -1018,7 +1042,7 @@ Ship an agent instruction document in the repo at `src/knott/_skills/knott/SKILL
 
 - what a Knott vault is, and that Markdown is the source of truth
 - where concept files live, how to read them, and how to use the body template
-- how to discover types (`knott types`)
+- how to discover types (`knott types --tree`, `knott types NAME`)
 - how to create an entity and write references (relative paths, Markdown-link form, quoted; strict cardinality; nested references)
 - that `knott validate <file>` must be run after every change
 - open references: `→ any` accepts any entity, which must still exist in the vault
@@ -1028,8 +1052,8 @@ Ship an agent instruction document in the repo at `src/knott/_skills/knott/SKILL
 
 Typical agent workflow:
 
-1. Run `knott types --verbose` and look in `.knott/concepts/`.
-2. Pick the relevant type and read its concept file.
+1. Run `knott types --tree` for the overview, and `knott types --verbose` to choose between types.
+2. Run `knott types NAME` for the type to write: its properties, template, and the relations and loops it uses.
 3. Create or update the Markdown entity, in a folder the type's `path` allows and under a name its `filename` allows, when it declares them, starting a new body from the concept's template.
 4. Write references as relative paths, one value for a `reference` and a list for a `list` of references.
 5. Run `knott validate <file>`.
