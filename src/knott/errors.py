@@ -28,3 +28,12 @@ class PathOutsideVaultError(KnottError):
 
 class MigrateError(KnottError):
     """A legacy ``.knott/schemas/`` file cannot be converted to a concept file."""
+
+
+class MoveError(KnottError):
+    """`Knott.move()` stopped on an I/O error after it started writing (spec 0018)."""
+
+    def __init__(self, message: str, written: list[str]) -> None:
+        super().__init__(message)
+        self.written = written
+        """Vault-relative paths of the files already written, in the order written."""

@@ -7,7 +7,7 @@ plus a map from key paths to line numbers and raw scalar text.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import yaml
@@ -33,6 +33,15 @@ class Loc:
 
     line: int
     raw: str | None
+    start: int | None = None
+    """For a scalar: index of its first character in the parsed text (a quote included)."""
+    end: int | None = None
+    """For a scalar: index just past its last character in the parsed text."""
+    style: str | None = None
+    """For a scalar: None when plain, else its quote or block indicator: one of ``" ' | >``."""
+    shared: bool = False
+    """The scalar's node is reached under more than one path (an alias): editing its
+    text would change every one of them."""
 
 
 @dataclass(frozen=True)
@@ -78,10 +87,17 @@ def load(text: str) -> YamlDocument:
         loader.dispose()
     locs: dict[KeyPath, Loc] = {}
     if node is not None:
+        nodes: dict[KeyPath, int] = {}
         try:
-            _collect(node, (), locs)
+            _collect(node, (), locs, nodes)
         except RecursionError:
             raise YamlParseError("invalid YAML: nesting is too deep", None) from None
+        visits: dict[int, int] = {}
+        for node_id in nodes.values():
+            visits[node_id] = visits.get(node_id, 0) + 1
+        for path, node_id in nodes.items():
+            if visits[node_id] > 1:
+                locs[path] = replace(locs[path], shared=True)
     return YamlDocument(data=data, locs=locs)
 
 
@@ -131,7 +147,16 @@ def _check_expansion(root: yaml.Node) -> None:
     size(root)
 
 
-def _collect(node: yaml.Node, path: KeyPath, locs: dict[KeyPath, Loc]) -> None:
+def _loc(line: int, node: yaml.Node, path: KeyPath, nodes: dict[KeyPath, int]) -> Loc:
+    if not isinstance(node, yaml.ScalarNode):
+        return Loc(line, None)
+    nodes[path] = id(node)
+    return Loc(line, node.value, node.start_mark.index, node.end_mark.index, node.style)
+
+
+def _collect(
+    node: yaml.Node, path: KeyPath, locs: dict[KeyPath, Loc], nodes: dict[KeyPath, int]
+) -> None:
     # Walks aliased nodes once per path, so aliased fields get full metadata.
     # Safe because _check_expansion already bounded the expanded size.
     if isinstance(node, yaml.MappingNode):
@@ -140,12 +165,10 @@ def _collect(node: yaml.Node, path: KeyPath, locs: dict[KeyPath, Loc]) -> None:
             if not isinstance(key_node, yaml.ScalarNode) or key_node.tag != _STR_TAG:
                 continue
             child = (*path, key_node.value)
-            raw = value_node.value if isinstance(value_node, yaml.ScalarNode) else None
-            locs[child] = Loc(key_node.start_mark.line, raw)
-            _collect(value_node, child, locs)
+            locs[child] = _loc(key_node.start_mark.line, value_node, child, nodes)
+            _collect(value_node, child, locs, nodes)
     elif isinstance(node, yaml.SequenceNode):
         for index, item in enumerate(node.value):
             child = (*path, index)
-            raw = item.value if isinstance(item, yaml.ScalarNode) else None
-            locs[child] = Loc(item.start_mark.line, raw)
-            _collect(item, child, locs)
+            locs[child] = _loc(item.start_mark.line, item, child, nodes)
+            _collect(item, child, locs, nodes)

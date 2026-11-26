@@ -703,6 +703,7 @@ kid: 3f2b8c1e-9d4a-4c2e-b7f1-0a6d5e9c8b21
 - `kid` is a reserved top-level key, like `type`. Its value is a canonical lowercase UUID (any version; knott generates v4). Other spellings are `kid-invalid`, and the message gives the canonical form.
 - It is optional unless the concept file says `kid: required` (`kid-missing`).
 - It is unique across the vault, whatever the type. A duplicate is reported once (`kid-duplicate`), on the first claimant by path, naming every claimant. A scoped run reports a duplicate only if one of its claimants is in scope.
+- `knott mv` never changes a `kid`, and a `kid:` reference survives a move unchanged (§14).
 - `knott validate --fix` inserts `kid: <uuid4>` into every in-scope entity without a `kid` key: one line, after `type:` (or before the closing `---`), with the rest of the file unchanged, re-parsed before it is written. It never changes an existing `kid`, including duplicates. This is knott's only edit to user files.
 - References may name an entity as `kid:<uuid>` (§11), at any depth. Markdown links remain the default.
 - Resolution stays behind `resolve_reference()` in `vault/links.py`. The `kid` index is built once per run, only when a run needs it. Within a run, each reference is resolved once and each directory is listed once for the exact-case check; nothing is kept between runs.
@@ -778,6 +779,7 @@ knott view [PATH]
 knott refs PATH
 knott list [TYPE]
 knott show PATH
+knott mv SOURCE DEST
 knott loops [NAME]
 ```
 
@@ -1022,6 +1024,40 @@ referenced by
 - **Text.** The header is the path, two spaces and the type, then two spaces and `kid:<uuid>` when the entity has a `kid`. `properties` lists every top-level key except those declared as a reference or a list of references, as `name  value`, values printed as in `list`. `references` lists field, target path, target type, then the relation in parentheses, in columns; a row with no path shows the value as written and the error code where the type would be; a row with a path and no type shows the error code there; a row with a type and an error ends with the error code. `referenced by` holds the output of `refs` from its first group on, indented by two spaces. Sections are separated by a blank line, each under its name; a section with nothing in it is left out. `--body` adds a `body` section last: the name, then the body verbatim from the line after the closing `---`, not indented; a blank body has no section.
 - **`--format json`** prints `{"entity": {path, type, kid, properties}, "references": [{field, relation, value, path, type, kid, error}], "referenced_by": [RefGroup]}`, and `"body"` only with `--body` (`null` when blank). `properties` holds every key, references included.
 
+### `knott mv SOURCE DEST [--dry-run] [--format text|json]`
+
+Moves or renames one Markdown file and rewrites every link the move would break (decision 0013). The second command that edits user files, after `validate --fix`. The vault is found from `SOURCE`, or from the current directory for `kid:`.
+
+```
+$ knott mv specs/0006-relation-definitions.md specs/0006-relations.md
+moved specs/0006-relation-definitions.md → specs/0006-relations.md
+
+updated 7 links in 6 files
+  README.md:72                             body
+  concepts/relation.md:123                 body
+  intents/relation-definitions.md:26       body
+  specs/0007-view-inline-relations.md:13   amends[0]
+  specs/0013-concept-inheritance.md:20     amends[1]
+  specs/0013-concept-inheritance.md:111    body
+  specs/0014-open-reference-targets.md:19  amends[1]
+```
+
+- **`SOURCE`** is a Markdown file discovery sees, an entity or a plain note: a path relative to the current directory, or `kid:<uuid>`. A file whose frontmatter cannot be read, and a symbolic link, are refused.
+- **`DEST`** is the new path, relative to the current directory; an existing directory keeps the file's name. It must end in `.md`, be inside the vault, have no folder whose name starts with `.` and no `#` in its path, not sit under a file, and not exist. Missing folders are created; nothing is overwritten. Symbolic links in the existing folders of `DEST` are resolved first, and a path that then leaves the vault is refused. A rename that changes only letter case is allowed, also on a file system that ignores case.
+- **Searched**: every Markdown file discovery sees, and the bodies of the files under `.knott/relations/`, `.knott/connectors/` and `.knott/loops/`. Not concept files (a template's links are relative to the entity that copies it), and not other hidden folders. A file whose frontmatter cannot be read, and a Markdown file that is a symbolic link, are not searched and are reported as `skipped`, whether or not they link to `SOURCE`. The example above is the docs vault before specs 0016 to 0019 were added.
+- **Frontmatter.** In an entity whose type a concept defines, a string value at a declared `reference` or `file` property, own or inherited, at any depth, is rewritten when the path it names (a plain path or a Markdown link, §11 and §8) resolves to `SOURCE`, with exact case. A `kid:` reference and a URI are never changed. The target-type check is not applied. Undeclared keys, and the frontmatter of plain notes, of entities of an undefined type and of files under `.knott/`, are not touched.
+- **Bodies.** An inline link `[text](dest)` or image `![alt](dest)` is rewritten when `dest` is a relative path (not a URL, not absolute, not only a fragment) that resolves to `SOURCE`, with exact case. `dest` is read up to an unescaped closing `)` with parentheses balanced, or between `<` and `>`; it may be percent-encoded; a `#fragment` and a title (`"…"`, `'…'` or `(…)`) are kept as written. Text inside a fenced code block (a line of three or more `` ` `` or `~`, indented by at most three spaces, to a closing fence of the same character and at least that length, or to the end) and inside an inline code span (a run of backticks to the next run of the same length before a blank line) is skipped. Indented code blocks, fences indented by more than three spaces or inside a blockquote, and HTML comments are not recognised: a link in one is rewritten. Wikilinks, reference-style definitions, HTML attributes, autolinks and bare paths are not rewritten.
+- **The moved file's own links.** When its folder changes, every path value at its declared `reference` and `file` properties and every relative inline link and image in its body is rewritten to name the same file from the new place; a link to itself follows the move. One that names no existing file in the vault (with exact case; a folder is not a file) is left as written and reported as `unchanged`, with the reason. When only the name changes, only its links to itself are rewritten.
+- **The new destination** is the shortest relative path from the linking file's folder to the target, with `/` and no leading `./`, except that `./` is put in front when its first segment contains `:` (it would read as a URI) or, for a plain frontmatter path, when it starts with `[`. In a Markdown link in frontmatter, `<…>` is kept and `%`, `<`, `>` are percent-encoded; without `<…>`, space, `%`, `(`, `)`, `<` and `>` are. A body link is encoded the same way, and `#` too. The label, the title, the fragment and the spaces around a frontmatter value are copied unchanged.
+- **YAML.** A value keeps its quoting: inside `"…"`, `"` and `\` are escaped; inside `'…'`, `'` is doubled. A plain value stays plain when the file then still reads as the same frontmatter with that value replaced, and is written in double quotes otherwise. A block scalar, a scalar that spans several lines, and a value reached through an alias or a merge key cannot be edited in place: the move is refused, naming the file and field. Every other byte of every file stays the same.
+- **Checks before writing.** All edits are prepared in memory. Each edited file is parsed again: its frontmatter must equal the old one, value for value and kind for kind, with exactly the rewritten values replaced; its body must hold the same number of links; and each rewritten link, read from the file's place after the move, must name the intended target. If any file fails, nothing is written (exit `2`).
+- **Writing.** The moved file is created at `DEST` with its own links rewritten and its permission bits; each referring file is replaced atomically, in path order; `SOURCE` is removed last. An I/O error stops the command and names the files already written. A case-only rename on a file system that ignores case renames the file in place after the referring files are written. An emptied folder is left in place. Git is not called.
+- **After the move.** No validation, except: when the moved entity's type declares `path` or `filename` and `DEST` does not fit, the move is done and `entity-misplaced` or `entity-invalid-name` is printed to stderr in the format of §20, as a warning.
+- **`--dry-run`** does everything up to and including the checks, prints the same output with `would move` and `would update`, and writes nothing.
+- **Text.** `moved <old> → <new>`, vault-relative. After a blank line, `updated N links in M files` (singular for one), then one line per rewritten link, indented by two spaces: `path:line`, padded to the widest plus two spaces, then the property path, or `body`; ordered by path, then line; the moved file's own links under its new path. With none: `no links to update`. Then, when they have entries, `unchanged N links` and `skipped N files` blocks, each line ending with the reason.
+- **`--format json`** prints `{"from", "to", "kid", "dry_run", "updated": [{path, line, field, old, new}], "unchanged": [{path, line, field, value, reason}], "skipped": [{path, reason}], "issues": [Issue]}`. `field` is `null` for a body link. For a frontmatter value `old` and `new` are the whole value; for a body link, the destination with its fragment.
+- **Exit codes.** `0` when the file was moved, or would be, with or without warnings. `1` for the legacy layout. `2` for no vault, a bad `SOURCE` or `DEST`, a link that cannot be edited in place, a failed check, or an I/O error.
+
 ---
 
 ## 15. Authoring
@@ -1047,7 +1083,8 @@ Ship an agent instruction document in the repo at `src/knott/_skills/knott/SKILL
 - that `knott validate <file>` must be run after every change
 - open references: `→ any` accepts any entity, which must still exist in the vault
 - inheritance: an entity's type is concrete and the most specific that fits, inherited properties and settings count as the type's own, and `extends` is for a real "is a"
-- relation files: how to read their guidance, never to write an inverse, `knott refs` before renaming or deleting, and `relation-cycle`
+- relation files: how to read their guidance, never to write an inverse, and `relation-cycle`
+- moving: `knott mv` to rename or move a file, never `mv` or `git mv`; `knott refs` before deleting or replacing
 - reading entities: `knott list` to find entities by type and property value, and `knott show` for one entity's properties and links without its body, instead of `grep` and whole-file reads
 
 Typical agent workflow:
@@ -1186,6 +1223,7 @@ ontology.connectors                # [ConnectorDefinition(name, description, gui
 refs = vault.refs("concepts/kid.md")   # or "kid:<uuid>"; Refs(entity, groups), see §10
 vault.entities("spec", where={"status": "draft"}, fields=["title"])  # list[EntityRecord]; §14
 vault.show("concepts/kid.md", body=True)  # EntityDetail(entity, references, referenced_by, body)
+vault.move("specs/a.md", "archive/a.md", dry_run=True)  # MoveResult; writes unless dry_run; §14
 ontology.loops                     # [LoopDefinition(name, description, type, property, stages,
                                    #   exits, guidance, path), …], sorted by name
 vault.loops()                      # list[LoopReport], sorted by loop name; see §27
@@ -1198,6 +1236,8 @@ vault.migrate()                    # MigrateResult(written, removed, list_fields
 `LoopDefinition.stages` and `.exits` are `list[LoopStage(name, needs, guidance)]`. `LoopNeed(kind, property, inverse, relation, type, since)`: `kind` is `property` or `inverse`, `since` is the stage that declares it, and an inverse need with several types is one `LoopNeed` per type. `LoopReport(loop, stages, exits, unplaced)`: `stages` and `exits` are `list[LoopPlacement(stage, entities)]`, empty ones included; `unplaced` and `entities` are `list[LoopEntity(path, kid, title, type, unmet, next, missing_next)]` in path order. `title` is the entity's `title` when its type declares a top-level `string` property of that name and the value is a non-blank string, else the file name. `loops()` does not validate.
 
 `entities(type=None, *, where=None, fields=None)` and `show(path_or_kid, *, body=False)` are `knott list` and `knott show` (§14). `EntityRecord(path, type, kid, properties)`: `properties` is `None` from `entities()` without `fields`; values are Python values as YAML read them (`datetime.date`, not text), with the conversions of §14, and `model_dump(mode="json")` gives the JSON forms. `where` is a mapping, or a sequence of `(key, value)` pairs when one key is given twice; values are typed, not text: an `int` for an integer, an `int` or `float` for a number, a `bool`, a `datetime.date`, a `datetime.datetime`, a `str` for a string, enum option or file, an entity path (resolved against the vault root) or `kid:<uuid>` for a reference, and `None` (or `""`) for "absent". A value of another kind raises `KnottError`, as do the other exit-`2` cases of `knott list`. `EntityDetail(entity, references, referenced_by, body)` holds `OutgoingRef(field, relation, value, path, type, kid, error)` and `RefGroup`s; `show()` raises as `refs()` does.
+
+`move(source, dest, *, dry_run=False)` is `knott mv` (§14). Relative paths are resolved against the vault root; `source` may be `kid:<uuid>`. `MoveResult(from_, to, kid, dry_run, updated, unchanged, skipped, issues)`, with `UpdatedLink(path, line, field, old, new)`, `UnchangedLink(path, line, field, value, reason)`, `SkippedFile(path, reason)` and `Issue`; `from_` is `from` in `model_dump(mode="json", by_alias=True)`. It raises `PathNotFoundError`, `PathOutsideVaultError` or `KnottError` before anything is written, and `MoveError`, whose `written` lists the files already written, for an I/O error after the first write.
 
 `validate()` returns validation problems as data and never raises for them. It raises only for `2`-class conditions (`KnottError` subclasses in `errors.py`).
 

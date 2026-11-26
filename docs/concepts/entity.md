@@ -21,7 +21,7 @@ derived_from: "[Episode 42 script](../scripts/episode-42.md)"
 ---
 # Episode 42
 
-The body is arbitrary Markdown. Knott does not read it.
+The body is arbitrary Markdown. Knott does not check it. Two commands touch it: [`knott show --body`](../commands/show.md) prints it, and [`knott mv`](../commands/mv.md) rewrites the destinations of the Markdown links in it when a file moves.
 ```
 
 - **frontmatter** → structured metadata ([attributes](attribute.md) and [relations](relation.md))

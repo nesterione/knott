@@ -1,8 +1,9 @@
 ---
 type: spec
 title: "0018: Move a file and rewrite the links to it"
-status: draft
+status: implemented
 created_on: 2026-11-26
+released_in: "0.14.0"
 realizes:
   - "[Move a file without breaking links](../intents/move-without-breaking-links.md)"
 decisions:
@@ -52,7 +53,7 @@ Every Markdown file in the vault is searched, and the bodies of relation, connec
 
 - A `#fragment` after the path and a title after it (`(dest "title")`) are kept as written.
 - `dest` may be wrapped in `<…>` and may be percent-encoded.
-- Skipped: everything inside a fenced code block (` ``` ` or `~~~`) and inside an inline code span. Indented code blocks are not recognised: a link in one is rewritten. A link inside an HTML comment is rewritten like any other.
+- Skipped: everything inside a fenced code block (` ``` ` or `~~~`) and inside an inline code span. Indented code blocks are not recognised: a link in one is rewritten. Neither is a fence indented by more than three spaces or inside a blockquote. A link inside an HTML comment is rewritten like any other.
 - Not rewritten: wikilinks, reference-style definitions (`[id]: dest`), HTML attributes, autolinks and bare paths in text.
 
 ### The moved file's own links
@@ -62,7 +63,7 @@ When the file's folder changes, its own relative links would point elsewhere. Th
 - every path value at its declared reference and `file` properties, at any depth (not `kid:` values, not URIs);
 - every inline link and image in its body whose destination is a relative path, under the body rules above.
 
-A link is rewritten only when it resolves to an existing file in the vault, with exact case. One that does not (already broken, leaving the vault, or not a path) is left as written and reported as `unchanged`. A link from the file to itself follows the move.
+A link is rewritten only when it resolves to an existing file in the vault, with exact case; a folder is not a file. One that does not (already broken, leaving the vault, or not a path) is left as written and reported as `unchanged`. A link from the file to itself follows the move.
 
 When only the name changes, the file's own links are not touched, except a link to itself.
 
@@ -73,12 +74,14 @@ The new destination is the shortest relative path from the linking file's folder
 | The old value | The new value |
 |---|---|
 | a plain path in frontmatter | the new path as is. `./` is put in front when the path would otherwise be read as something else: it starts with `[`, or its first segment contains `:` |
+| any link whose new path has `:` in its first segment | `./` is put in front, in a Markdown link and in a body link too: `a:b.md` would read as a URI |
 | a Markdown link with `<…>` | `<…>` is kept; `%`, `<` and `>` in the path are percent-encoded |
 | a Markdown link without `<…>` | space, `%`, `(`, `)`, `<` and `>` in the path are percent-encoded |
+| a body link, with or without `<…>` | as above, and `#` in the path is percent-encoded too: bare, it would start a fragment |
 
 - The label, the title and the fragment are copied unchanged.
 - A frontmatter value keeps its YAML quoting: inside `"…"`, `"` and `\` are escaped; inside `'…'`, `'` is doubled. A plain (unquoted) value stays plain when the new text is still a plain YAML string, and is written in double quotes otherwise.
-- A value that cannot be edited in place is not guessed at: a block scalar (`|`, `>`), a scalar that spans several lines, or a value that reaches the property through a YAML alias. The move is refused and names the file and field.
+- A value that cannot be edited in place is not guessed at: a block scalar (`|`, `>`), a scalar that spans several lines, or a value that reaches the property through a YAML alias or a merge key (`<<`). The move is refused and names the file and field.
 - Every other byte of every file stays the same: line endings, a byte order mark, comments, key order, trailing spaces.
 
 ### Checks before writing
@@ -87,7 +90,8 @@ All edits are prepared in memory first.
 
 1. Each edited file is parsed again. Its frontmatter must equal the old frontmatter with exactly the rewritten values replaced, and each rewritten link, resolved from the file's place after the move, must name the intended target.
 2. If any file fails, nothing is written and the command names the file and field (exit 2).
-3. A referring file whose frontmatter cannot be read has no known body, so it is not edited. It is reported as `skipped`.
+3. A file whose frontmatter cannot be read has no known body, so it is not searched or edited. Every such file is reported as `skipped`, whether or not it links to `SOURCE`: knott cannot tell. A valid vault has none.
+4. A Markdown file that is a symbolic link is not searched or edited either, and is reported as `skipped`: replacing it would replace the link, and its target may be outside the vault ([0006](../decisions/0006-symlinks-and-containment.md)).
 
 ### Writing
 
@@ -162,7 +166,7 @@ This is the vault as it was before specs 0016 to 0018 were added. `concepts/onto
   }
   ```
 
-  `field` is `null` for a body link. For a frontmatter value, `old` and `new` are the whole value; for a body link, the destination only. `unchanged` entries have `path`, `line`, `field`, `value` and `reason`; `skipped` entries have `path` and `reason`. `issues` holds the `path` and `filename` warnings as `validate` issues.
+  `field` is `null` for a body link. For a frontmatter value, `old` and `new` are the whole value; for a body link, the destination only, with its fragment and without `<…>` or a title. `unchanged` entries have `path`, `line`, `field`, `value` and `reason`; `skipped` entries have `path` and `reason`. `issues` holds the `path` and `filename` warnings as `validate` issues.
 - The vault is found from `SOURCE`, or from the current directory for `kid:`.
 - Exit codes: `0` when the file was moved (or would be, with `--dry-run`), with or without warnings. `1` when the vault has the legacy layout. `2` for no vault, a `SOURCE` that doesn't exist, is outside the vault, is not a Markdown file knott sees or has unreadable frontmatter, a bad `DEST` (exists, not `.md`, outside the vault, in a hidden folder, the same file), a link that cannot be edited in place, a failed check, or an I/O error.
 
@@ -188,6 +192,9 @@ The rule "before renaming, deleting or replacing an entity, run `knott refs` and
 | `knott mv specs/a.md archive/` and `archive` does not exist | exit 2: `DEST` does not end in `.md` |
 | `knott mv specs/a.md archive/2026/a.md`, folders missing | created |
 | `knott mv a.md .knott/a.md`, or into `.obsidian/` | exit 2 |
+| `knott mv a.md b.md/a.md` and `b.md` is a file | exit 2, also with `--dry-run` |
+| A symbolic link `linked.md` whose target links to `SOURCE` | not edited; in `skipped` |
+| Writing `DEST` fails part-way | exit 2; the partial `DEST` is removed; `SOURCE` is untouched |
 | `knott mv a.md a.md` | exit 2: the same file |
 | `knott mv a.md "b#1.md"` | exit 2: a name with `#` cannot be referenced |
 | `SOURCE` is a symbolic link | exit 2 |
@@ -201,8 +208,10 @@ The rule "before renaming, deleting or replacing an entity, run `knott refs` and
 | The new name has a space; the old link was `[x](old.md)` | `[x](new%20name.md)` |
 | The new name has a space; the old link was `[x](<old name.md>)` | `[x](<new name.md>)` |
 | A plain-path reference and the new path is `notes/a: b.md` | written `"notes/a: b.md"`, in double quotes |
+| A plain-path reference and the new path is `notes/new name.md` | written plain: it still reads as the same string |
+| A reference in a flow list, `[a.md, b.md]`, and the new name has a comma | that item is written in double quotes |
 | A reference written as a block scalar (`ref: >` on its own line) | exit 2, naming the file and field; nothing written |
-| A referring entity with unreadable frontmatter | not edited; in `skipped` |
+| A file with unreadable frontmatter, referring or not | not edited; in `skipped` |
 | A referring entity whose type no concept defines | its body links are rewritten; its frontmatter is not |
 | A path to `SOURCE` in an undeclared key | not rewritten and not reported |
 | The moved file has `audio: ../audio/ep42.mp3` and changes folder | rewritten to reach the same mp3 |
@@ -227,4 +236,4 @@ The rule "before renaming, deleting or replacing an entity, run `knott refs` and
 
 ## Compatibility
 
-Additive: one new command and one new API method. No existing command changes. Knott now reads bodies in one place, to rewrite link destinations; it still never checks them. The pages that say knott does not read the body (the entity concept page, the bundled skill) are reworded to "does not check" in the same change. Version 0.14.0, together with [0016](0016-list-and-show-entities.md) and [0017](0017-types-for-one-type.md).
+Additive: one new command and one new API method. No existing command changes. Knott reads bodies in two places, `show --body` ([0016](0016-list-and-show-entities.md)) to print one and `mv` to rewrite link destinations; it still never checks them. The pages that say knott does not read the body (the entity concept page, the bundled skill) are reworded to "does not check" in the same change. Version 0.14.0, together with [0016](0016-list-and-show-entities.md) and [0017](0017-types-for-one-type.md).

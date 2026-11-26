@@ -29,6 +29,7 @@ vault.ontology()                    # Ontology(vault, types, schema_issues, rela
 vault.refs("concepts/kid.md")       # Refs(entity, groups): who references it; also "kid:<uuid>"
 vault.entities("spec", where={"status": "draft"})  # [EntityRecord(path, type, kid, properties), …]
 vault.show("concepts/kid.md")       # EntityDetail(entity, references, referenced_by, body)
+vault.move("specs/a.md", "archive/a.md")  # MoveResult(from_, to, kid, dry_run, updated, …); writes
 vault.loops()                       # [LoopReport(loop, stages, exits, unplaced), …]; loops("name") for one
 vault.migrate()                     # convert .knott/schemas/; MigrateResult(written, removed, list_fields)
 vault.validate(fix=True)            # add missing kids first; result.fixed: [FixedEntity(path, kid)]
@@ -39,7 +40,7 @@ Knott.init("new-vault")             # InitResult(root, created)
 
 - Inputs and outputs are plain data: `str`, `Path`, ints, lists, and frozen Pydantic models. No parser objects leak out.
 - `validate()` **never raises for validation problems**. They're returned as `Issue`s.
-- It raises only for exit-code-2 conditions, all subclasses of `KnottError`: `VaultNotFoundError`, `ConfigError`, `PathNotFoundError`, `PathOutsideVaultError`, and `MigrateError` from `migrate()`.
+- It raises only for exit-code-2 conditions, all subclasses of `KnottError`: `VaultNotFoundError`, `ConfigError`, `PathNotFoundError`, `PathOutsideVaultError`, `MigrateError` from `migrate()`, and `MoveError` from `move()`.
 - Relative paths passed to `validate()`, `refs()`, `show()` and a reference value of `entities(where=…)` are resolved against the vault root (the CLI resolves them against the current directory first).
 
 `ontology()` returns `Ontology(vault, types, schema_issues, relations, connectors, loops)`. Each `OntologyType` has `type`, `description`, `path` (its concept file), `count` (entities of that type; files with invalid frontmatter are not counted), `extends`, `abstract`, `ancestors`, `subtypes` and `inherited` (which ancestor an inherited `template`, `path`, `filename` or `kid` comes from), `kid_required`, `entity_paths` (the folder patterns of the concept's `path`, `[]` when it has none), `filename` (`FilenamePattern(pattern, parts)` or `None`; each part is `FilenamePart(name, match, description)`), `properties` (in concept-file order) and `template` (the concept file's body, `None` when blank).
@@ -93,6 +94,28 @@ detail.body                               # the body, verbatim; None when blank 
 
 `OutgoingRef.error` is the issue code `validate()` reports for that value (`relation-target-not-found`, `relation-target-type-mismatch`, …), or `None`. `path`, `type` and `kid` are `None` when the value resolves to no file; `type` and `kid` are `None` when the file is not an entity. `show()` raises as `refs()` does.
 
+## Moving a file
+
+`move()` is [`knott mv`](../commands/mv.md): it moves one Markdown file and rewrites the links the move would break. It is the one method besides `validate(fix=True)`, `init()` and `migrate()` that writes.
+
+```python
+plan = vault.move("specs/0006-relation-definitions.md", "specs/0006-relations.md", dry_run=True)
+plan.from_, plan.to, plan.kid          # old path, new path, the entity's kid or None
+[(u.path, u.line, u.field, u.old, u.new) for u in plan.updated]
+# [("README.md", 72, None, "specs/0006-relation-definitions.md", "specs/0006-relations.md"),
+#  ("specs/0007-view-inline-relations.md", 13, "amends[0]", "[0006](0006-…)", "[0006](0006-relations.md)"), …]
+plan.unchanged                         # links of the moved file left as written, with a reason
+plan.skipped                           # files that could not be searched
+plan.issues                            # entity-misplaced / entity-invalid-name warnings
+
+vault.move("specs/0006-relation-definitions.md", "specs/0006-relations.md")   # do it
+```
+
+- `source` is a path or `"kid:<uuid>"`; `dest` is the new path or an existing folder. Relative paths are resolved against the vault root.
+- `field` is `None` for a link in a body. `model_dump(mode="json", by_alias=True)` gives the JSON of the command, with `from` for `from_`.
+- Everything is prepared and checked before the first write. A problem found then raises `KnottError` (or `PathNotFoundError`, `PathOutsideVaultError`) and nothing is written.
+- An I/O error after the first write raises `MoveError`; its `written` lists the files already written. The old file is removed last, so it still exists.
+
 ## Reverse lookup
 
 `refs()` takes an entity path or `kid:<uuid>` and returns what [`knott refs`](../commands/refs.md) prints:
@@ -114,7 +137,7 @@ It doesn't validate, and raises `PathNotFoundError`, `PathOutsideVaultError` or 
 
 ```
 src/knott/
-  api.py        Knott class: open / init / migrate / validate / types / schemas / schema_issues / ontology / refs / entities / show / loops
+  api.py        Knott class: open / init / migrate / validate / types / schemas / schema_issues / ontology / refs / entities / show / move / loops
   cli.py        thin Typer adapter
   view.py       render_ontology(): Ontology → self-contained HTML (template in _view/)
   models.py     Issue, Stats, ValidationResult, SchemaInfo, InitResult, MigrateResult,
@@ -128,6 +151,6 @@ src/knott/
                 validator (entities vs schemas), migrate (.knott/schemas/ → concepts)
   vault/        discovery, entity (frontmatter), links (resolve_reference),
                 files (resolve_file), index (the vault's
-                references, built once per run), cycles (relation-cycle), refs (reverse lookup), query (list and show),
+                references, built once per run), cycles (relation-cycle), refs (reverse lookup), query (list and show), move (mv),
                 loops (placement by stage, loop-stage-unmet)
 ```
