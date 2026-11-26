@@ -67,6 +67,11 @@ This is a shortened copy of this folder's `.knott/concepts/decision.md`.
 - **Put a property on the highest type where every subtype has it**, and nowhere else. A property that half the children leave empty belongs on those children.
 - **Keep the tree shallow.** Two levels cover most vaults; a child cannot change what it inherits.
 - **List targets (`[episode, meeting]`) for types that share nothing**, rather than inventing a parent for them.
+- **Use `any` only for a link that is open by nature**: "see also", "promoted to", "created by". If you can name the types, name them, or target their parent. See [Open references](../concepts/relation.md#open-references).
+- **Prefer a parent over `any` when the set is a family.** `target: page` checks the type and draws one edge; `any` checks only that the value is an entity.
+- **Say what belongs there in the description.** With no target type, the description is the only guidance an agent has.
+- **Give an open link a relation file**, so `knott refs` shows it under a name from the target side.
+- **Keep them few.** A vault where most references are open has lost its type checks.
 - **Prefer a reference over a string** when the value names another entity. You get existence and type checks for free.
 - **Say where a type lives when the folder matters**: `path: specs` at the top level, or `episodes/*`, `notes/**`, a list. An entity stored elsewhere then fails validation, and an agent reads the folder from `knott types --verbose`. Leave it out when any folder is fine.
 - **Set a file-name pattern when names carry meaning**: `filename` with a `pattern` such as `"{number}-{slug}"` and, per part, a `match` and a `description`. Write the description as an instruction to the agent that names the file. See [File names](../concepts/schema.md#file-names).

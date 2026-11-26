@@ -37,4 +37,5 @@ Choose another `inverse`, usually a past participle or a phrase such as `superse
 ## Notes
 
 - Reported at the `inverse:` line. For two relations with the same `inverse`, it is the second file by path.
+- When a property naming the relation is open (`target: any`), it can point at every concept, so the `inverse` must not equal a top-level property of any concept in the vault.
 - Only top-level property names conflict. A nested field such as `speakers[].role` doesn't, and neither does a property of a concept the relation's properties can't target.

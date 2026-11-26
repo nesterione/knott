@@ -40,7 +40,7 @@ lexeme  (.knott/concepts/lexeme.md)
 - `filename:` appears when the concept file sets [a pattern for file names](../concepts/schema.md#file-names), followed by one line per part: its name, the expression it must match, and how to fill it.
 - `references:` lists the path of every reference at any depth, or `none`. Paths use `[]` for list items, `.*` for map values and `.field` for object fields.
 - `*` marks a required property. Object fields are indented under their property.
-- A reference shows its targets after `→`. A target that no concept defines is marked `(unknown)`.
+- A reference shows its targets after `→`; an [open reference](../concepts/relation.md#open-references) shows `→ any`. A target that no concept defines is marked `(unknown)`.
 - An [enum](../concepts/attribute.md#enums) lists its options on the lines under it: `one of: m | f`, or one line per option when any has a description (`A1: Understands …`).
 - A [file](../concepts/file.md) shows the extensions it accepts: `audio*  file .mp3 | .wav`, `images  list of file .png | .jpg`.
 - A reference that names a [relation](../concepts/relation.md) shows it in parentheses after the type: `affects*  list of reference → concept  (about)`. A name no relation file defines is not shown.

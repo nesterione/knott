@@ -6,7 +6,7 @@ about: "[Reference resolution](../concepts/reference-resolution.md)"
 ---
 # `relation-target-type-mismatch`
 
-The target is an entity, but its `type` isn't the property's `target` or a [subtype](../concepts/schema.md#inheritance) of it, or of any of them when `target` is a list. The message lists every allowed type.
+The target is an entity, but its `type` isn't the property's `target` or a [subtype](../concepts/schema.md#inheritance) of it, or of any of them when `target` is a list. The message lists every allowed type. An [open reference](../concepts/relation.md#open-references) (`target: any`) never reports it.
 
 ## Example
 

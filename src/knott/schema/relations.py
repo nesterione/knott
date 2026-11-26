@@ -73,7 +73,10 @@ def check_definitions(
         for path, shape in iter_own_references(schema):
             if shape.relation is None:
                 continue
-            targets.setdefault(shape.relation, set()).update(shape.accepts or shape.targets)
+            # An open reference (spec 0014) can target every concept.
+            targets.setdefault(shape.relation, set()).update(
+                schemas if shape.open else shape.accepts or shape.targets
+            )
             relation = relations[shape.relation]
             if (
                 relation.symmetric
@@ -133,17 +136,16 @@ def check_definitions(
                 if inverse in schemas[target].properties
             }
             for target in sorted(declaring):
-                if True:
-                    conflict(
-                        f"inverse `{inverse}` of relation `{relation.name}` is also a property "
-                        f"of concept `{target}` (`{schemas[target].path}`), "
-                        + (
-                            "which this relation can point at"
-                            if target in targets.get(relation.name, ())
-                            else "inherited by a concept this relation can point at"
-                        )
-                        + "; reading the link from the target side would be ambiguous"
+                conflict(
+                    f"inverse `{inverse}` of relation `{relation.name}` is also a property "
+                    f"of concept `{target}` (`{schemas[target].path}`), "
+                    + (
+                        "which this relation can point at"
+                        if target in targets.get(relation.name, ())
+                        else "inherited by a concept this relation can point at"
                     )
+                    + "; reading the link from the target side would be ambiguous"
+                )
             if relation.symmetric:
                 issues.append(
                     Issue(

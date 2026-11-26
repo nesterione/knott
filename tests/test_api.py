@@ -138,6 +138,7 @@ def test_ontology_types_properties_and_counts(tmp_path: Path) -> None:
         "fields": [],
         "targets": [],
         "unknown_targets": [],
+        "open": False,
         "relation": None,
         "accept": [],
         "options": [],

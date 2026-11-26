@@ -142,6 +142,8 @@ def _notation(a: OntologyAttribute) -> str:
     inner = a.items or a.values
     if inner is not None:
         return f"{a.type} of {_notation(inner)}"
+    if a.open:
+        return f"{a.type} → any"
     targets = [*a.targets, *(f"{name} (unknown)" for name in a.unknown_targets)]
     if targets:
         return f"{a.type} → {' | '.join(targets)}"

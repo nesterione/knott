@@ -112,6 +112,15 @@ Rules:
 - Paths are case-sensitive, even on macOS.
 - `kid:<uuid>` also works (`- kid:3f2b8c1e-…`), and survives the target being moved. Use it when you were given a `kid`; otherwise prefer the Markdown link. Never wrap it in a link.
 
+## Open references
+
+- `→ any` in `knott types --verbose` means the value can be any entity. It must still be an existing entity file in the vault: a plain note, a URL or a file outside the vault is an error.
+- Read the property's description or its relation's guidance to decide what belongs there. Open is not "optional" and not "anything loosely connected".
+- When writing a concept file:
+  - Use `target: any` only for a link that is open by nature ("see also", "promoted to"). If the types can be named, name them or target their parent.
+  - Never change a target to `any` to make `relation-target-type-mismatch` go away; fix the reference.
+  - Describe what belongs in an open property: with no target type, the description is the only guidance.
+
 ## Relations
 
 `knott types --verbose` shows the relation a property names after its type (`affects  list of reference → concept  (about)`) and lists every relation at the end, with its guidance:

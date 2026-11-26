@@ -1,8 +1,9 @@
 ---
 type: spec
 title: "0014: Open reference targets"
-status: draft
+status: implemented
 created_on: 2026-11-25
+released_in: "0.12.0"
 realizes:
   - "[Open reference targets](../intents/open-reference-targets.md)"
 decisions:
@@ -80,10 +81,10 @@ The target is printed as written:
 ### `knott view`
 
 - **No edge** is drawn for an open reference.
-- **The type's box** carries one mark, `→ any`, followed by `×N` when the type declares more than one. Its tooltip lists them: `related[] (related)`, `promoted_to`. A type that only inherits an open reference has no mark; its ancestor has it.
+- **The type's box** carries one mark, `→ any`, followed by `×N` when the type declares more than one. Its tooltip lists them: `related[] (related)`, `promoted_to`. A type that only inherits an open reference has no mark; its ancestor has it. While a family is folded ([0013](0013-concept-inheritance.md)), the folded type's mark also counts the open references its hidden subtypes declare, and the tooltip names them as `<type>.<path>`.
 - **A header toggle**, `Open references (N)`, hidden when the vault has none. On, every type with a mark is highlighted and the others dim, so "what is open" can be read at a glance. It is off at first and not remembered.
 - **The type's panel**, in the property table and under *References out*: `→ any`.
-- ***Referenced by*** in every type's panel ends with a group `from anywhere`, folded at first, with one row per open reference in the vault: `<type>.<property path>` and its relation. Its rows are not counted with the others.
+- ***Referenced by*** in every type's panel ends with a group `from anywhere · N`, folded at first, with one row per open reference in the vault: `<type>.<property path>` and its relation. Its rows are not counted with the others.
 - **The Relations panel**: a row of a defined relation reads `<type>.<property path> → any`. Inline open references form one group headed `→ any`, ordered with the other groups by size.
 
 **Embedded data.** A reference attribute and a `reference_properties` row gain `open` (boolean); `targets` and `unknown_targets` are empty when it is `true`. `edges` has no entry for it. `referenced_by` is unchanged: the page builds the `from anywhere` group from `reference_properties`.
@@ -134,4 +135,4 @@ To add to *Writing schemas*:
 
 ## Compatibility
 
-Additive, with one exception: a vault that has a type named `any` must rename it. Before this change `target: any` in a vault without such a type was `schema-unknown-target` and skipped the type check, so values that passed still pass. Ontology API and view data additions only. Minor version.
+Additive, with one exception: a vault that has a type named `any` must rename it. Before this change `target: any` in a vault without such a type was `schema-unknown-target` and skipped the type check, so values that passed still pass. Ontology API and view data additions only. Version 0.12.0, together with [0013](0013-concept-inheritance.md).

@@ -120,6 +120,8 @@ class OntologyAttribute(_Frozen):
     """For a `reference`: target types that some concept defines, in schema order."""
     unknown_targets: list[str] = []
     """For a `reference`: target types no concept defines (shown, never enforced)."""
+    open: bool = False
+    """A reference declared `target: any` (spec 0014): any entity; `targets` is `[]`."""
     relation: str | None = None
     """For a `reference`: the relation it names, when a relation file defines it."""
     accept: list[str] = []
@@ -133,6 +135,8 @@ class OntologyAttribute(_Frozen):
         inner = self.items or self.values
         if inner is not None:
             return f"{self.type} of {inner.notation}"
+        if self.open:
+            return f"{self.type} → any"
         if self.targets:
             return f"{self.type} → {' | '.join(self.targets)}"
         return self.type

@@ -19,7 +19,7 @@ properties:
 
 ## Fix
 
-Create the concept file, or fix the spelling. The message lists the known types.
+Create the concept file, or fix the spelling. For a reference to any entity, write `target: any`, lowercase and alone (`Any` and `"*"` are unknown names). The message lists the known types.
 
 ## Notes
 

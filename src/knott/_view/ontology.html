@@ -58,6 +58,8 @@
   .node.abstract .count { font-style: italic; }
   .node .fold { font-size: 11.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
   .node .fold:hover { fill: var(--accent); }
+  .node .open { font-size: 11.5px; fill: var(--muted); }
+  .openmode .node.hot .open { fill: var(--accent); }
   .node rect { fill: var(--surface); stroke: var(--border); stroke-width: 1; transition: stroke .15s, fill .15s; }
   .node .name { font-size: 13.5px; font-weight: 550; fill: var(--ink); }
   .node .count { font-size: 12px; fill: var(--muted); font-variant-numeric: tabular-nums; }
@@ -107,8 +109,9 @@
   aside .relation .empty { margin-top: 6px; font-size: 12.5px; }
   aside .note { color: var(--muted); font-size: 12.5px; margin: -2px 0 10px; }
   aside .note code { font: 12px ui-monospace, "SF Mono", Menlo, monospace; }
-  #relations, #loops, #fold { border: 1px solid var(--border); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 8px; cursor: pointer; }
-  #relations[hidden], #loops[hidden], #fold[hidden] { display: none; }
+  #relations, #loops, #fold, #open { border: 1px solid var(--border); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 8px; cursor: pointer; }
+  #relations[hidden], #loops[hidden], #fold[hidden], #open[hidden] { display: none; }
+  #open.on { border-color: var(--accent); color: var(--accent); }
   #loops.on { border-color: var(--accent); color: var(--accent); }
   #board { position: absolute; inset: 0; background: var(--bg); z-index: 2; display: flex; flex-direction: column; padding: 10px 24px 18px; }
   #board[hidden] { display: none; }
@@ -147,6 +150,7 @@
   <button id="relations" hidden>Relations</button>
   <button id="loops" hidden>Loops</button>
   <button id="fold" hidden>Fold subtypes</button>
+  <button id="open" hidden>Open references</button>
   <nav id="tabs">
     <button data-l="layered" class="on">Layered</button>
     <button data-l="force">Force</button>
@@ -192,6 +196,10 @@ for (const n of allNodes) n.below = allNodes.filter(o => o.ancestors.includes(n.
 // with the path. DATA.inheritance: one {child, parent} per type that extends another.
 const REFS = DATA.edges.filter(d => byId[d.source] && byId[d.target]);
 const ISA = (DATA.inheritance || []).filter(d => byId[d.child] && byId[d.parent]);
+// Open references (`target: any`): no edge is drawn; the declaring type carries a "→ any" mark.
+const OPEN = DATA.reference_properties.filter(p => p.open && byId[p.type]);
+const openLabel = p => p.path + (p.relation ? ` (${p.relation})` : "");
+for (const n of allNodes) n.open = OPEN.filter(p => p.type === n.id);
 // Folding: a folded type hides its subtypes; rep(id) is the type drawn in place of id,
 // the farthest folded ancestor, or id itself.
 const folded = new Set();
@@ -238,6 +246,10 @@ for (const n of allNodes) {
     n.tFold.addEventListener("click", ev => { ev.stopPropagation(); toggleFold(n.id); });
     n.tFold.addEventListener("pointerdown", ev => ev.stopPropagation());
   }
+  // a type that declares open references says so once: "→ any", "×N" for several;
+  // sizeNode() fills it, with those of the subtypes folded into the type
+  n.tOpen = el("text", { class: "open", y: 4.5 }, g);
+  n.tOpenTitle = el("title", {}, n.tOpen);
   // an abstract type has no entities of its own: it says so where the count would be
   n.tCount = el("text", { class: "count", y: 4.5, "text-anchor": "end" }, g); n.tCount.textContent = n.abstract ? "abstract" : n.count;
   n.g = g;
@@ -252,12 +264,18 @@ function sizeNode(n) {
   const mark = n.below ? `${folded.has(n.id) ? "▸" : "▾"} ${n.below}` : "";
   const markW = mark ? textW(mark, "11.5px -apple-system, system-ui, sans-serif") + 10 : 0;
   const cntW = textW(n.tCount.textContent, "12px -apple-system, system-ui, sans-serif") + 14;
-  n.w = Math.round(nameW + markW + cntW + 32);
+  n.shownOpen = OPEN.filter(p => rep(p.type) === n.id);
+  const openMark = n.shownOpen.length ? "→ any" + (n.shownOpen.length > 1 ? ` ×${n.shownOpen.length}` : "") : "";
+  n.tOpen.firstChild.nodeType === 3 ? n.tOpen.firstChild.nodeValue = openMark : n.tOpen.insertBefore(document.createTextNode(openMark), n.tOpen.firstChild);
+  n.tOpenTitle.textContent = n.shownOpen.map(p => (p.type === n.id ? "" : p.type + ".") + openLabel(p)).join(", ");
+  const openW = openMark ? textW(openMark, "11.5px -apple-system, system-ui, sans-serif") + 10 : 0;
+  n.w = Math.round(nameW + markW + openW + cntW + 32);
   n.rect.setAttribute("x", -n.w / 2); n.rect.setAttribute("y", -n.h / 2);
   n.rect.setAttribute("width", n.w); n.rect.setAttribute("height", n.h); n.rect.setAttribute("rx", n.h / 2);
   n.tName.setAttribute("x", -n.w / 2 + 16);
   n.tCount.setAttribute("x", n.w / 2 - 16);
   if (n.tFold) { n.tFold.firstChild.nodeType === 3 ? n.tFold.firstChild.nodeValue = mark : n.tFold.insertBefore(document.createTextNode(mark), n.tFold.firstChild); n.tFold.setAttribute("x", -n.w / 2 + 16 + nameW + 8); }
+  n.tOpen.setAttribute("x", -n.w / 2 + 16 + nameW + markW + 8);
 }
 function buildEdges() {
   gE.textContent = "";
@@ -531,9 +549,12 @@ function startDrag(ev, n) {
 
 // ---------- focus & panel ----------
 let selected = null;
+let openMode = false; // the header toggle: highlight every type that declares an open reference
 function focusOn(id) {
-  svg.classList.toggle("dim", !!id);
-  const near = new Set([id]);
+  const showOpen = openMode && !id;
+  svg.classList.toggle("dim", !!id || showOpen);
+  svg.classList.toggle("openmode", showOpen);
+  const near = new Set(showOpen ? nodes.filter(n => n.shownOpen.length).map(n => n.id) : [id]);
   // a type's own edges, and the references of its ancestors: the ones it inherits and the
   // ones that can point at it through an ancestor
   const up = id ? new Set(byId[id].ancestors) : new Set();
@@ -559,7 +580,7 @@ function applyFold(instant) {
     // a type that comes back starts where the type that stood for it is
     if (shown && n.g.style.display === "none") { const at = byId[n.ancestors.find(a => byId[a].g.style.display !== "none") || n.id]; n.x = at.x; n.y = at.y; }
     n.g.style.display = shown ? "" : "none";
-    if (n.below) sizeNode(n);
+    sizeNode(n);
   }
   buildEdges();
   foldButton.hidden = !families.length;
@@ -584,6 +605,8 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;"
 const notation = a => {
   const inner = a.items || a.values;
   if (inner) return `${esc(a.type)} of ${notation(inner)}`;
+  // an open reference accepts any entity: there is no type to link to
+  if (a.open) return `${esc(a.type)} → any` + (a.relation ? ` <span class="rel" title="relation">(${esc(a.relation)})</span>` : "");
   const targets = [...a.targets.map(link), ...a.unknown_targets.map(x => `<span class="unknown" title="no concept defines this type">${esc(x)} (unknown)</span>`)];
   const rel = a.relation ? ` <span class="rel" title="relation">(${esc(a.relation)})</span>` : "";
   // a file property lists the extensions it accepts: "file .mp3 | .wav"
@@ -608,7 +631,7 @@ const usesOf = {}, inline = [];
 for (const p of DATA.reference_properties) {
   if (p.relation === null) inline.push(p); else (usesOf[p.relation] ||= []).push(p);
 }
-const targetsOf = p => [...p.targets.map(link), ...p.unknown_targets.map(x => `<span class="unknown" title="no concept defines this type">${esc(x)} (unknown)</span>`)].join(" | ");
+const targetsOf = p => p.open ? "any" : [...p.targets.map(link), ...p.unknown_targets.map(x => `<span class="unknown" title="no concept defines this type">${esc(x)} (unknown)</span>`)].join(" | ");
 const property = p => `${link(p.type)}.${esc(p.path)}`;
 function showRelations() {
   const wasOpen = panel.classList.contains("open");
@@ -649,6 +672,13 @@ function showRelations() {
   button.textContent = `Relations (${counts.join(" · ")})`;
   button.hidden = !counts.length;
   button.onclick = showRelations;
+}
+// ---------- open references ----------
+{
+  const button = document.getElementById("open");
+  button.textContent = `Open references (${OPEN.length})`;
+  button.hidden = !OPEN.length;
+  button.onclick = () => { openMode = !openMode; button.classList.toggle("on", openMode); focusOn(selected); };
 }
 // ---------- loops ----------
 // DATA.loop_reports: one report per loop (spec 0010): its definition, the entities under each
@@ -728,6 +758,10 @@ function showPanel(id) {
   const groups = referencedBy[id] || [];
   const incRows = groups.map(g => `<tr class="group"><td colspan="2" title="${esc(g.kind)}">${esc(g.label)}</td></tr>` +
     g.references.map(r => row(link(r.type) + "." + esc(r.path) + (r.via ? ` <span class="rel">via ${link(r.via)}</span>` : ""), "", r.required)).join("")).join("");
+  // open references, own and inherited: listed under "References out", pointing at "any"
+  const outOpen = OPEN.filter(p => chain.includes(p.type)).sort((a, b) => chain.indexOf(a.type) - chain.indexOf(b.type));
+  // every open reference in the vault can point here: one folded group, counted apart
+  const anywhere = OPEN.length ? `<details><summary>from anywhere · ${OPEN.length}</summary><table>${OPEN.map(p => row(property(p) + (p.relation ? ` <span class="rel">(${esc(p.relation)})</span>` : ""), "", p.required)).join("")}</table></details>` : "";
   const typeLoops = LOOPS.filter(r => chain.includes(r.loop.type));
   const family = [n.parent ? `extends ${link(n.parent)}` : "", n.abstract ? "abstract" : "", n.subtypes.length ? `subtypes: ${n.subtypes.map(link).join(", ")}` : ""].filter(Boolean).join(" · ");
   const head = `${family ? `<div class="sub">${family}</div>` : ""}<div class="sub">${plural(n.count, "entity", "entities")}${n.below ? ` · ${n.countAll} with subtypes` : ""}${n.kidRequired ? " · kid required" : ""}</div>${n.entityPaths.length ? `<div class="sub">stored in ${n.entityPaths.map(p => `<code>${esc(p)}</code>`).join(" or ")}</div>` : ""}${n.filename ? `<div class="sub">named <code>${esc(n.filename.pattern)}.md</code></div>${n.filename.parts.length ? `<table>${n.filename.parts.map(p => `<tr><td>${esc(p.name)}</td><td>${p.match ? `<code>${esc(p.match)}</code>` : ""}${p.description ? `<div class="sub">${esc(p.description)}</div>` : ""}</td></tr>`).join("")}</table>` : ""}` : ""}${n.description ? `<p>${esc(n.description)}</p>` : ""}`;
@@ -740,9 +774,10 @@ function showPanel(id) {
     <h3>Template</h3>
     ${n.template !== null ? `<details><summary>Entity body template</summary><pre>${esc(n.template)}</pre></details>` : '<div class="empty">None</div>'}
     <h3>References out</h3>
-    ${out.length ? `<table>${out.map(d => row(esc(d.path) + (d.relation ? ` <span class="rel">(${esc(d.relation)})</span>` : "") + (d.source !== id ? from(d.source) : ""), "→ " + link(d.target), d.required)).join("")}</table>` : '<div class="empty">None</div>'}
+    ${out.length + outOpen.length ? `<table>${out.map(d => row(esc(d.path) + (d.relation ? ` <span class="rel">(${esc(d.relation)})</span>` : "") + (d.source !== id ? from(d.source) : ""), "→ " + link(d.target), d.required)).join("")}${outOpen.map(p => row(esc(p.path) + (p.relation ? ` <span class="rel">(${esc(p.relation)})</span>` : "") + (p.type !== id ? from(p.type) : ""), "→ any", p.required)).join("")}</table>` : '<div class="empty">None</div>'}
     <h3>Referenced by</h3>
-    ${groups.length ? `<table>${incRows}</table>` : '<div class="empty">None</div>'}
+    ${groups.length ? `<table>${incRows}</table>` : anywhere ? "" : '<div class="empty">None</div>'}
+    ${anywhere}
     ${typeLoops.length ? `<h3>Loops</h3>${typeLoops.map(r => `<div class="relation">
       <a data-loop="${esc(r.loop.name)}">${esc(r.loop.name)}</a><span class="keys">${esc(r.loop.property)}</span>${r.loop.type !== id ? from(r.loop.type) : ""}
       <div class="stages">${[...r.stages.map(p => `${esc(p.stage)} ${p.entities.length}`), ...(r.exits.length ? ["(" + r.exits.map(p => `${esc(p.stage)} ${p.entities.length}`).join(" · ") + ")"] : [])].join(" → ").replace(" → (", " · (")}</div>
