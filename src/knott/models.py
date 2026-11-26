@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from collections.abc import Iterator
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_serializer
 
 
 class _Frozen(BaseModel):
@@ -396,3 +397,69 @@ class Refs(_Frozen):
     groups: list[RefGroup]
     """``inverse``, ``symmetric`` and ``relation`` groups by label, then ``property``
     groups by label."""
+
+
+def _json_value(value: Any) -> Any:
+    """Dates and datetimes in ISO 8601 form, with the offset as written (``+00:00``)."""
+    if isinstance(value, dt.date):
+        return value.isoformat()
+    if isinstance(value, list):
+        return [_json_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _json_value(item) for key, item in value.items()}
+    return value
+
+
+class EntityRecord(_Frozen):
+    """One entity as data (spec 0016)."""
+
+    path: str
+    """Vault-relative POSIX path."""
+    type: str
+    """The frontmatter `type` as written; a non-string in YAML form."""
+    kid: str | None
+    """The entity's `kid`, when it has a valid one."""
+    properties: dict[str, Any] | None = None
+    """Frontmatter values as written, by key: all keys but `type` and `kid` from
+    `Knott.show()`, the chosen fields from `Knott.entities()`, and None from
+    `Knott.entities()` without fields. Dates are `datetime.date`; a blank value is
+    None; a value JSON cannot hold is its YAML text."""
+
+    @field_serializer("properties", when_used="json")
+    def _properties_json(self, value: dict[str, Any] | None) -> Any:
+        return _json_value(value)
+
+
+class OutgoingRef(_Frozen):
+    """One value of a declared reference property of an entity (spec 0016)."""
+
+    field: str
+    """Where the value sits: ``realizes[0]``, ``speakers[1].person``."""
+    relation: str | None
+    """The relation the property names, when a relation file defines it."""
+    value: Any
+    """The value as written."""
+    path: str | None
+    """Vault-relative path of the file the value resolves to; None when it resolves to none."""
+    type: str | None
+    """The target's frontmatter `type`; None when the target is not an entity."""
+    kid: str | None
+    """The target's `kid`, when it has a valid one."""
+    error: str | None
+    """The issue code `validate` reports for this value; None when it has none."""
+
+    @field_serializer("value", when_used="json")
+    def _value_json(self, value: Any) -> Any:
+        return _json_value(value)
+
+
+class EntityDetail(_Frozen):
+    """One entity with its links in both directions (spec 0016)."""
+
+    entity: EntityRecord
+    references: list[OutgoingRef]
+    """Outgoing references, in schema order."""
+    referenced_by: list[RefGroup]
+    """The groups of `Knott.refs()` for this entity."""
+    body: str | None = None
+    """The body, verbatim, when asked for; None when blank or not asked for."""

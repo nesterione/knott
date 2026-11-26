@@ -776,6 +776,8 @@ knott version
 knott skill install [PATH]
 knott view [PATH]
 knott refs PATH
+knott list [TYPE]
+knott show PATH
 knott loops [NAME]
 ```
 
@@ -941,6 +943,61 @@ related
 - `refs` does not validate. Schema issues don't stop it; it works with the concepts and relations that loaded.
 - Exit codes: `0` on success, including no references. `1` when the vault has the legacy layout (`schema-legacy-layout` on stderr). `2` when PATH doesn't exist, isn't inside the vault, isn't an entity (a file under `.knott/` or another hidden folder, a folder, a note without `type`, a file whose frontmatter can't be read), or a `kid:` is malformed or matches no entity or several.
 
+### `knott list [TYPE] [--where KEY=VALUE]... [--fields KEY,...] [--format text|json]`
+
+Lists entities as data. Read-only; it does not validate, and works with the concept and relation files that loaded. The vault is found from the current directory.
+
+```
+$ knott list spec --where released_in=0.12.0 --fields status,title
+specs/0013-concept-inheritance.md     spec  implemented  0013: Concept inheritance
+specs/0014-open-reference-targets.md  spec  implemented  0014: Open reference targets
+```
+
+- **Which files.** Every Markdown file whose frontmatter is a mapping with a `type` key, ordered by path. A file whose frontmatter cannot be read is skipped. An entity with invalid values, an unknown type or an abstract type is listed like any other.
+- **`TYPE`** keeps the entities whose type is-a `TYPE` (§7); an abstract `TYPE` is allowed. A `TYPE` no concept defines is a usage error that names the known types. An entity of an undefined type appears only without `TYPE`.
+- **The record.** `path` (vault-relative, `/`), `type` (as written; a non-string in YAML form, as in `refs`), `kid` (`null` when absent or invalid) and `properties`: frontmatter values as written, converted to JSON. Nothing is coerced to the declared type. A date is `"2026-11-23"`, a datetime its ISO 8601 form with the offset when one was written. A reference or file value stays the text in the file. A null or `""` value is `null`, at any depth. `.nan`, `.inf`, `-.inf`, a binary value and a set are strings in their YAML form, and a nested mapping key that is not a string becomes its YAML text. A top-level key that is not a string can never name a property and is left out.
+- **`--where KEY=VALUE`**, repeatable; an entity must pass every one. It needs `TYPE`, and `KEY` must be a top-level property of `TYPE`, own or inherited. The text is split at the first `=`. `VALUE` is read by the declared shape: `string` and `file` the text as is; `integer` `-?[0-9]+`; `number` an integer or a decimal (`-?[0-9]+(\.[0-9]+)?`); `boolean` `true` or `false`; `date` `YYYY-MM-DD`; `datetime` ISO 8601 with a time; `enum` one of the options, exact case; `reference` an entity as a path relative to the current directory or `kid:<uuid>`; a `list` of one of these as for its items, and any item may match. `object`, `map`, a list of them and a list of lists cannot be filtered by a value. A `VALUE` that cannot be read is a usage error that says what was expected.
+- **Matching.** A value matches only when it has the declared kind (§8) and equals `VALUE`: an integer is not `3.0` or `"3"`; a number is an integer or float equal to it; a date or datetime may be written quoted in ISO form; a datetime with an offset equals the same moment written with another offset, and never one without an offset. A reference matches when it resolves (§11) to that entity, whatever form the file uses; one that does not resolve matches nothing, and the target-type check is not applied. An empty `VALUE` keeps the entities where the property is absent (§8, decision 0005): missing, `null`, `""`, and an empty container of the declared kind; it is allowed for every shape.
+- **`--fields a,b,c`** adds top-level frontmatter keys, declared or not, in that order; names are trimmed. Without it the output has `path`, `type` and `kid`, and JSON has no `properties` key. `type`, `kid` and `path`, an empty name and a repeated name are usage errors.
+- **Text.** One line per entity: path, type, then each field. Every column but the last is padded to its widest value plus two spaces; no line ends in spaces. A string is printed as is with line breaks replaced by a space; a number, boolean, date or datetime in its JSON form without quotes; a list or mapping as JSON on one line with `, ` and `: ` separators; `null` as `-`. No match prints `no entities`.
+- **`--format json`** prints `{"entities": [{path, type, kid, properties}]}`; no match is `{"entities": []}`.
+- **Exit codes.** `0` on success, including no match. `1` for the legacy layout (`schema-legacy-layout` on stderr), checked first. `2` for no vault, an unknown `TYPE`, `--where` without `TYPE`, a `KEY` that is not a property of `TYPE`, a missing `=`, a shape that cannot be filtered, a `VALUE` that cannot be read, or a bad `--fields` name.
+
+### `knott show PATH [--body] [--format text|json]`
+
+Prints one entity: the record above with every frontmatter key but `type` and `kid`, in file order; its outgoing references, resolved; and its incoming links. `PATH` and the exit codes are those of `refs`. Read-only; it does not validate.
+
+```
+$ knott show specs/0006-relation-definitions.md
+specs/0006-relation-definitions.md  spec
+
+properties
+  title        0006: Relation definitions and reverse lookup
+  status       implemented
+  created_on   2026-11-23
+  released_in  0.6.0
+
+references
+  realizes[0]   intents/relation-definitions.md                           intent
+  decisions[0]  decisions/0010-concept-files-and-reference-properties.md  decision
+  decisions[1]  decisions/0003-source-side-relations.md                   decision
+  concepts[0]   concepts/relation.md                                      concept
+  concepts[1]   concepts/ontology.md                                      concept
+  concepts[2]   concepts/schema.md                                        concept
+  amends[0]     specs/0005-concept-files.md                               spec      (amends)
+
+referenced by
+  amended_by
+    specs/0007-view-inline-relations.md   spec  amends[0]
+    specs/0013-concept-inheritance.md     spec  amends[1]
+    specs/0014-open-reference-targets.md  spec  amends[1]
+```
+
+- **`references`**: every value of a declared reference property, own or inherited, at any depth, in schema order (list items in list order, map values in file order). Each has `field` (`realizes[0]`, `speakers[1].person`, `roles.lead`), `relation` (the relation the property names, or `null`), `value` (as written), the target's `path`, `type` and `kid`, and `error`: `null`, or the code `validate` reports for that value. A value that resolves to an entity of an accepted type has no error. An entity of another type: its path, type and `kid`, `relation-target-type-mismatch`. A Markdown file that is not an entity: its path, `relation-target-not-entity`. No file, or a `kid` no entity has: `relation-target-not-found`. A path that leaves the vault: `relation-target-outside-vault`. A `kid` several entities claim: `relation-target-ambiguous`. Not a reference (a wikilink, a URL, a malformed `kid`, a non-string): `relation-invalid-value`. In the last four, `path`, `type` and `kid` are `null`. A value of the wrong kind for the property (one value where a list is declared, a list where one is, a map key that is not a string) is one row at the property's path, with the value as written and `relation-invalid-value`; so is an empty list item or map value, with value `null`. An absent property gives no row, required or not. An entity whose type no concept defines has no declared references and so no rows.
+- **`referenced_by`**: the groups of `refs` for this entity, unchanged.
+- **Text.** The header is the path, two spaces and the type, then two spaces and `kid:<uuid>` when the entity has a `kid`. `properties` lists every top-level key except those declared as a reference or a list of references, as `name  value`, values printed as in `list`. `references` lists field, target path, target type, then the relation in parentheses, in columns; a row with no path shows the value as written and the error code where the type would be; a row with a path and no type shows the error code there; a row with a type and an error ends with the error code. `referenced by` holds the output of `refs` from its first group on, indented by two spaces. Sections are separated by a blank line, each under its name; a section with nothing in it is left out. `--body` adds a `body` section last: the name, then the body verbatim from the line after the closing `---`, not indented; a blank body has no section.
+- **`--format json`** prints `{"entity": {path, type, kid, properties}, "references": [{field, relation, value, path, type, kid, error}], "referenced_by": [RefGroup]}`, and `"body"` only with `--body` (`null` when blank). `properties` holds every key, references included.
+
 ---
 
 ## 15. Authoring
@@ -967,6 +1024,7 @@ Ship an agent instruction document in the repo at `src/knott/_skills/knott/SKILL
 - open references: `→ any` accepts any entity, which must still exist in the vault
 - inheritance: an entity's type is concrete and the most specific that fits, inherited properties and settings count as the type's own, and `extends` is for a real "is a"
 - relation files: how to read their guidance, never to write an inverse, `knott refs` before renaming or deleting, and `relation-cycle`
+- reading entities: `knott list` to find entities by type and property value, and `knott show` for one entity's properties and links without its body, instead of `grep` and whole-file reads
 
 Typical agent workflow:
 
@@ -1102,6 +1160,8 @@ ontology.relations                 # [RelationDefinition(name, description, inve
                                    #   acyclic, guidance, path), …], sorted by name
 ontology.connectors                # [ConnectorDefinition(name, description, guidance, path), …]
 refs = vault.refs("concepts/kid.md")   # or "kid:<uuid>"; Refs(entity, groups), see §10
+vault.entities("spec", where={"status": "draft"}, fields=["title"])  # list[EntityRecord]; §14
+vault.show("concepts/kid.md", body=True)  # EntityDetail(entity, references, referenced_by, body)
 ontology.loops                     # [LoopDefinition(name, description, type, property, stages,
                                    #   exits, guidance, path), …], sorted by name
 vault.loops()                      # list[LoopReport], sorted by loop name; see §27
@@ -1112,6 +1172,8 @@ vault.migrate()                    # MigrateResult(written, removed, list_fields
 `OntologyType.extends`, `abstract`, `ancestors` (nearest first) and `subtypes` (direct children, sorted) describe the hierarchy (§7). `properties`, `template`, `entity_paths`, `filename` and `kid_required` are the effective values; `OntologyAttribute.inherited_from` names the ancestor that declares an inherited top-level property, and `OntologyType.inherited` maps `template`, `path`, `filename` and `kid` to the ancestor each comes from, when it is inherited. `count` is the type's own entities. `OntologyType.entity_paths` lists the folder patterns of the concept's `path` (`[]` when not declared; `OntologyType.path` is the concept file). `OntologyType.filename` is `FilenamePattern(pattern, parts)` or `None`; each part is `FilenamePart(name, match, description)`, in the pattern's order. `OntologyAttribute.open` marks a reference declared `target: any`, whose `targets` is `[]` (§7). `OntologyAttribute.relation` is the relation a reference names (`None` when none, or one no relation file defines). `OntologyAttribute.type` may be `file`; `accept` lists its extensions (`[]` when not declared). It may be `enum`; `options` is then a list of `EnumOption(value, description)`. `Refs` has `entity: EntityRef(path, type, kid)` and `groups: list[RefGroup(label, kind, relation, references: list[Ref(path, type, kid, field, line, direction)])]`; `type` is the frontmatter `type` as written. A relative path passed to `refs()` is resolved against the vault root, as in `validate()`.
 
 `LoopDefinition.stages` and `.exits` are `list[LoopStage(name, needs, guidance)]`. `LoopNeed(kind, property, inverse, relation, type, since)`: `kind` is `property` or `inverse`, `since` is the stage that declares it, and an inverse need with several types is one `LoopNeed` per type. `LoopReport(loop, stages, exits, unplaced)`: `stages` and `exits` are `list[LoopPlacement(stage, entities)]`, empty ones included; `unplaced` and `entities` are `list[LoopEntity(path, kid, title, type, unmet, next, missing_next)]` in path order. `title` is the entity's `title` when its type declares a top-level `string` property of that name and the value is a non-blank string, else the file name. `loops()` does not validate.
+
+`entities(type=None, *, where=None, fields=None)` and `show(path_or_kid, *, body=False)` are `knott list` and `knott show` (§14). `EntityRecord(path, type, kid, properties)`: `properties` is `None` from `entities()` without `fields`; values are Python values as YAML read them (`datetime.date`, not text), with the conversions of §14, and `model_dump(mode="json")` gives the JSON forms. `where` is a mapping, or a sequence of `(key, value)` pairs when one key is given twice; values are typed, not text: an `int` for an integer, an `int` or `float` for a number, a `bool`, a `datetime.date`, a `datetime.datetime`, a `str` for a string, enum option or file, an entity path (resolved against the vault root) or `kid:<uuid>` for a reference, and `None` (or `""`) for "absent". A value of another kind raises `KnottError`, as do the other exit-`2` cases of `knott list`. `EntityDetail(entity, references, referenced_by, body)` holds `OutgoingRef(field, relation, value, path, type, kid, error)` and `RefGroup`s; `show()` raises as `refs()` does.
 
 `validate()` returns validation problems as data and never raises for them. It raises only for `2`-class conditions (`KnottError` subclasses in `errors.py`).
 

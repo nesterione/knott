@@ -1,8 +1,9 @@
 ---
 type: spec
 title: "0016: List and show entities"
-status: draft
+status: implemented
 created_on: 2026-11-26
+released_in: "0.14.0"
 realizes:
   - "[Read the vault as data](../intents/read-the-vault-as-data.md)"
 decisions:
@@ -47,7 +48,8 @@ Values in `properties` are the values as written, converted to JSON:
 - A date is `"2026-11-23"`. A datetime is its ISO 8601 form, `"2026-11-23T10:30:00"`, with the offset when one was written.
 - A reference or file value stays the text in the file (`"[0005](0005-concept-files.md)"`). Resolved references are reported separately by `show`.
 - A null or blank value is `null`. Keys no concept declares are included.
-- A value JSON cannot hold is a string in its YAML form: `.nan`, `.inf`, `-.inf`, a binary value, a set. A mapping key that is not a string becomes its YAML text (`1`, `true`).
+- A value JSON cannot hold is a string in its YAML form: `.nan`, `.inf`, `-.inf`, a binary value, a set. A nested mapping key that is not a string becomes its YAML text (`1`, `true`). A top-level key that is not a string can never name a property and is left out.
+- A null or blank value is `null` at any depth, so `[""]` is `[null]`.
 
 ### `list`: the type
 
@@ -105,7 +107,7 @@ Values in `properties` are the values as written, converted to JSON:
   | is a `kid` several entities claim | `null` | `null` | `relation-target-ambiguous` |
   | is not a reference (a wikilink, a URL, a malformed `kid`, a non-string) | `null` | `null` | `relation-invalid-value` |
 
-  A property with the wrong cardinality (one value where a list is declared, or a list where one is) gives a single row for the property, with `field` its path without an index, `value` as written and `error: relation-invalid-value`. An absent reference gives no row, required or not.
+  A property with the wrong cardinality (one value where a list is declared, or a list where one is) gives a single row for the property, with `field` its path without an index, `value` as written and `error: relation-invalid-value`. So does a map of references with a key that is not a string. An empty list item or map value (`- ` with nothing after it) is a row with `value: null` and `error: relation-invalid-value`, since `validate` reports it. An absent property gives no row, required or not. The rows with an error are exactly the `relation-*` issues `validate` reports for the entity, other than `relation-missing`.
 - **`referenced_by`**: the groups of `knott refs` for this entity, unchanged ([spec 0006](0006-relation-definitions.md)).
 
 An entity whose type no concept defines has no declared references, so `references` is empty; its incoming links are still listed.
@@ -132,7 +134,8 @@ decisions/0003-source-side-relations.md    decision
 ```
 
 - One line per entity: path, type, then each field. Every column but the last is padded to its widest value plus two spaces; lines have no trailing spaces.
-- A field value is printed as: a string as is, with line breaks replaced by a space; a number, boolean, date or datetime in its JSON form without quotes; a list or mapping as compact JSON on one line; `null` as `-`.
+- A field value is printed as: a string as is, with line breaks replaced by a space; a number, boolean, date or datetime in its JSON form without quotes; a list or mapping as JSON on one line, with `, ` and `: ` as separators (`["red", "blue"]`); `null` as `-`.
+- Field names in `--fields` are trimmed, so `--fields "status, title"` works.
 - No match prints `no entities`.
 - `--format json`:
 
@@ -183,8 +186,8 @@ referenced by
     specs/0014-open-reference-targets.md  spec  amends[1]
 ```
 
-- The header line is the path, two spaces and the type, as in `refs`; a `kid` follows on the same line as `kid:<uuid>` when the entity has one.
-- `properties` lists every top-level key except those whose declared shape is `reference` or a `list` of references, with values printed as in `list`. A property that holds references deeper (`speakers`, a list of objects with a `person` reference) is printed here in full, and its references also appear under `references`. `references` lists the outgoing references: field, target path, target type, then the relation in parentheses when the property names one. An unresolved reference shows its value as written and the error code in place of the path and type. `referenced by` holds the output of `refs` from its first group on, indented by two spaces.
+- The header line is the path, two spaces and the type, as in `refs`; a `kid` follows on the same line, after two spaces, as `kid:<uuid>` when the entity has one.
+- `properties` lists every top-level key except those whose declared shape is `reference` or a `list` of references, with values printed as in `list`. A property that holds references deeper (`speakers`, a list of objects with a `person` reference) is printed here in full, and its references also appear under `references`. `references` lists the outgoing references: field, target path, target type, then the relation in parentheses when the property names one. An unresolved reference shows its value as written and the error code in place of the path and type. A file that is not an entity shows its path and the error code in place of the type. An entity of the wrong type shows its path and type, and the error code at the end of the line, after the relation. `referenced by` holds the output of `refs` from its first group on, indented by two spaces.
 - A section with nothing in it is left out. With `--body`, a `body` section follows, separated by a blank line and printed verbatim, not indented.
 - `--format json`:
 
@@ -207,7 +210,7 @@ referenced by
 
 ### Python API
 
-- `Knott.entities(type: str | None = None, *, where: Mapping[str, Any] | None = None, fields: Sequence[str] | None = None) -> list[EntityRecord]`. `where` values are typed, not text: an `int` for an integer, a `datetime.date` for a date, a path (resolved against the vault root) or `kid:<uuid>` string for a reference, and `None` for "absent". Raises `KnottError` for the exit-2 cases.
+- `Knott.entities(type: str | None = None, *, where: Mapping[str, Any] | Sequence[tuple[str, Any]] | None = None, fields: Sequence[str] | None = None) -> list[EntityRecord]`. `where` is a mapping, or a sequence of `(key, value)` pairs when one key is given twice. Its values are typed, not text: an `int` for an integer, a `datetime.date` for a date, a path (resolved against the vault root) or `kid:<uuid>` string for a reference, and `None` for "absent". Raises `KnottError` for the exit-2 cases.
 - `Knott.show(path_or_kid: str | Path, *, body: bool = False) -> EntityDetail`, with `entity: EntityRecord`, `references: list[OutgoingRef(field, relation, value, path, type, kid, error)]`, `referenced_by: list[RefGroup]` and `body: str | None`. Raises as `Knott.refs` does.
 - `EntityRecord(path, type, kid, properties)`. `properties` is `None` from `entities()` without `fields`. Values are Python values (`datetime.date`, not a string); `model_dump(mode="json")` gives the JSON forms above.
 - `EntityRecord`, `EntityDetail` and `OutgoingRef` are exported from `knott`.
@@ -218,7 +221,7 @@ referenced by
 |---|---|
 | `knott list concept`, and `tool` extends `concept` | entities of both; each line shows its own type |
 | `knott list page` where `page` is abstract | the entities of its subtypes |
-| `knott list --where status=draft` | exit 2: `--where` needs a type |
+| `knott list --where status=draft` | exit 2: a filter needs a type |
 | `knott list spec --where status=drafted` | exit 2: lists the options of `status` |
 | `knott list spec --where title=a=b` | matches the title `a=b` |
 | `knott list spec --where released_in=` | specs with no `released_in`, or a blank one |
@@ -234,6 +237,9 @@ referenced by
 | `knott show` on an entity with a reference to a deleted file | listed in `references` with `error: relation-target-not-found` |
 | `knott show` on a symmetric link stored by this entity | in `references`, and in its symmetric group of `referenced_by` with direction `out` |
 | `knott show --body` on an entity with a blank body | no `body` section; `"body": null` |
+| A datetime written with an offset, filtered by the same moment in another offset | it matches; a `VALUE` without an offset never matches a value with one |
+| `--where due=2026-10-06` and an entity writes `due: "2026-10-06"` | it matches: a quoted ISO date is a valid date |
+| `--where urgent=true` and an entity writes `urgent: yes` | no match: `yes` is not a boolean spelling knott accepts |
 
 ## Out of scope
 

@@ -205,6 +205,16 @@ A concept can extend another (`extends: concept`), and a concept can be `abstrac
 
 For vaults edited in Obsidian, set Files & links → *New link format* to **Relative path to file** and turn **off** *Use [[Wikilinks]]*. Otherwise Obsidian may rewrite links on rename into forms `knott validate` rejects.
 
+## Reading entities
+
+Ask knott instead of grepping frontmatter or reading whole files:
+
+- **Which entities have a value**: `knott list spec --where status=draft --fields title`. `TYPE` includes its subtypes. `--where` reads the value by the property's type, looks inside lists, and matches a reference by its target: `knott list decision --where affects=concepts/relation.md` finds every decision that links to that file, whatever relative path or `kid:` each one wrote. An empty value (`--where released_in=`) means "not set". A misspelt option or key is an error that lists the valid ones, never an empty result.
+- **What one entity is connected to**: `knott show <file>` prints its properties, each outgoing reference with the target's path and type, and its incoming links, without the body. Add `--body` only when you need the text. A reference with a problem shows the issue code `knott validate` reports for it.
+- Add `--format json` to either when you will parse the output.
+
+Neither command validates, and neither writes.
+
 ## Commands
 
 ```sh
@@ -213,6 +223,8 @@ knott validate [PATH...]         # check concept files + all entities, or only P
 knott validate --format json     # {ok, stats, issues[]} for machine reading
 knott validate --fix [PATH...]   # add a kid to entities that have none, then validate
 knott refs PATH [--format json]  # who references an entity (PATH or kid:<uuid>), by relation
+knott list [TYPE] [--where KEY=VALUE] [--fields a,b] [--format json]  # entities of a type, filtered
+knott show PATH [--body] [--format json]  # one entity: properties, links out (resolved) and in
 knott loops [NAME] [--format json]  # entities by stage of a loop, and what each still needs
 knott init [PATH]                # create .knott/ (never overwrites)
 knott view [PATH] [--no-open] [-o FILE]  # write an HTML diagram of types and references

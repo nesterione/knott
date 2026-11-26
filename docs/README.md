@@ -29,7 +29,7 @@ This README has no frontmatter, so Knott treats it as an ordinary note.
 
 ## Commands
 
-[init](commands/init.md) · [validate](commands/validate.md) · [types](commands/types.md) · [migrate](commands/migrate.md) · [version](commands/version.md) · [skill](commands/skill.md) · [view](commands/view.md) · [refs](commands/refs.md) · [loops](commands/loops.md)
+[init](commands/init.md) · [validate](commands/validate.md) · [types](commands/types.md) · [migrate](commands/migrate.md) · [version](commands/version.md) · [skill](commands/skill.md) · [view](commands/view.md) · [refs](commands/refs.md) · [list](commands/list.md) · [show](commands/show.md) · [loops](commands/loops.md)
 
 ## Issue codes
 
