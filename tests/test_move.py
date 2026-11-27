@@ -632,7 +632,7 @@ def test_docs_rename_keeps_the_vault_valid(docs: Path) -> None:
     refs_before = knott.refs("specs/0006-relation-definitions.md").groups
     output = _mv("specs/0006-relation-definitions.md", "specs/0006-relations.md")
     for line in (
-        "  README.md:72 ",
+        "  README.md:",  # the README grows, so no line number
         "  specs/0007-view-inline-relations.md:13 ",
         "  specs/0013-concept-inheritance.md:20 ",
         "  specs/0014-open-reference-targets.md:19 ",
