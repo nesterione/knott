@@ -90,6 +90,7 @@ src/knott/
     validator.py
   vault/
     discovery.py
+    include.py     # the `include` key: the folders Markdown is read from
     entity.py
     links.py       # relation value parsing + path resolution
     files.py       # file value parsing + resolution (paths and connector URIs)
@@ -129,24 +130,44 @@ The vault root is the nearest directory, starting at the current working directo
 
 ### Vault config
 
-`.knott/config.yaml` records the Knott version the vault was initialized with:
+`.knott/config.yaml` records the Knott version the vault was initialized with, and may name the folders knott reads Markdown from:
 
 ```yaml
 knott_version: 0.1.0
+include:
+  - docs
+  - notes/projects
 ```
 
-- Only `knott init` writes it. `validate` and `types` never write any file.
+- Only `knott init` writes it, and it writes only `knott_version`. `validate` and `types` never write any file.
 - A missing `config.yaml` is fine. A malformed one is a configuration error (exit `2`).
 - v0 does not compare this version against the installed one. No migration framework.
 
+### Included folders
+
+`include` is one folder or a non-empty list of folders. A folder is a vault-relative POSIX path, matched with regard to case; `.` is the vault root and a trailing `/` is ignored. A missing key is `include: .`: the whole vault. The key is edited by hand; no command writes it.
+
+A file is **inside the included folders** when it is below at least one of them, at any depth: a test on the path alone. A `*.md` file directly in the vault root is inside them only when `.` is listed. **A Markdown file that is not inside the included folders is never an entity**, whatever its frontmatter says: knott does not read it, count it, list it, give it a `kid` or rewrite it.
+
+- Every command that enumerates Markdown (`validate`, `validate --fix`, the `kid` index, cycles, reverse lookup, entity counts, `loops`, `migrate`, `list`, the files `mv` searches) uses the scanned set of "Entity discovery" below.
+- A path reference to a file that is not inside the included folders is `relation-target-not-entity`, and the file is not read; one that does not exist stays `relation-target-not-found`. A `kid` carried only by such a file is `relation-target-not-found` and is never a duplicate.
+- `knott validate FILE` reports `not-an-entity` for such a file. `refs`, `show`, and `mv` for its `SOURCE` and for a `DEST` that is not inside them, exit `2`. Each message ends with the reason: ``it is outside the included folders (`docs`); add its folder to `include` in .knott/config.yaml``, the folders in the order written.
+- Not affected: finding the vault root; `.knott/`, whose concept, relation, connector and loop files are always loaded; `file` values, which may point at any file in the vault; and what knott does with a file in a hidden folder that is inside the included folders.
+
+Each of these is a configuration error (exit `2`, one line on stderr naming the line of the entry, nothing read or written): a value that is not a string or a non-empty list of strings; an entry that is empty, starts with `/`, contains `\`, `*` or an empty segment, or has a `.` or `..` segment (a lone `.` is the root); a segment that starts with `.`; a folder that does not exist with that exact case or is not a folder; a folder that is a symbolic link or is reached through one.
+
+```
+error: invalid `include` in .knott/config.yaml:4: folder `doc` does not exist
+```
+
 ### Entity discovery
 
-Knott scans every `*.md` file under the vault root, recursively, with these rules:
+Knott scans every `*.md` file under the included folders (the whole vault when `include` is not set), recursively, with these rules. The result is the **scanned set**:
 
 - Skip any directory whose name starts with `.` (covers `.git`, `.knott`, `.obsidian`, …).
 - Do not follow symlinked directories.
 - `.gitignore` is not consulted in v0.
-- Sort file paths so output is deterministic.
+- Sort file paths so output is deterministic. A file below two included folders is in the set once.
 
 A file is an **entity** if it has YAML frontmatter that is a mapping containing a `type` key. All other Markdown files (no frontmatter, or frontmatter without `type`) are ordinary notes and are ignored silently.
 
@@ -760,7 +781,7 @@ some_personal_metadata: foo
 
 - `knott validate` (no args) checks every concept file and every entity.
 - `knott validate PATH...` always checks every concept file, because entity checks depend on them. Entity checks cover only the given files, or the entities under the given directories. Relation targets outside those paths are still read to check their type. File values are resolved only for the entities in scope.
-- An explicitly given file that is not an entity is an error (`not-an-entity`).
+- An explicitly given file that is not an entity is an error (`not-an-entity`); so is one that is not inside the included folders (§3). A given directory with no entity of the scanned set is not an error.
 
 ---
 
@@ -831,7 +852,7 @@ After the relations, a `connectors:` section lists every connector, sorted by na
 
 After the connectors, a `loops:` section lists every loop (§27), sorted by name: `<name>  <type>.<property>` indented by two spaces; then, each line indented by four: the description, `stages: a → b → c`, `exits: x | y` when there are side exits, `<stage> needs: <items>` for each stage with needs (a property need is its name, an inverse need is `<type> in <inverse>`), the loop's guidance, and each stage's guidance under a `## <stage>` line. A vault without loops has no `loops:` section.
 
-`--tree` (`-t`) prints the types as a tree instead: the types with no parent, sorted by name, each followed by its direct subtypes, sorted, at any depth. A concept whose parent is unknown or part of a cycle is a root. It counts entities, so it reads every Markdown file in the vault, as `view` does; plain `types` reads concept files only. Exit codes and stderr are those of `types`.
+`--tree` (`-t`) prints the types as a tree instead: the types with no parent, sorted by name, each followed by its direct subtypes, sorted, at any depth. A concept whose parent is unknown or part of a cycle is a root. It counts entities, so it reads every Markdown file of the scanned set (§3), as `view` does; plain `types` reads concept files only. Exit codes and stderr are those of `types`.
 
 ```
 $ knott types --tree
@@ -967,7 +988,7 @@ related
 - An entity nobody references prints its header line, a blank line and `no references`.
 - `--format json` prints `{"entity": {path, type, kid}, "groups": [{label, kind, relation, references: [{path, type, kid, field, line, direction}]}]}`. `relation` is `null` for `property` groups; `direction` is always `in` outside symmetric groups.
 - `refs` does not validate. Schema issues don't stop it; it works with the concepts and relations that loaded.
-- Exit codes: `0` on success, including no references. `1` when the vault has the legacy layout (`schema-legacy-layout` on stderr). `2` when PATH doesn't exist, isn't inside the vault, isn't an entity (a file under `.knott/` or another hidden folder, a folder, a note without `type`, a file whose frontmatter can't be read), or a `kid:` is malformed or matches no entity or several.
+- Exit codes: `0` on success, including no references. `1` when the vault has the legacy layout (`schema-legacy-layout` on stderr). `2` when PATH doesn't exist, isn't inside the vault, isn't an entity (a file that is not inside the included folders, a file under `.knott/` or another hidden folder, a folder, a note without `type`, a file whose frontmatter can't be read), or a `kid:` is malformed or matches no entity or several.
 
 ### `knott list [TYPE] [--where KEY=VALUE]... [--fields KEY,...] [--format text|json]`
 
@@ -1042,7 +1063,7 @@ updated 7 links in 6 files
   specs/0014-open-reference-targets.md:19  amends[1]
 ```
 
-- **`SOURCE`** is a Markdown file discovery sees, an entity or a plain note: a path relative to the current directory, or `kid:<uuid>`. A file whose frontmatter cannot be read, and a symbolic link, are refused.
+- **`SOURCE`** is a Markdown file discovery sees, an entity or a plain note: a path relative to the current directory, or `kid:<uuid>`. A file whose frontmatter cannot be read, and a symbolic link, are refused. So is a `DEST` that is not inside the included folders (§3): the file would stop being an entity.
 - **`DEST`** is the new path, relative to the current directory; an existing directory keeps the file's name. It must end in `.md`, be inside the vault, have no folder whose name starts with `.` and no `#` in its path, not sit under a file, and not exist. Missing folders are created; nothing is overwritten. Symbolic links in the existing folders of `DEST` are resolved first, and a path that then leaves the vault is refused. A rename that changes only letter case is allowed, also on a file system that ignores case.
 - **Searched**: every Markdown file discovery sees, and the bodies of the files under `.knott/relations/`, `.knott/connectors/` and `.knott/loops/`. Not concept files (a template's links are relative to the entity that copies it), and not other hidden folders. A file whose frontmatter cannot be read, and a Markdown file that is a symbolic link, are not searched and are reported as `skipped`, whether or not they link to `SOURCE`. The example above is the docs vault before specs 0016 to 0019 were added.
 - **Frontmatter.** In an entity whose type a concept defines, a string value at a declared `reference` or `file` property, own or inherited, at any depth, is rewritten when the path it names (a plain path or a Markdown link, §11 and §8) resolves to `SOURCE`, with exact case. A `kid:` reference and a URI are never changed. The target-type check is not applied. Undeclared keys, and the frontmatter of plain notes, of entities of an undefined type and of files under `.knott/`, are not touched.
@@ -1197,7 +1218,7 @@ schema-duplicate-loop      loop-invalid-target        loop-stage-unmet
 |---|---|
 | `0` | success / valid |
 | `1` | one or more validation issues (schema or entity) |
-| `2` | usage error, no vault found, unreadable or malformed `.knott/config.yaml`, or a path argument that doesn't exist |
+| `2` | usage error, no vault found, unreadable or malformed `.knott/config.yaml`, an invalid `include` in it, or a path argument that doesn't exist |
 
 ---
 
@@ -1208,7 +1229,8 @@ Core behavior is available independently of the CLI, and the CLI is a thin adapt
 ```python
 from knott import Knott
 
-vault = Knott.open(".")            # walks up to the vault root; raises VaultNotFoundError
+vault = Knott.open(".")            # walks up to the vault root; raises VaultNotFoundError, ConfigError
+vault.included_folders             # ("docs", "notes/projects"); (".",) when `include` is not set; §3
 result = vault.validate()          # or vault.validate(["transcripts/foo.md"])
 result.ok                          # bool
 result.issues                      # list[Issue], sorted

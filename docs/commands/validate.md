@@ -17,7 +17,7 @@ The primary command. It loads every [concept file](../concepts/schema.md) in `.k
 | `knott validate` | all | all |
 | `knott validate a.md notes/` | all (entity checks depend on them) | only `a.md` and entities under `notes/` |
 
-Relation targets outside the given paths are still read to check their type. A cycle of an `acyclic` relation ([`relation-cycle`](../issues/relation-cycle.md)) is reported when any entity on it is in scope. [File](../concepts/file.md) values are resolved only for the entities in scope. A given file that isn't an entity is reported as `not-an-entity`.
+Relation targets outside the given paths are still read to check their type. A cycle of an `acyclic` relation ([`relation-cycle`](../issues/relation-cycle.md)) is reported when any entity on it is in scope. [File](../concepts/file.md) values are resolved only for the entities in scope. A given file that isn't an entity is reported as `not-an-entity`; so is one outside the [included folders](../concepts/vault.md#included-folders).
 
 ## Output
 
@@ -54,4 +54,4 @@ The edit is a single inserted line, `kid: <new uuid>`, after the `type:` line; n
 |---|---|
 | `0` | valid |
 | `1` | one or more validation issues |
-| `2` | usage error: no vault, missing path, path outside the vault, malformed `.knott/config.yaml` |
+| `2` | usage error: no vault, missing path, path outside the vault, malformed `.knott/config.yaml` or an invalid `include` in it |

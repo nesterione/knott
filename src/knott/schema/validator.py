@@ -39,6 +39,8 @@ _ISO_DATETIME = re.compile(r"^\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}")
 Resolver = Callable[[str, str], ResolvedReference]
 """(source path, reference) -> resolved reference; raises ``LinkError``."""
 FileLookup = Callable[[str], MarkdownFile]
+OutsideReason = Callable[[str], str | None]
+"""target path -> why it is outside the included folders, or None when it is inside."""
 FileResolver = Callable[[str, str, tuple[str, ...]], ResolvedFile]
 """(source path, file value, accepted extensions) -> resolved file; raises ``LinkError``."""
 
@@ -61,8 +63,12 @@ def validate_entity(
     resolve: Resolver,
     lookup: FileLookup,
     resolve_file: FileResolver | None = None,
+    outside: OutsideReason | None = None,
 ) -> EntityReport:
-    """``resolve_file`` checks file values (spec 0008); without it they are not resolved."""
+    """``resolve_file`` checks file values (spec 0008); without it they are not resolved.
+
+    ``outside`` gives the reason a reference target is not inside the included
+    folders (spec 0019), or None when it is; such a target is never read."""
     assert entity.frontmatter is not None
     entity_type = entity.type
     schema = schemas.get(entity_type) if isinstance(entity_type, str) else None
@@ -80,7 +86,7 @@ def validate_entity(
         )
         return EntityReport([issue], 0)
 
-    checker = _ValueChecker(entity, resolve, lookup, resolve_file)
+    checker = _ValueChecker(entity, resolve, lookup, resolve_file, outside)
     checker.issues.extend(_check_abstract(entity, schema, schemas))
     checker.issues.extend(_check_location(entity, schema))
     checker.issues.extend(_check_name(entity, schema))
@@ -233,11 +239,13 @@ class _ValueChecker:
         resolve: Resolver,
         lookup: FileLookup,
         resolve_file: FileResolver | None = None,
+        outside: OutsideReason | None = None,
     ) -> None:
         self.entity = entity
         self.resolve = resolve
         self.lookup = lookup
         self.resolve_file = resolve_file
+        self.outside = outside
         self.issues: list[Issue] = []
         self.relations = 0
 
@@ -431,6 +439,15 @@ class _ValueChecker:
             resolved = self.resolve(self.entity.path, value)
         except LinkError as exc:
             self.report(exc.code, f"relation `{field}`: {exc.message}", path)
+            return
+        excluded = self.outside(resolved.target) if self.outside is not None else None
+        if excluded is not None:
+            self.report(
+                "relation-target-not-entity",
+                f"relation `{field}` points to {resolved.label}, "
+                f"which is not a Knott entity: {excluded}",
+                path,
+            )
             return
         target = self.lookup(resolved.target)
         if not target.is_entity:

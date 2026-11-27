@@ -28,6 +28,7 @@ from knott.schema.validator import format_field_path
 from knott.vault.discovery import iter_markdown
 from knott.vault.entity import MarkdownFile, read_markdown
 from knott.vault.files import ResolvedFile, resolve_file
+from knott.vault.include import WHOLE_VAULT, Included
 from knott.vault.kid import KidIndex, build_index
 from knott.vault.links import LinkError, ResolvedReference, list_dir_entries, resolve_reference
 
@@ -100,9 +101,15 @@ class VaultSession:
     """
 
     def __init__(
-        self, root: Path, schemas: dict[str, Schema], connectors: Collection[str] = ()
+        self,
+        root: Path,
+        schemas: dict[str, Schema],
+        connectors: Collection[str] = (),
+        included: Included = WHOLE_VAULT,
     ) -> None:
         self.root = root
+        self.included = included
+        """The folders Markdown is read from (spec 0019)."""
         self.schemas = schemas
         self.connectors = frozenset(connectors)
         """Names of the declared connectors (spec 0008)."""
@@ -115,10 +122,16 @@ class VaultSession:
 
     @property
     def all_markdown(self) -> list[str]:
-        """Vault-relative paths of every Markdown file, sorted."""
+        """The scanned set: vault-relative paths of every Markdown file discovery
+        finds in the included folders, sorted."""
         if self._all_markdown is None:
-            self._all_markdown = iter_markdown(self.root)
+            self._all_markdown = iter_markdown(self.root, self.included.scan_roots())
         return self._all_markdown
+
+    def outside_reason(self, rel_path: str) -> str | None:
+        """Why the file at ``rel_path`` cannot be an entity: it is not inside the
+        included folders. None when it is inside."""
+        return None if self.included.contains(rel_path) else self.included.outside_reason()
 
     def lookup(self, rel_path: str) -> MarkdownFile:
         parsed = self._files.get(rel_path)
@@ -195,6 +208,8 @@ class VaultSession:
         try:
             resolved = self.resolve(entity.path, value)
         except LinkError:
+            return None
+        if not self.included.contains(resolved.target):
             return None
         target = self.lookup(resolved.target)
         if target.error is not None or not target.is_entity:

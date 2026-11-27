@@ -6,7 +6,7 @@ about: "[Entity](../concepts/entity.md)"
 ---
 # `not-an-entity`
 
-A file passed explicitly to `knott validate PATH` is not an entity: no frontmatter, no `type`, or not a `.md` file.
+A file passed explicitly to `knott validate PATH` is not an entity: no frontmatter, no `type`, not a `.md` file, or a file outside the [included folders](../concepts/vault.md#included-folders).
 
 ## Example
 

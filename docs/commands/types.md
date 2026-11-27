@@ -113,7 +113,7 @@ record (abstract)
 - **Order**: types with no parent first, sorted by name, each followed by its direct subtypes, sorted. A vault without [inheritance](../concepts/schema.md#inheritance) prints a flat list.
 - **Count**: entities whose `type` is exactly that type. Subtypes are not added in. An abstract type has no count.
 - **Folder**: the type's `path` patterns, its own or inherited, joined with ` | `. Left out when it has none.
-- `--tree` reads every Markdown file in the vault to count entities; plain `knott types` reads concept files only.
+- `--tree` reads every Markdown file in the [included folders](../concepts/vault.md#included-folders) to count entities; plain `knott types` reads concept files only.
 
 `--tree --verbose` adds, under each type, its description on one line and `adds:` with the properties it declares itself (`*` marks a required one). Inherited properties are listed at the type that declares them.
 

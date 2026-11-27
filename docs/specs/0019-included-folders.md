@@ -1,8 +1,9 @@
 ---
 type: spec
 title: "0019: Included folders"
-status: draft
+status: implemented
 created_on: 2026-11-26
+released_in: "0.15.0"
 realizes:
   - "[Included folders](../intents/included-folders.md)"
 decisions:
@@ -13,6 +14,8 @@ concepts:
 amends:
   - "[0004](0004-kid-identity.md)"
   - "[0006](0006-relation-definitions.md)"
+  - "[0016](0016-list-and-show-entities.md)"
+  - "[0018](0018-move-entities.md)"
 ---
 # 0019: Included folders
 
@@ -78,7 +81,8 @@ Where a single file is named, the test is the path:
 |---|---|
 | The target of a path reference | `relation-target-not-entity`. The file is not read. A target that does not exist is `relation-target-not-found`, as today. |
 | `knott validate FILE` | `not-an-entity`. |
-| `knott refs PATH`, `knott show PATH`, `Knott.show()` | Exit `2` (`KnottError`): not an entity. |
+| `knott refs PATH`, `knott show PATH`, `Knott.show()` | Exit `2` (`KnottError`): not an entity. A folder gets the message it gets today, whether it is an included folder or not. The same for an entity path given as the value of a reference filter (`knott list --where`, `Knott.entities(where=…)`). |
+| An outgoing reference in `knott show` | Listed with the error `relation-target-not-entity`, its target's path, and no type or `kid`. |
 | `knott mv SOURCE DEST` | Exit `2` when `SOURCE` is not inside the included folders, and when `DEST` is not: the file would stop being an entity and every reference to it would break. |
 
 A file in a hidden folder that *is* inside the included folders (`docs/.drafts/a.md` with `include: [docs]`) is treated exactly as today, in every row above. This spec does not change what knott does with hidden folders.
@@ -98,7 +102,7 @@ Each message says why and names the setting. The included folders are listed in 
 
 ```
 ✗ docs/specs/0019-included-folders.md:6  realizes[0]
-  relation `realizes[0]` points to ../../notes/plan.md, which is not a Knott entity: it is outside the included folders (`docs`); add its folder to `include` in .knott/config.yaml
+  relation `realizes[0]` points to `../../notes/plan.md`, which is not a Knott entity: it is outside the included folders (`docs`); add its folder to `include` in .knott/config.yaml
 ```
 
 `not-an-entity`, for `knott validate notes/plan.md`:
@@ -108,10 +112,17 @@ Each message says why and names the setting. The included folders are listed in 
   not a Knott entity: it is outside the included folders (`docs`); add its folder to `include` in .knott/config.yaml
 ```
 
-`knott refs`, `knott show` and `knott mv`:
+`knott refs` and `knott show`:
 
 ```
 error: not a Knott entity: notes/plan.md; it is outside the included folders (`docs`); add its folder to `include` in .knott/config.yaml
+```
+
+`knott mv` moves plain notes too, so it keeps the wording of [0018](0018-move-entities.md) for `SOURCE`, and says what would happen for `DEST`:
+
+```
+error: not a Markdown file knott sees: notes/plan.md; it is outside the included folders (`docs`); add its folder to `include` in .knott/config.yaml
+error: cannot move to notes/a.md: the file would stop being an entity and every reference to it would break; it is outside the included folders (`docs`); add its folder to `include` in .knott/config.yaml
 ```
 
 ### Checks on `include`
@@ -152,6 +163,7 @@ Python API:
 | `include: [., docs]` | The same as `include: .`. |
 | `include: [docs, docs]` | Allowed; `Knott.included_folders` is `("docs",)`. |
 | `include: [docs/]` | The same as `include: [docs]`. |
+| `include: ./` | The same as `include: .`. |
 | `include: []`, or `include:` with no value | Configuration error: write `.` or remove the key. |
 | `include: [doc]`, and only `docs/` exists | Configuration error. |
 | `include: [Docs]`, the folder is `docs`, on a file system that ignores case | Configuration error: exact case, as for reference targets. |
@@ -187,4 +199,4 @@ Python API:
 
 ## Compatibility
 
-Additive. A vault without `include` behaves exactly as before. The draft specs [0016](0016-list-and-show-entities.md) and [0018](0018-move-entities.md) describe what they see as "outside `.knott/` and other hidden folders"; with `include` set, the rules above apply on top of that. A knott older than this change ignores the key and scans the whole vault, since unknown keys in `config.yaml` have always been accepted. Version 0.15.0.
+Additive. A vault without `include` behaves exactly as before. [0016](0016-list-and-show-entities.md) and [0018](0018-move-entities.md), released in 0.14.0, describe what they see as "outside `.knott/` and other hidden folders"; with `include` set, the rules above apply on top of that. A knott older than this change ignores the key and scans the whole vault, since unknown keys in `config.yaml` have always been accepted. Version 0.15.0.

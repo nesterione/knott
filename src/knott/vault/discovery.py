@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from pathlib import Path
 
 from knott.errors import VaultNotFoundError
@@ -31,17 +32,19 @@ def find_vault_root(start: Path) -> Path:
     raise VaultNotFoundError(f"no Knott vault found at or above {start} (missing {KNOTT_DIR}/)")
 
 
-def iter_markdown(root: Path) -> list[str]:
-    """Vault-relative POSIX paths of all ``*.md`` files, sorted.
+def iter_markdown(root: Path, folders: Sequence[str] = (".",)) -> list[str]:
+    """Vault-relative POSIX paths of the ``*.md`` files below ``folders``, sorted.
 
-    Skips directories whose names start with ``.`` and does not follow
-    symlinked directories.
+    ``folders`` are vault-relative; the default is the whole vault. Nothing outside
+    them is walked. Skips directories whose names start with ``.`` and does not
+    follow symlinked directories.
     """
-    found: list[str] = []
-    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-        dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
-        rel_dir = Path(dirpath).relative_to(root)
-        for name in filenames:
-            if name.endswith(".md") and (Path(dirpath) / name).is_file():
-                found.append((rel_dir / name).as_posix())
+    found: set[str] = set()
+    for folder in folders:
+        for dirpath, dirnames, filenames in os.walk(root / folder, followlinks=False):
+            dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+            rel_dir = Path(dirpath).relative_to(root)
+            for name in filenames:
+                if name.endswith(".md") and (Path(dirpath) / name).is_file():
+                    found.add((rel_dir / name).as_posix())
     return sorted(found)
