@@ -1,8 +1,9 @@
 ---
 type: spec
 title: "0017: Show the details of one type"
-status: draft
+status: implemented
 created_on: 2026-11-26
+released_in: "0.14.0"
 realizes:
   - "[Read the vault as data](../intents/read-the-vault-as-data.md)"
 decisions:
@@ -84,7 +85,7 @@ intent  (.knott/concepts/intent.md)
 
   ```
   $ knott types intnet
-  error: no type named intnet; known types: command, concept, decision, guide, intent, issue_code, spec
+  error: no type named `intnet` (known types: `command`, `concept`, `decision`, `guide`, `intent`, `issue_code`, `spec`)
   ```
 - No Python API change: `Knott.ontology()` already holds the types with their templates, and the relations, connectors and loops.
 

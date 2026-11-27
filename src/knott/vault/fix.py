@@ -1,8 +1,8 @@
 """`knott validate --fix`: give entities without a `kid` a new one.
 
-This is the only place knott edits a user's Markdown file. The edit is one inserted
-line; the rest of the file stays byte-for-byte the same, and the result is re-parsed
-before it is written.
+One of the two places knott edits a user's Markdown file (the other is ``move.py``;
+decision 0013). The edit is one inserted line; the rest of the file stays
+byte-for-byte the same, and the result is re-parsed before it is written.
 """
 
 from __future__ import annotations

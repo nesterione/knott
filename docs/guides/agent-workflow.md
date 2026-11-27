@@ -10,13 +10,16 @@ commands:
   - "[knott types](../commands/types.md)"
   - "[knott validate](../commands/validate.md)"
   - "[knott refs](../commands/refs.md)"
+  - "[knott list](../commands/list.md)"
+  - "[knott show](../commands/show.md)"
+  - "[knott mv](../commands/mv.md)"
 ---
 # Agent workflow
 
 Knott is built for agents that persist knowledge as files. The full instructions ship as an Agent Skill (install it into a project with `knott skill install`). This is the short version.
 
-1. `knott types --tree` for the overview (which types exist, which are kinds of which, how many entities each has), then `knott types --verbose`: find the right type and its concept file. The `relations:` section at the end says what each link means; when two properties fit, its guidance says which one to use.
-2. Pick the most specific type that fits; a type marked `abstract: yes` cannot be used, take one of its `subtypes`. Read the concept file in `.knott/concepts/`: `description`, required properties, reference targets, and the body template.
+1. `knott types --tree` for the overview (which types exist, which are kinds of which, how many entities each has), then `knott types --verbose` when you need to choose between types. The `relations:` section at the end says what each link means; when two properties fit, its guidance says which one to use.
+2. Pick the most specific type that fits; a type marked `abstract: yes` cannot be used, take one of its `subtypes`. Run `knott types NAME` for it: required properties, reference targets, the body template, and the relations and loops that type uses. The concept file in `.knott/concepts/` need not be opened.
 3. Create or edit the Markdown file directly, in a folder the type's `path:` line allows when `knott types --verbose` shows one, and under a name its `filename:` pattern allows. Knott has no `create` command; files are the interface. Start a new body from the template and delete each `<!-- -->` comment once its section is written.
 4. Write references as quoted Markdown links with paths relative to the file. A `reference` holds one; a `list` of references needs a list, even for one.
 5. `knott validate <file> --fix --format json`. `--fix` gives a new entity its [kid](../concepts/kid.md); it never changes an existing one.
@@ -24,7 +27,11 @@ Knott is built for agents that persist knowledge as files. The full instructions
 
 When starting a new entity from a copy of another file, delete the copied `kid:` line first, or both files claim the same `kid`.
 
-Before renaming, deleting or replacing an entity, run `knott refs <file>` to see who links to it, and update those files too.
+To find entities, ask knott rather than `grep`: [`knott list`](../commands/list.md) `spec --where status=draft --fields title` knows subtypes, reads values by their declared type and matches a reference by its target. To read one entity's connections without its body, use [`knott show`](../commands/show.md) `<file>`.
+
+To rename or move a file, run [`knott mv`](../commands/mv.md) `OLD NEW`: it rewrites every link to the file, in frontmatter and in bodies, and the file's own links when its folder changes. Never use `mv` or `git mv` and fix links by hand. Run `knott validate` afterwards and read the `unchanged` lines.
+
+Before deleting or replacing an entity, run `knott refs <file>` to see who links to it, and update those files too.
 
 Before changing a property that a [loop](../concepts/loop.md) follows (often `status`), run `knott loops <name>`: it lists what each entity's next stage still needs. Add those first, then change the property. Setting a stage whose needs are not met is [`loop-stage-unmet`](../issues/loop-stage-unmet.md).
 

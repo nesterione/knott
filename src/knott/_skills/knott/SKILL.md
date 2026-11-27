@@ -21,10 +21,10 @@ A Knott vault is an ordinary directory of Markdown files with a `.knott/` direct
 
 ## Workflow
 
-1. In an unfamiliar vault, run `knott types --tree` first: it shows which types exist, which are kinds of which, how many entities each has and the folder they live in (`--tree --verbose` adds what each type is for and the properties it adds). A type marked `(abstract)` cannot be an entity's `type`; pick one of the types under it. The tree is an overview: it shows property names, not their shapes, targets or options.
-2. Run `knott types --verbose` to see each type's concept file, whether it has a template, its references and its properties (with nested shapes), and the vault's relations and connectors with their usage guidance. If it reports `schema-legacy-layout`, migrate first (see Commands).
-3. Pick the relevant type and read its concept file: `description`, `properties`, which fields are `required: true`, and the body template.
-4. Create or update the Markdown entity. If `knott types --verbose` shows a `path:` line for the type, put the file in a folder that matches it (`specs` is that folder only, `episodes/*` one level below, `episodes/**` any depth, `.` the vault root); `entity-misplaced` means it is somewhere else. Without a `path:` line, put it wherever it makes sense to a human. If there is a `filename:` line, name the file after that pattern: fill each `{part}` as its description says and check it against the expression shown next to it (`{number}-{slug}.md` with `number  [0-9]{4}` gives `0012-entity-file-names.md`); `entity-invalid-name` means the name does not fit. Knott does not pick the name for you. For a new entity, start the body from the concept's template (`template: yes`): keep its headings, fill each section, and delete a section's `<!-- … -->` guidance once it is filled. Knott never checks the body.
+1. In an unfamiliar vault, run `knott types --tree` first: it shows which types exist, which are kinds of which, how many entities each has and the folder they live in (`--tree --verbose` adds what each type is for and the properties it adds). A type marked `(abstract)` cannot be an entity's `type`; pick one of the types under it. The tree is an overview: it shows property names, not their shapes, targets or options; `knott types NAME` has those.
+2. Pick the type. When you don't know which one fits, run `knott types --verbose`: it prints every type with its description, references and properties, and the vault's relations and connectors with their usage guidance. If it reports `schema-legacy-layout`, migrate first (see Commands).
+3. Run `knott types NAME` for the type you will write. It prints the type's concept file, its `path:` and `filename:` rules, its properties (`*` marks a required one, nested shapes indented), the body template under `template body:`, and only the relations, connectors and loops that type uses. The concept file need not be opened.
+4. Create or update the Markdown entity. If `knott types NAME` shows a `path:` line for the type, put the file in a folder that matches it (`specs` is that folder only, `episodes/*` one level below, `episodes/**` any depth, `.` the vault root); `entity-misplaced` means it is somewhere else. Without a `path:` line, put it wherever it makes sense to a human. If there is a `filename:` line, name the file after that pattern: fill each `{part}` as its description says and check it against the expression shown next to it (`{number}-{slug}.md` with `number  [0-9]{4}` gives `0012-entity-file-names.md`); `entity-invalid-name` means the name does not fit. Knott does not pick the name for you. For a new entity, start the body from the concept's template (`template: yes`): keep its headings, fill each section, and delete a section's `<!-- … -->` guidance once it is filled. Knott never checks the body.
 5. Write references as relative paths (see below).
 6. Run `knott validate --fix <file>` after creating an entity (it adds the `kid`), and `knott validate <file>` after **every** change.
 7. Fix every reported issue and validate again before finishing.
@@ -55,7 +55,7 @@ derived_from: "[Episode 42 script](../scripts/episode-42.md)"
 ---
 # Episode 42
 
-Body: any Markdown. Knott does not read it.
+Body: any Markdown. Knott does not check it.
 ```
 
 Typing is strict, with no coercion:
@@ -135,7 +135,8 @@ relations:
 
 - **Pick the property by its relation's guidance.** When two fit (`supersedes` vs `amends`), the guidance says which one.
 - **Never write the inverse.** `superseded_by` is not a property; it is how `knott refs` labels incoming `supersedes` links. Store a `symmetric` link on one side only.
-- **Find who links to an entity** with `knott refs <file>` before renaming, deleting or replacing it:
+- **Rename or move a file with `knott mv OLD NEW`.** It rewrites every link to the file, in frontmatter and in bodies, and the file's own links when its folder changes. Never move an entity with `mv` or `git mv` and fix links by hand. Try `--dry-run` first when unsure. Afterwards run `knott validate`, and read any `unchanged` lines (links of the moved file that name no existing file) and `skipped` lines (files it could not search).
+- **Find who links to an entity** with `knott refs <file>` before deleting or replacing it:
 
   ```
   $ knott refs specs/0005-concept-files.md
@@ -205,14 +206,28 @@ A concept can extend another (`extends: concept`), and a concept can be `abstrac
 
 For vaults edited in Obsidian, set Files & links → *New link format* to **Relative path to file** and turn **off** *Use [[Wikilinks]]*. Otherwise Obsidian may rewrite links on rename into forms `knott validate` rejects.
 
+## Reading entities
+
+Ask knott instead of grepping frontmatter or reading whole files:
+
+- **Which entities have a value**: `knott list spec --where status=draft --fields title`. `TYPE` includes its subtypes. `--where` reads the value by the property's type, looks inside lists, and matches a reference by its target: `knott list decision --where affects=concepts/relation.md` finds every decision that links to that file, whatever relative path or `kid:` each one wrote. An empty value (`--where released_in=`) means "not set". A misspelt option or key is an error that lists the valid ones, never an empty result.
+- **What one entity is connected to**: `knott show <file>` prints its properties, each outgoing reference with the target's path and type, and its incoming links, without the body. Add `--body` only when you need the text. A reference with a problem shows the issue code `knott validate` reports for it.
+- Add `--format json` to either when you will parse the output.
+
+Neither command validates, and neither writes.
+
 ## Commands
 
 ```sh
-knott types [--verbose]          # list types (exit 1 if a concept file has errors)
+knott types [--verbose] [--tree] # list types (exit 1 if a concept file has errors)
+knott types NAME...              # one type in full: properties, template, its relations and loops
 knott validate [PATH...]         # check concept files + all entities, or only PATHs
 knott validate --format json     # {ok, stats, issues[]} for machine reading
 knott validate --fix [PATH...]   # add a kid to entities that have none, then validate
 knott refs PATH [--format json]  # who references an entity (PATH or kid:<uuid>), by relation
+knott list [TYPE] [--where KEY=VALUE] [--fields a,b] [--format json]  # entities of a type, filtered
+knott show PATH [--body] [--format json]  # one entity: properties, links out (resolved) and in
+knott mv SOURCE DEST [--dry-run]  # move or rename a file and rewrite the links to it
 knott loops [NAME] [--format json]  # entities by stage of a loop, and what each still needs
 knott init [PATH]                # create .knott/ (never overwrites)
 knott view [PATH] [--no-open] [-o FILE]  # write an HTML diagram of types and references

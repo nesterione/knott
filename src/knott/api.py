@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _dist_version
 from pathlib import Path
-from typing import overload
+from typing import Any, overload
 
 from knott import _yaml
 from knott.errors import ConfigError, KnottError, PathNotFoundError, PathOutsideVaultError
 from knott.models import (
     ConnectorDefinition,
+    EntityDetail,
+    EntityRecord,
     EntityRef,
     EnumOption,
     FilenamePart,
@@ -22,6 +24,7 @@ from knott.models import (
     Issue,
     LoopReport,
     MigrateResult,
+    MoveResult,
     Ontology,
     OntologyAttribute,
     OntologyType,
@@ -42,12 +45,13 @@ from knott.schema.models import (
     MapShape,
     ObjectShape,
     ReferenceShape,
+    Schema,
     shape_kind,
 )
 from knott.schema.validator import validate_entity
 from knott.vault.cycles import checked_relations, cycle_issues
 from knott.vault.discovery import CONCEPTS_DIR, KNOTT_DIR, find_vault_root, iter_markdown
-from knott.vault.entity import read_markdown
+from knott.vault.entity import markdown_body, read_markdown
 from knott.vault.fix import insert_kid
 from knott.vault.index import VaultSession
 from knott.vault.kid import (
@@ -59,6 +63,17 @@ from knott.vault.kid import (
 )
 from knott.vault.links import KID_PREFIX, LinkError
 from knott.vault.loops import loop_definition, loop_report, unmet_issues
+from knott.vault.move import move_file
+from knott.vault.query import (
+    Filter,
+    check_fields,
+    entity_record,
+    filter_from_text,
+    filter_from_value,
+    full_record,
+    outgoing_references,
+    property_of,
+)
 from knott.vault.refs import entity_kid, reverse_lookup, type_name
 
 CONFIG_FILE = Path(KNOTT_DIR) / "config.yaml"
@@ -241,13 +256,7 @@ class Knott:
         """
         schemas, relations, _ = load_ontology(self.root)
         session = VaultSession(self.root, schemas)
-        if isinstance(path_or_kid, str) and path_or_kid.strip().startswith(KID_PREFIX):
-            try:
-                target = session.resolve("", path_or_kid).target
-            except LinkError as error:
-                raise KnottError(error.message) from None
-        else:
-            target = self._entity_path(path_or_kid, session)
+        target = self._resolve_entity(path_or_kid, session)
         entity = session.lookup(target)
         return Refs(
             entity=EntityRef(
@@ -255,6 +264,144 @@ class Knott:
             ),
             groups=reverse_lookup(session, relations, target),
         )
+
+    def entities(
+        self,
+        type: str | None = None,
+        *,
+        where: Mapping[str, Any] | Sequence[tuple[str, Any]] | None = None,
+        fields: Sequence[str] | None = None,
+    ) -> list[EntityRecord]:
+        """The vault's entities, ordered by path (spec 0016).
+
+        With ``type``, the entities of that type and its subtypes. ``where`` keeps
+        those whose property equals a value, every condition at once: a mapping, or
+        pairs when one key is given twice. Values are typed: an ``int`` for an
+        integer, a ``datetime.date`` for a date, an entity path (relative to the
+        vault root) or ``kid:<uuid>`` for a reference, and ``None`` for "absent"; on
+        a list, any item may match. ``fields`` puts those frontmatter keys in each
+        record's ``properties``; without it ``properties`` is ``None``.
+
+        Does not validate. Raises ``KnottError`` for a type no concept defines,
+        ``where`` without a type, a key that is not a top-level property of the
+        type, a value of the wrong kind, or a bad field name.
+        """
+        loaded = load_definitions(self.root)
+        session = VaultSession(self.root, loaded.schemas)
+        pairs = list(where.items()) if isinstance(where, Mapping) else list(where or ())
+        schema = self._type_schema(loaded.schemas, type, bool(pairs))
+        filters = [
+            filter_from_value(
+                property_of(schema, key), value, lambda given: self._resolve_entity(given, session)
+            )
+            for key, value in pairs
+            if schema is not None
+        ]
+        return self._entities(session, schema, filters, fields)
+
+    def _entities_from_text(
+        self, type: str | None, where: Sequence[str], fields: Sequence[str] | None, base: Path
+    ) -> list[EntityRecord]:
+        """``entities()`` for the command line: each condition is ``KEY=VALUE`` text,
+        and a reference value is a path relative to ``base``."""
+        loaded = load_definitions(self.root)
+        session = VaultSession(self.root, loaded.schemas)
+        schema = self._type_schema(loaded.schemas, type, bool(where))
+        filters: list[Filter] = []
+        for condition in where:
+            key, separator, text = condition.partition("=")
+            if not separator:
+                raise KnottError(f"--where {condition}: expected KEY=VALUE")
+            assert schema is not None
+            filters.append(
+                filter_from_text(
+                    property_of(schema, key),
+                    text,
+                    lambda given: self._resolve_entity(given, session),
+                    base,
+                )
+            )
+        return self._entities(session, schema, filters, fields)
+
+    @staticmethod
+    def _type_schema(schemas: dict[str, Schema], name: str | None, filtered: bool) -> Schema | None:
+        if name is None:
+            if filtered:
+                raise KnottError("a filter needs a type: name the type whose property it is")
+            return None
+        schema = schemas.get(name)
+        if schema is None:
+            known = ", ".join(f"`{t}`" for t in sorted(schemas)) or "none"
+            raise KnottError(f"no type named `{name}` (known types: {known})")
+        return schema
+
+    @staticmethod
+    def _entities(
+        session: VaultSession,
+        schema: Schema | None,
+        filters: Sequence[Filter],
+        fields: Sequence[str] | None,
+    ) -> list[EntityRecord]:
+        chosen = None if fields is None else list(fields)
+        if chosen is not None:
+            check_fields(chosen)
+        records: list[EntityRecord] = []
+        for rel_path in session.all_markdown:
+            entity = session.lookup(rel_path)
+            if entity.error is not None or not entity.is_entity:
+                continue
+            if schema is not None:
+                own = session.schemas.get(entity.type) if isinstance(entity.type, str) else None
+                if own is None or not own.is_a(schema.type):
+                    continue
+            if all(f.matches(session, entity) for f in filters):
+                records.append(entity_record(session, entity, chosen))
+        return records
+
+    def show(self, path_or_kid: str | Path, *, body: bool = False) -> EntityDetail:
+        """One entity: its properties, its outgoing references resolved, and who
+        references it (spec 0016).
+
+        ``path_or_kid`` is as for ``refs()``, and it raises as ``refs()`` does. Does
+        not validate: each outgoing reference carries the issue code ``validate``
+        would report for it. ``body=True`` adds the body, verbatim.
+        """
+        schemas, relations, _ = load_ontology(self.root)
+        session = VaultSession(self.root, schemas)
+        target = self._resolve_entity(path_or_kid, session)
+        entity = session.lookup(target)
+        schema = schemas.get(entity.type) if isinstance(entity.type, str) else None
+        text = (self.root / target).read_text(encoding="utf-8") if body else None
+        return EntityDetail(
+            entity=full_record(session, entity),
+            references=[] if schema is None else outgoing_references(session, entity, schema),
+            referenced_by=reverse_lookup(session, relations, target),
+            body=None if text is None else markdown_body(text),
+        )
+
+    def move(self, source: str | Path, dest: str | Path, *, dry_run: bool = False) -> MoveResult:
+        """Move or rename one Markdown file and rewrite the links the move would
+        break (spec 0018): references and file values that name it in other entities'
+        frontmatter, Markdown links to it in bodies, and its own relative links when
+        its folder changes. ``dry_run=True`` prepares and checks everything and writes
+        nothing.
+
+        ``source`` is a file knott sees, or ``kid:<uuid>``; ``dest`` is the new path,
+        or an existing folder. Relative paths are resolved against the vault root.
+        Raises ``PathNotFoundError``, ``PathOutsideVaultError`` or ``KnottError``
+        before anything is written, and ``MoveError`` (with ``written``) for an I/O
+        error after the first write.
+        """
+        loaded = load_definitions(self.root)
+        session = VaultSession(self.root, loaded.schemas, loaded.connectors)
+        if isinstance(source, str) and source.strip().startswith(KID_PREFIX):
+            source_path = self._resolve_entity(source, session)
+        else:
+            source_path = self._vault_relative(source)
+        target = Path(dest)
+        if not target.is_absolute():
+            target = self.root / target
+        return move_file(session, source_path, target, dry_run=dry_run)
 
     @overload
     def loops(self) -> list[LoopReport]: ...
@@ -274,6 +421,28 @@ class Knott:
         if loop is None:
             raise KnottError(f"no loop named {name}")
         return loop_report(session, loop)
+
+    def _reference_keys(self, type_name: str) -> frozenset[str]:
+        """The top-level properties of a type declared as a reference or a list of them."""
+        schema = load_definitions(self.root).schemas.get(type_name)
+        if schema is None:
+            return frozenset()
+
+        def only_references(shape: object) -> bool:
+            if isinstance(shape, ListShape):
+                shape = shape.items.shape
+            return isinstance(shape, ReferenceShape)
+
+        return frozenset(name for name, a in schema.properties.items() if only_references(a.shape))
+
+    def _resolve_entity(self, path_or_kid: str | Path, session: VaultSession) -> str:
+        """The vault-relative path of an entity given as a file or ``kid:<uuid>``."""
+        if isinstance(path_or_kid, str) and path_or_kid.strip().startswith(KID_PREFIX):
+            try:
+                return session.resolve("", path_or_kid).target
+            except LinkError as error:
+                raise KnottError(error.message) from None
+        return self._entity_path(path_or_kid, session)
 
     def _entity_path(self, given: str | Path, session: VaultSession) -> str:
         """The vault-relative path of the entity file ``given``."""

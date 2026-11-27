@@ -29,7 +29,7 @@ This README has no frontmatter, so Knott treats it as an ordinary note.
 
 ## Commands
 
-[init](commands/init.md) · [validate](commands/validate.md) · [types](commands/types.md) · [migrate](commands/migrate.md) · [version](commands/version.md) · [skill](commands/skill.md) · [view](commands/view.md) · [refs](commands/refs.md) · [loops](commands/loops.md)
+[init](commands/init.md) · [validate](commands/validate.md) · [types](commands/types.md) · [migrate](commands/migrate.md) · [version](commands/version.md) · [skill](commands/skill.md) · [view](commands/view.md) · [refs](commands/refs.md) · [list](commands/list.md) · [show](commands/show.md) · [mv](commands/mv.md) · [loops](commands/loops.md)
 
 ## Issue codes
 
@@ -83,6 +83,7 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 16. [List and show entities](specs/0016-list-and-show-entities.md)
 17. [Show the details of one type](specs/0017-types-for-one-type.md)
 18. [Move a file and rewrite the links to it](specs/0018-move-entities.md)
+19. [Included folders](specs/0019-included-folders.md)
 20. [Artifact types](specs/0020-artifact-types.md)
 
 ### Intents
@@ -99,4 +100,5 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 - [Type tree](intents/type-tree.md)
 - [Read the vault as data](intents/read-the-vault-as-data.md)
 - [Move a file without breaking links](intents/move-without-breaking-links.md)
+- [Included folders](intents/included-folders.md)
 - [Artifacts](intents/artifacts.md)
