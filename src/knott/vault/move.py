@@ -806,6 +806,9 @@ def move_file(
 ) -> MoveResult:
     """Move ``source`` (vault-relative, a file discovery sees) to ``dest`` (absolute)."""
     root = session.root
+    outside = session.outside_reason(source)
+    if outside is not None and not (root / source).is_dir():
+        raise KnottError(f"not a Markdown file knott sees: {source}; {outside}")
     if source not in session.all_markdown:
         raise KnottError(
             f"not a Markdown file knott sees: {source}; expected a `.md` file in the vault, "
@@ -816,7 +819,14 @@ def move_file(
     parsed = session.lookup(source)
     if parsed.error is not None:
         raise KnottError(f"cannot read the frontmatter of {source}: {parsed.error}")
-    mover = Mover(session, source, check_destination(root, source, dest))
+    destination = check_destination(root, source, dest)
+    outside = session.outside_reason(destination)
+    if outside is not None:
+        raise KnottError(
+            f"cannot move to {destination}: the file would stop being an entity and "
+            f"every reference to it would break; {outside}"
+        )
+    mover = Mover(session, source, destination)
     files = mover.plan()
     result = mover.result(files, dry_run=dry_run)
     if not dry_run:

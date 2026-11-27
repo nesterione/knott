@@ -49,7 +49,7 @@ properties:
 <!-- Who speaks, and what the recording covers. -->
 ```
 
-Write entities as ordinary Markdown with frontmatter, anywhere in the vault:
+Write entities as ordinary Markdown with frontmatter, anywhere in the vault (or only in the folders you list under `include` in `.knott/config.yaml`, when the vault shares a repository with code or fixtures):
 
 ```markdown
 ---

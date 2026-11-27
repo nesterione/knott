@@ -393,7 +393,9 @@ def _resolve(
         path = session.resolve(entity.path, value).target
     except LinkError as exc:
         error = exc.code
-    if path is not None:
+    if path is not None and not session.included.contains(path):
+        error = NOT_ENTITY
+    elif path is not None:
         target = session.lookup(path)
         if not target.is_entity:
             error = NOT_ENTITY

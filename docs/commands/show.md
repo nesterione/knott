@@ -83,4 +83,4 @@ A value that resolves to no file is shown as written, with the code where the ty
 |---|---|
 | `0` | success |
 | `1` | the vault still has `.knott/schemas/`: the [`schema-legacy-layout`](../issues/schema-legacy-layout.md) issue goes to stderr |
-| `2` | no vault, `PATH` doesn't exist or is outside the vault, `PATH` isn't an entity, or a `kid:` is malformed or matches no entity or several |
+| `2` | no vault, `PATH` doesn't exist or is outside the vault, `PATH` isn't an entity (a file outside the [included folders](../concepts/vault.md#included-folders) is never one), or a `kid:` is malformed or matches no entity or several |

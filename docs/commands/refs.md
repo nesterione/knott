@@ -74,7 +74,7 @@ An entity nobody references prints its header line, a blank line and `no referen
 |---|---|
 | `0` | success, including an entity with no references |
 | `1` | the vault still has `.knott/schemas/`: the [`schema-legacy-layout`](../issues/schema-legacy-layout.md) issue goes to stderr |
-| `2` | no vault, `PATH` doesn't exist or is outside the vault, `PATH` isn't an entity (a concept or relation file, a folder, a note without `type`, unreadable frontmatter), or a `kid:` is malformed or matches no entity or several |
+| `2` | no vault, `PATH` doesn't exist or is outside the vault, `PATH` isn't an entity (a file outside the [included folders](../concepts/vault.md#included-folders), a concept or relation file, a folder, a note without `type`, unreadable frontmatter), or a `kid:` is malformed or matches no entity or several |
 
 ```
 $ knott refs .knott/concepts/concept.md

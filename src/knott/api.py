@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _dist_version
 from pathlib import Path
@@ -53,6 +53,7 @@ from knott.vault.cycles import checked_relations, cycle_issues
 from knott.vault.discovery import CONCEPTS_DIR, KNOTT_DIR, find_vault_root, iter_markdown
 from knott.vault.entity import markdown_body, read_markdown
 from knott.vault.fix import insert_kid
+from knott.vault.include import WHOLE_VAULT, parse_include
 from knott.vault.index import VaultSession
 from knott.vault.kid import (
     KID_KEY,
@@ -92,6 +93,14 @@ class Knott:
 
     def __init__(self, root: Path) -> None:
         self.root = root
+        self._included = WHOLE_VAULT
+
+    @property
+    def included_folders(self) -> tuple[str, ...]:
+        """The folders knott reads Markdown from (spec 0019): the `include` key of
+        ``.knott/config.yaml`` as vault-relative POSIX paths, in the order written,
+        duplicates removed. ``(".",)``, the whole vault, when the key is missing."""
+        return self._included.folders
 
     @classmethod
     def open(cls, path: str | Path = ".") -> Knott:
@@ -135,7 +144,7 @@ class Knott:
         ``.knott/schemas/`` fails, the concept files are kept and ``MigrateError``
         says to delete the legacy folder by hand.
         """
-        return migrate_vault(self.root)
+        return migrate_vault(self.root, self._included.scan_roots())
 
     def types(self) -> list[str]:
         """Discovered type names, sorted. Schemas with errors may be missing."""
@@ -165,7 +174,7 @@ class Knott:
         loaded = load_definitions(self.root)
         schemas, relation_defs, issues = loaded.schemas, loaded.relations, loaded.issues
         counts: dict[str, int] = {}
-        for rel_path in iter_markdown(self.root):
+        for rel_path in iter_markdown(self.root, self._included.scan_roots()):
             parsed = read_markdown(self.root / rel_path, rel_path)
             if parsed.error is None and parsed.is_entity and isinstance(parsed.type, str):
                 counts[parsed.type] = counts.get(parsed.type, 0) + 1
@@ -255,7 +264,7 @@ class Knott:
         ``KnottError`` when it isn't an entity or a `kid` matches no entity or several.
         """
         schemas, relations, _ = load_ontology(self.root)
-        session = VaultSession(self.root, schemas)
+        session = self._session(schemas)
         target = self._resolve_entity(path_or_kid, session)
         entity = session.lookup(target)
         return Refs(
@@ -287,7 +296,7 @@ class Knott:
         type, a value of the wrong kind, or a bad field name.
         """
         loaded = load_definitions(self.root)
-        session = VaultSession(self.root, loaded.schemas)
+        session = self._session(loaded.schemas)
         pairs = list(where.items()) if isinstance(where, Mapping) else list(where or ())
         schema = self._type_schema(loaded.schemas, type, bool(pairs))
         filters = [
@@ -305,7 +314,7 @@ class Knott:
         """``entities()`` for the command line: each condition is ``KEY=VALUE`` text,
         and a reference value is a path relative to ``base``."""
         loaded = load_definitions(self.root)
-        session = VaultSession(self.root, loaded.schemas)
+        session = self._session(loaded.schemas)
         schema = self._type_schema(loaded.schemas, type, bool(where))
         filters: list[Filter] = []
         for condition in where:
@@ -367,7 +376,7 @@ class Knott:
         would report for it. ``body=True`` adds the body, verbatim.
         """
         schemas, relations, _ = load_ontology(self.root)
-        session = VaultSession(self.root, schemas)
+        session = self._session(schemas)
         target = self._resolve_entity(path_or_kid, session)
         entity = session.lookup(target)
         schema = schemas.get(entity.type) if isinstance(entity.type, str) else None
@@ -393,7 +402,7 @@ class Knott:
         error after the first write.
         """
         loaded = load_definitions(self.root)
-        session = VaultSession(self.root, loaded.schemas, loaded.connectors)
+        session = self._session(loaded.schemas, loaded.connectors)
         if isinstance(source, str) and source.strip().startswith(KID_PREFIX):
             source_path = self._resolve_entity(source, session)
         else:
@@ -414,7 +423,7 @@ class Knott:
         the name. Does not validate: it works with the definitions that load.
         """
         loaded = load_definitions(self.root)
-        session = VaultSession(self.root, loaded.schemas)
+        session = self._session(loaded.schemas)
         if name is None:
             return [loop_report(session, loop) for _, loop in sorted(loaded.loops.items())]
         loop = loaded.loops.get(name)
@@ -447,6 +456,9 @@ class Knott:
     def _entity_path(self, given: str | Path, session: VaultSession) -> str:
         """The vault-relative path of the entity file ``given``."""
         rel_posix = self._vault_relative(given)
+        # A folder is never an entity; it gets the general message below.
+        if not (self.root / rel_posix).is_dir() and not self._included.contains(rel_posix):
+            raise KnottError(f"not a Knott entity: {rel_posix}; {self._included.outside_reason()}")
         parsed = session.lookup(rel_posix) if rel_posix in session.all_markdown else None
         if parsed is not None and parsed.error is not None:
             raise KnottError(f"cannot read the frontmatter of {rel_posix}: {parsed.error}")
@@ -458,7 +470,7 @@ class Knott:
         return rel_posix
 
     def _assign_kids(self, paths: Sequence[str | Path] | None) -> list[FixedEntity]:
-        all_markdown = iter_markdown(self.root)
+        all_markdown = iter_markdown(self.root, self._included.scan_roots())
         in_scope = all_markdown if paths is None else self._scope(paths, all_markdown)[0]
         fixed: list[FixedEntity] = []
         for rel_path in in_scope:
@@ -473,7 +485,7 @@ class Knott:
         if any(i.code == "schema-legacy-layout" for i in issues):
             # Every entity would also be `entity-unknown-type`; report only the cause.
             return ValidationResult(issues=issues, stats=Stats(schemas=0, entities=0, relations=0))
-        session = VaultSession(self.root, schemas, loaded.connectors)
+        session = self._session(schemas, loaded.connectors)
         all_markdown = session.all_markdown
 
         if paths is None:
@@ -501,7 +513,12 @@ class Knott:
                 continue
             entities += 1
             report = validate_entity(
-                parsed, schemas, session.resolve, session.lookup, session.resolve_file
+                parsed,
+                schemas,
+                session.resolve,
+                session.lookup,
+                session.resolve_file,
+                session.outside_reason,
             )
             issues.extend(report.issues)
             relations += report.relations
@@ -541,6 +558,16 @@ class Knott:
                 prefix = "" if rel_posix == "." else rel_posix + "/"
                 selected.update(p for p in all_markdown if p.startswith(prefix))
                 continue
+            if not self._included.contains(rel_posix):
+                reason = self._included.outside_reason()
+                issues.append(
+                    Issue(
+                        code="not-an-entity",
+                        path=rel_posix,
+                        message=f"not a Knott entity: {reason}",
+                    )
+                )
+                continue
             parsed = read_markdown(absolute, rel_posix) if rel_posix.endswith(".md") else None
             if parsed is not None and (parsed.is_entity or parsed.error is not None):
                 selected.add(rel_posix)
@@ -577,7 +604,13 @@ class Knott:
             raise PathOutsideVaultError(f"path is outside the vault {self.root}: {given}") from None
         return rel.as_posix()
 
+    def _session(
+        self, schemas: dict[str, Schema], connectors: Collection[str] = ()
+    ) -> VaultSession:
+        return VaultSession(self.root, schemas, connectors, self._included)
+
     def _check_config(self) -> None:
+        """Read ``.knott/config.yaml``: its form, and the included folders."""
         config = self.root / CONFIG_FILE
         if not config.exists():
             return
@@ -586,12 +619,13 @@ class Knott:
         except (OSError, UnicodeDecodeError) as exc:
             raise ConfigError(f"cannot read {CONFIG_FILE.as_posix()}: {exc}") from exc
         try:
-            data = _yaml.load(text).data
+            document = _yaml.load(text)
         except _yaml.YamlParseError as exc:
             where = f":{exc.line + 1}" if exc.line is not None else ""
             raise ConfigError(f"malformed {CONFIG_FILE.as_posix()}{where}: {exc.message}") from exc
-        if data is not None and not isinstance(data, dict):
+        if document.data is not None and not isinstance(document.data, dict):
             raise ConfigError(f"malformed {CONFIG_FILE.as_posix()}: expected a YAML mapping")
+        self._included = parse_include(self.root, document)
 
 
 def _filename_pattern(definition: FilenameDef | None) -> FilenamePattern | None:

@@ -8,6 +8,6 @@ concepts:
 ---
 # knott init
 
-Creates `.knott/concepts/` and `.knott/config.yaml` (recording `knott_version`) in `PATH`, default the current directory. It creates no content folders and no concept files. Add one [concept file](../concepts/schema.md) per type, and organize your Markdown however you like.
+Creates `.knott/concepts/` and `.knott/config.yaml` (recording `knott_version`) in `PATH`, default the current directory. It creates no content folders and no concept files, and writes no [`include`](../concepts/vault.md#included-folders) key. Add one [concept file](../concepts/schema.md) per type, and organize your Markdown however you like.
 
 If `.knott/` already exists, it changes nothing, says the vault is already initialized, and exits `0`. A `PATH` that doesn't exist exits `2`.

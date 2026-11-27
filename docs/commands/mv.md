@@ -49,7 +49,7 @@ Not rewritten:
 - wikilinks, reference-style definitions (`[id]: dest`), HTML attributes, autolinks and bare paths in text
 - keys no concept declares, and the frontmatter of plain notes, of entities whose type no concept defines, and of files under `.knott/`: knott cannot tell a path from a string there
 - concept files: a link in a template is relative to the entity that will copy it
-- files in hidden folders other than `.knott/`, and anything outside the vault
+- files in hidden folders other than `.knott/`, files outside the [included folders](../concepts/vault.md#included-folders), and anything outside the vault
 
 A link in an indented code block is rewritten, since indented code is not recognised; so is one in a fence indented by more than three spaces or inside a blockquote. A link in an HTML comment is rewritten like any other.
 
@@ -122,6 +122,6 @@ skipped 1 file
 |---|---|
 | `0` | the file was moved (or would be, with `--dry-run`), with or without warnings |
 | `1` | the vault still has `.knott/schemas/`: the [`schema-legacy-layout`](../issues/schema-legacy-layout.md) issue goes to stderr |
-| `2` | no vault; `SOURCE` doesn't exist, is outside the vault, is a symbolic link, is not a Markdown file knott sees, or has unreadable frontmatter; `DEST` exists, does not end in `.md`, is outside the vault, is in a hidden folder, has a `#` in its path, or is the same file; a link that cannot be edited in place; a failed check; an I/O error |
+| `2` | no vault; `SOURCE` doesn't exist, is outside the vault, is a symbolic link, is not a Markdown file knott sees (outside the [included folders](../concepts/vault.md#included-folders) too), or has unreadable frontmatter; `DEST` exists, does not end in `.md`, is outside the vault or the included folders, is in a hidden folder, has a `#` in its path, or is the same file; a link that cannot be edited in place; a failed check; an I/O error |
 
 Out of scope: moving a folder or several files, moving files that are not Markdown, and deleting an entity. Before deleting or replacing an entity, run [`knott refs`](refs.md).

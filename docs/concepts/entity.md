@@ -35,6 +35,7 @@ The body is arbitrary Markdown. Knott does not check it. Two commands touch it: 
 | frontmatter without `type` | ordinary note, ignored |
 | frontmatter with `type` | **entity**, validated |
 | starts with `---` but broken YAML | error: `entity-invalid-frontmatter` |
+| any file outside the [included folders](vault.md#included-folders) | never an entity, not read |
 
 This very folder mixes both: `README.md` is a plain note, everything under `concepts/` is an entity.
 

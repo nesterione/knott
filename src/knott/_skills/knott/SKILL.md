@@ -238,6 +238,8 @@ If any command reports `schema-legacy-layout`, the vault still uses `.knott/sche
 
 Exit codes: `0` valid, `1` validation issues, `2` usage error (no vault, bad path, malformed `.knott/config.yaml`).
 
+A vault may set `include` in `.knott/config.yaml`: the folders knott reads Markdown from. A Markdown file outside them is never an entity: knott does not list it, and a reference to it is `relation-target-not-entity`. The message says so. Create entities inside the included folders, and do not edit `include` unless the user asks.
+
 Each issue has a stable `code`, the file `path`, a `line` when known, the `field`, and a `message` that says what was expected. Fix the cause the message names; do not delete required fields or references just to silence an error.
 
 If `uvx` is how Knott is run here, prefix commands with `uvx`: `uvx knott validate path/to/file.md`.

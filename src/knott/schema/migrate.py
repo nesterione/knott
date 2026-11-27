@@ -9,7 +9,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import shutil
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -101,8 +101,10 @@ class _Planned:
     list_fields: list[str]
 
 
-def migrate_vault(root: Path) -> MigrateResult:
+def migrate_vault(root: Path, folders: Sequence[str] = (".",)) -> MigrateResult:
     """Convert ``.knott/schemas/**/*.yaml`` under ``root`` into ``.knott/concepts/**/*.md``.
+
+    Entity frontmatter is read from the Markdown files below ``folders`` (spec 0019).
 
     Everything is read and converted first; any problem raises ``MigrateError``
     before a single file is written or removed. If writing a concept file fails
@@ -134,7 +136,7 @@ def migrate_vault(root: Path) -> MigrateResult:
             )
 
     loaded = [(path, _read_legacy(root, path)) for path in sources]
-    entities = _entity_frontmatters(root)
+    entities = _entity_frontmatters(root, folders)
 
     planned: list[_Planned] = []
     for path, data in loaded:
@@ -248,10 +250,10 @@ def _read_legacy(root: Path, path: Path) -> Any:
         raise MigrateError(f"{where}: {exc.message}") from None
 
 
-def _entity_frontmatters(root: Path) -> list[dict[str, Any]]:
+def _entity_frontmatters(root: Path, folders: Sequence[str]) -> list[dict[str, Any]]:
     """Frontmatter of every readable entity; files with invalid frontmatter are skipped."""
     found: list[dict[str, Any]] = []
-    for rel_path in iter_markdown(root):
+    for rel_path in iter_markdown(root, folders):
         parsed = read_markdown(root / rel_path, rel_path)
         if parsed.error is None and parsed.is_entity and parsed.frontmatter is not None:
             found.append(parsed.frontmatter)
