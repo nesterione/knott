@@ -57,6 +57,7 @@ This README has no frontmatter, so Knott treats it as an ordinary note.
 11. [Changes are specified in frozen specs, wanted ones start as intents](decisions/0011-specs-intents-and-frozen-history.md)
 12. [Files are values of a `file` property, and a URI names files kept elsewhere](decisions/0012-files-are-property-values.md)
 13. [A command may edit files when the edit adds no knowledge](decisions/0013-commands-may-make-mechanical-edits.md)
+14. [An artifact type is a place in the vault, not an entity](decisions/0014-artifact-types-are-places-not-entities.md)
 
 ## How changes are made
 
@@ -83,6 +84,7 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 17. [Show the details of one type](specs/0017-types-for-one-type.md)
 18. [Move a file and rewrite the links to it](specs/0018-move-entities.md)
 19. [Included folders](specs/0019-included-folders.md)
+20. [Artifact types](specs/0020-artifact-types.md)
 
 ### Intents
 
@@ -99,3 +101,4 @@ Wanted work starts as an **intent** in [intents/](intents/): the need, an exampl
 - [Read the vault as data](intents/read-the-vault-as-data.md)
 - [Move a file without breaking links](intents/move-without-breaking-links.md)
 - [Included folders](intents/included-folders.md)
+- [Artifacts](intents/artifacts.md)
